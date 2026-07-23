@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 local candidate
+## Version 0.1.0
 
 - Defined five versioned protocol artifacts and a technical settlement bundle.
 - Implemented action-digest binding and signed single-use permits.
@@ -18,4 +18,4 @@
 - Added a loopback reference API and CLI.
 - Added synthetic fault demos, JSON Schemas, OpenAPI and conformance tests.
 
-This candidate has not been publicly released.
+Initial public source release on 23 July 2026.

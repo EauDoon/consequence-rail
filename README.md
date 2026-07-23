@@ -231,8 +231,8 @@ Read:
 ## Project status
 
 This is an experimental reference implementation, not a production release.
-The publication controls and release gates are recorded in
-[`docs/publication-plan.md`](docs/publication-plan.md).
+The public release status and maintenance boundaries are recorded in
+[`docs/release-status.md`](docs/release-status.md).
 
 Licensed under the [Apache License 2.0](LICENSE).
 

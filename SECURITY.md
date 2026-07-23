@@ -5,13 +5,11 @@ production-ready.
 
 ## Reporting
 
-If this candidate is later published, report suspected vulnerabilities through
-the repository's private security-advisory channel. Do not place credentials,
+Report suspected vulnerabilities through GitHub's private vulnerability
+reporting for this repository. If that option is unavailable, open a minimal
+public issue requesting a private contact channel. Do not place credentials,
 private data, exploit details, or affected-system identifiers in a public
 issue.
-
-Until publication, security findings should remain within the local review
-workflow.
 
 ## In scope
 
