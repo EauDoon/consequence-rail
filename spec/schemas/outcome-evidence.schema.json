@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:outcome-evidence:v0.1",
+  "title": "OutcomeEvidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "action_digest",
+    "source",
+    "resource",
+    "observed_at",
+    "facts",
+    "evaluation",
+    "captured_by",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/outcome-evidence/v0.1"
+    },
+    "action_digest": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "facts": {
+      "type": "object"
+    },
+    "evaluation": {
+      "type": "object"
+    },
+    "captured_by": {
+      "type": "string"
+    },
+    "phase": {
+      "type": "string"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:event:v0.1",
+  "title": "ConsequenceRailEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "action_id",
+    "sequence",
+    "previous_hash",
+    "event_type",
+    "actor",
+    "recorded_at",
+    "payload",
+    "signature",
+    "event_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/event/v0.1"
+    },
+    "action_id": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "previous_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "event_type": {
+      "type": "string"
+    },
+    "actor": {
+      "type": "string"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "signature": {
+      "type": "object"
+    },
+    "event_hash": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:action-permit:v0.1",
+  "title": "ActionPermit",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "permit_id",
+    "action_id",
+    "action_digest",
+    "recourse_reservation_digest",
+    "assurance_mode",
+    "bypass_possible",
+    "gated",
+    "jti",
+    "issued_at",
+    "expires_at",
+    "max_uses",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/action-permit/v0.1"
+    },
+    "permit_id": {
+      "type": "string"
+    },
+    "action_id": {
+      "type": "string"
+    },
+    "action_digest": {
+      "type": "string"
+    },
+    "recourse_reservation_digest": {
+      "type": "string"
+    },
+    "assurance_mode": {
+      "enum": [
+        "enforced",
+        "cooperative"
+      ]
+    },
+    "bypass_possible": {
+      "type": "boolean"
+    },
+    "gated": {
+      "const": true
+    },
+    "jti": {
+      "type": "string"
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "max_uses": {
+      "const": 1
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

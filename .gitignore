@@ -1,0 +1,8 @@
+node_modules/
+coverage/
+.consequence-rail/
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.tmp

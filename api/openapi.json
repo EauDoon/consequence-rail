@@ -1,0 +1,585 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Consequence Rail Reference API",
+    "version": "0.1.0",
+    "description": "Experimental local reference API for recourse-gated execution. The v0.1 server keeps runtime state in memory."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787"
+    }
+  ],
+  "paths": {
+    "/.well-known/consequence-rail": {
+      "get": {
+        "operationId": "getCapabilities",
+        "summary": "Describe protocol and connector capabilities",
+        "responses": {
+          "200": {
+            "description": "Capability document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v0/actions": {
+      "post": {
+        "operationId": "proposeAction",
+        "summary": "Register an immutable ActionProposal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "../spec/schemas/action-proposal.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "get": {
+        "operationId": "inspectAction",
+        "summary": "Read redacted action state and event-chain metadata",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/authorize": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "authorizeAction",
+        "summary": "Bind an external policy decision to the action",
+        "description": "The loopback v0.1 reference accepts this decision without authenticating a policy service. Real connectors require an authenticated policy adapter.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthorizationDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/recourse": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "reserveRecourse",
+        "summary": "Ask the connector to reserve and sign a bounded remedy",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecourseReservationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/permit": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "issuePermit",
+        "summary": "Issue a signed single-use execution permit",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/execute": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "executeAction",
+        "summary": "Consume the permit and call the protected connector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaultInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/reconcile": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "reconcileAction",
+        "summary": "Resolve UNKNOWN through connector status without re-execution",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/verify-outcome": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "verifyOutcome",
+        "summary": "Evaluate the configured postcondition against declared evidence",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaultInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/remediate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "remediateAction",
+        "summary": "Execute and verify the pre-reserved bounded remedy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaultInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/reconcile-remedy": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "reconcileRemedy",
+        "summary": "Resolve REMEDY_UNKNOWN through connector status without retry",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "evidenceFault": {
+                    "type": "string",
+                    "description": "Synthetic post-remedy evidence fault for the mock connector."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/actions/{action_id}/bundle": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        },
+        {
+          "name": "profile",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "enum": [
+              "receipt",
+              "audit"
+            ],
+            "default": "receipt"
+          },
+          "description": "Receipt omits raw proposal and evidence. Audit includes them for semantic verification."
+        }
+      ],
+      "get": {
+        "operationId": "exportSettlementBundle",
+        "summary": "Export a privacy-minimized receipt or full audit bundle",
+        "responses": {
+          "200": {
+            "description": "Settlement bundle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../spec/schemas/settlement-bundle.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v0/bundles/verify": {
+      "post": {
+        "operationId": "verifySettlementBundle",
+        "summary": "Verify integrity and semantics of an audit bundle against configured trusted keys",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "../spec/schemas/settlement-bundle.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "valid",
+                    "action_id",
+                    "outcome"
+                  ],
+                  "properties": {
+                    "valid": {
+                      "const": true
+                    },
+                    "action_id": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "enum": [
+                        "settled",
+                        "compensated",
+                        "disputed"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "ActionId": {
+        "name": "action_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "ActionView": {
+        "description": "Redacted action state",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ActionView"
+            }
+          }
+        }
+      },
+      "Error": {
+        "description": "Stable machine-readable error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ActionView": {
+        "type": "object",
+        "required": [
+          "action_id",
+          "action_digest",
+          "action_type",
+          "state",
+          "assurance_mode",
+          "bypass_possible",
+          "event_count"
+        ],
+        "properties": {
+          "action_id": {
+            "type": "string"
+          },
+          "action_digest": {
+            "type": "string"
+          },
+          "action_type": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "assurance_mode": {
+            "enum": [
+              "enforced",
+              "cooperative",
+              "observed"
+            ]
+          },
+          "bypass_possible": {
+            "type": "boolean"
+          },
+          "event_count": {
+            "type": "integer"
+          },
+          "outcome": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AuthorizationDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "allow",
+          "policy_id",
+          "policy_digest"
+        ],
+        "properties": {
+          "allow": {
+            "type": "boolean"
+          },
+          "policy_id": {
+            "type": "string"
+          },
+          "policy_digest": {
+            "type": "string"
+          },
+          "evaluation_input_digest": {
+            "type": "string"
+          }
+        }
+      },
+      "RecourseReservationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Requested remedy scope. The connector returns a separately signed commitment that the rail binds into the accepted reservation.",
+        "required": [
+          "action_digest",
+          "kind",
+          "connector",
+          "capability",
+          "capability_reference",
+          "expires_at",
+          "remedy_window_seconds",
+          "max_attempts",
+          "max_amount_minor",
+          "idempotency_key"
+        ],
+        "properties": {
+          "action_digest": {
+            "type": "string",
+            "minLength": 32
+          },
+          "kind": {
+            "enum": [
+              "reverse",
+              "compensate",
+              "escalate"
+            ]
+          },
+          "connector": {
+            "type": "string",
+            "minLength": 1
+          },
+          "capability": {
+            "type": "string",
+            "minLength": 1
+          },
+          "capability_reference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "remedy_window_seconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_attempts": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "max_amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "FaultInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fault": {
+            "type": "string",
+            "description": "Synthetic action, evidence, or remedy fault accepted only by the demo connector."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "action_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

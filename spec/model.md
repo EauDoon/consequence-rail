@@ -1,0 +1,163 @@
+# Consequence Rail v0.1 artifact model
+
+This document defines the protocol vocabulary implemented by the reference
+runtime. The terms `MUST`, `MUST NOT`, `SHOULD`, and `MAY` describe protocol
+requirements.
+
+## ActionProposal
+
+An `ActionProposal` is an immutable, versioned description of one intended
+external action. It includes:
+
+- action type and version
+- proposer subject
+- target connector and resource
+- action parameters
+- action idempotency key
+- request and expiry times
+- assurance mode
+- data-only postcondition
+- declared evidence source and freshness window
+
+The `action_digest` is the SHA-256 digest, encoded as base64url without
+padding, of the proposal's canonical JSON bytes.
+
+The reference canonicalization profile recursively sorts object keys, rejects
+undefined values and non-finite numbers, preserves array order, and serializes
+the resulting JSON without insignificant whitespace. Protocol parameters that
+represent money MUST use integer minor units.
+
+The current implementation covers the interoperable subset exercised by the
+conformance fixtures. A later standards-track version should adopt a complete
+published canonicalization profile and a larger cross-language vector suite.
+
+After authorization, the proposal MUST NOT change. A changed target,
+parameter, postcondition, expiry, idempotency key, or assurance mode is a new
+action.
+
+## RecourseReservation
+
+A `RecourseReservation` contains two signatures:
+
+- a connector-signed commitment that reserves a bounded response capability
+  for the exact action digest
+- a rail signature that accepts and binds that connector commitment into the
+  action lifecycle
+
+It includes:
+
+- exact action digest
+- remedy kind: `reverse`, `compensate`, or `escalate`
+- connector and named capability
+- capability reference
+- expiry and remedy window
+- maximum attempts and scope
+- digests of the capability reference and independent remedy idempotency key
+- opaque connector reservation token
+- connector commitment signature
+
+The reservation validity MUST cover the permit expiry and the configured
+remedy window.
+
+A connector must expose reservation status and release operations. The rail
+checks that the reservation remains active before issuing a permit,
+immediately before consuming that permit, and before invoking the remedy.
+
+Confirmed no-effect failure, permit expiry and revocation release or expire
+the reservation. A disputed action may retain active recourse until its
+deadline because the external effect remains unresolved. A receipt records
+the reservation status observed at close.
+
+A reservation establishes authenticated declared capability and scope. It
+does not guarantee that the remedy will succeed.
+
+For a remote connector, a status check followed by execution still has a
+time-of-check to time-of-use interval. Production connectors SHOULD expose an
+atomic lease-consume or execute-with-reservation operation. The v0.1 mock
+connector provides only an in-process demonstration of that boundary.
+
+## ActionPermit
+
+An `ActionPermit` is signed, expiring, bound to one action digest and one
+reservation digest, and limited to one use.
+
+It discloses:
+
+- assurance mode
+- whether bypass is possible
+- issue and expiry times
+- a unique token identifier
+- maximum uses
+
+Permit consumption MUST occur before the connector call and MUST be atomic
+within the rail's execution boundary.
+
+`observed` mode MUST NOT issue an `ActionPermit`.
+
+## OutcomeEvidence
+
+`OutcomeEvidence` contains declared observations about an external resource.
+Before use, the rail checks:
+
+- schema version
+- exact action digest
+- declared source
+- exact target resource
+- freshness
+- allowed postcondition operators
+
+The v0.1 reference connector returns evidence directly to the rail. The rail
+then signs its captured artifact. That signature proves what the rail
+captured, not that the originating system was honest or independent.
+
+## SettlementReceipt
+
+A `SettlementReceipt` may be issued only after an external effect is possible
+and the action reaches `CLOSED`.
+
+Its technical outcome is:
+
+- `settled`: the configured postcondition was satisfied
+- `compensated`: the initial postcondition failed, the reserved remedy ran, and
+  fresh evidence satisfied the configured postcondition
+- `disputed`: the resulting state or remedy could not be verified
+
+A confirmed pre-execution denial, expiry, or no-effect failure does not
+produce a settlement receipt.
+
+The receipt binds:
+
+- action digest
+- reservation digest
+- connector commitment digest and final reservation status
+- permit digest
+- assurance disclosure
+- evidence digests
+- event-chain head
+- close time
+
+`settlement` is a technical protocol term. It does not mean legal settlement,
+financial finality, insurance coverage, or guaranteed recovery.
+
+## Trust and signatures
+
+The reference implementation uses separate Ed25519 keys for the rail and
+connector. Verifiers MUST receive both trusted public-key sets through
+explicit trust configuration. Public keys embedded in a bundle are only hints
+and MUST NOT become trusted automatically.
+
+The demo keys are deterministic and public. They are suitable only for
+reproducible tests.
+
+## Bundle profiles
+
+The `receipt` profile omits the full proposal and raw evidence. It supports
+signature, digest and event-chain integrity verification.
+
+The `audit` profile includes the proposal and outcome evidence. Full semantic
+verification additionally replays the state machine, validates every
+cross-binding, reevaluates postconditions, checks evidence freshness and
+derives the receipt outcome.
+
+Integrity verification alone MUST NOT be described as semantic settlement
+verification.

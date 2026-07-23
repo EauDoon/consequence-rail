@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:action-proposal:v0.1",
+  "title": "ActionProposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "action_type",
+    "subject",
+    "target",
+    "parameters",
+    "idempotency_key",
+    "requested_at",
+    "expires_at",
+    "assurance_mode",
+    "postcondition",
+    "evidence_plan"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/action-proposal/v0.1"
+    },
+    "action_type": {
+      "enum": [
+        "demo.refund.issue/v1",
+        "demo.email.send/v1"
+      ]
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector",
+        "resource_type",
+        "resource_id"
+      ],
+      "properties": {
+        "connector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resource_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resource_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "parameters": {
+      "type": "object"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assurance_mode": {
+      "enum": [
+        "enforced",
+        "cooperative",
+        "observed"
+      ]
+    },
+    "postcondition": {
+      "$ref": "#/$defs/postcondition"
+    },
+    "evidence_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "max_age_seconds"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "max_age_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "postcondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "clauses"
+      ],
+      "properties": {
+        "op": {
+          "const": "all"
+        },
+        "clauses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "op",
+              "value"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "op": {
+                "enum": [
+                  "eq",
+                  "gte",
+                  "lte"
+                ]
+              },
+              "value": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

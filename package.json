@@ -1,0 +1,29 @@
+{
+  "name": "consequence-rail",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Recourse-gated execution and settlement receipts for autonomous actions.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node ./scripts/check.js && node --test",
+    "demo": "node ./cmd/crctl.js demo refund",
+    "demo:duplicate": "node ./cmd/crctl.js demo refund --fault duplicate",
+    "demo:irreversible": "node ./cmd/crctl.js demo irreversible",
+    "start": "node ./cmd/rail.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "autonomous-agents",
+    "recourse",
+    "runtime-safety",
+    "compensating-transactions",
+    "event-sourcing",
+    "openapi",
+    "json-schema"
+  ],
+  "author": "Oonyl",
+  "license": "Apache-2.0"
+}

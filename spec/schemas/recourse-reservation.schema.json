@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:recourse-reservation:v0.1",
+  "title": "RecourseReservation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "reservation_id",
+    "action_digest",
+    "kind",
+    "connector",
+    "capability",
+    "expires_at",
+    "remedy_window_seconds",
+    "max_attempts",
+    "max_amount_minor",
+    "capability_reference_digest",
+    "idempotency_key_digest",
+    "reserved_at",
+    "connector_commitment",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/recourse-reservation/v0.1"
+    },
+    "reservation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action_digest": {
+      "type": "string",
+      "minLength": 32
+    },
+    "kind": {
+      "enum": [
+        "reverse",
+        "compensate",
+        "escalate"
+      ]
+    },
+    "connector": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capability": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capability_reference_digest": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "remedy_window_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_attempts": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_amount_minor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "idempotency_key_digest": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reserved_by": {
+      "type": "string"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reserved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "connector_commitment": {
+      "$ref": "connector-recourse-commitment.schema.json"
+    },
+    "signature": {
+      "$ref": "#/$defs/signature"
+    }
+  },
+  "$defs": {
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

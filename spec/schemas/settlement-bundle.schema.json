@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:settlement-bundle:v0.1",
+  "title": "SettlementBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile",
+    "action",
+    "recourse_reservation",
+    "action_permit",
+    "evidence_manifest",
+    "outcome_evidence",
+    "settlement_receipt",
+    "events",
+    "trust_hint"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/settlement-bundle/v0.1"
+    },
+    "profile": {
+      "enum": [
+        "receipt",
+        "audit"
+      ]
+    },
+    "action": {
+      "type": "object"
+    },
+    "recourse_reservation": {
+      "$ref": "recourse-reservation.schema.json"
+    },
+    "action_permit": {
+      "$ref": "action-permit.schema.json"
+    },
+    "evidence_manifest": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outcome_evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "outcome-evidence.schema.json"
+      }
+    },
+    "settlement_receipt": {
+      "$ref": "settlement-receipt.schema.json"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "event.schema.json"
+      }
+    },
+    "trust_hint": {
+      "type": "object"
+    }
+  }
+}

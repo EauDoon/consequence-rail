@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:settlement-receipt:v0.1",
+  "title": "SettlementReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "action_id",
+    "action_digest",
+    "recourse_reservation_digest",
+    "connector_recourse_commitment_digest",
+    "recourse_final_status",
+    "action_permit_digest",
+    "assurance_mode",
+    "bypass_possible",
+    "gated",
+    "outcome",
+    "configured_postcondition_result",
+    "evidence_digests",
+    "event_chain_head",
+    "closed_at",
+    "technical_claim",
+    "limitations",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/settlement-receipt/v0.1"
+    },
+    "receipt_id": {
+      "type": "string"
+    },
+    "action_id": {
+      "type": "string"
+    },
+    "action_digest": {
+      "type": "string"
+    },
+    "recourse_reservation_digest": {
+      "type": "string"
+    },
+    "connector_recourse_commitment_digest": {
+      "type": "string"
+    },
+    "recourse_final_status": {
+      "enum": [
+        "active",
+        "expired",
+        "released",
+        "consumed"
+      ]
+    },
+    "action_permit_digest": {
+      "type": "string"
+    },
+    "assurance_mode": {
+      "enum": [
+        "enforced",
+        "cooperative"
+      ]
+    },
+    "bypass_possible": {
+      "type": "boolean"
+    },
+    "gated": {
+      "const": true
+    },
+    "outcome": {
+      "enum": [
+        "settled",
+        "compensated",
+        "disputed"
+      ]
+    },
+    "configured_postcondition_result": {
+      "enum": [
+        "satisfied",
+        "unresolved"
+      ]
+    },
+    "evidence_digests": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "event_chain_head": {
+      "type": "string"
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "technical_claim": {
+      "type": "string"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "signature": {
+      "type": "object"
+    }
+  }
+}

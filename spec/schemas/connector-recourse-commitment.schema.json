@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:connector-recourse-commitment:v0.1",
+  "title": "ConnectorRecourseCommitment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "reservation_token",
+    "action_digest",
+    "connector",
+    "capability",
+    "kind",
+    "expires_at",
+    "max_attempts",
+    "max_amount_minor",
+    "reserved_at",
+    "status",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/connector-recourse-commitment/v0.1"
+    },
+    "reservation_token": {
+      "type": "string"
+    },
+    "action_digest": {
+      "type": "string"
+    },
+    "connector": {
+      "type": "string"
+    },
+    "capability": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "reverse",
+        "compensate",
+        "escalate"
+      ]
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "max_attempts": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_amount_minor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reserved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "const": "active"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
