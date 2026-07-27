@@ -1,11 +1,15 @@
 import { deepClone, digest } from "./canonical.js";
 import { addMilliseconds, ManualClock } from "./clock.js";
 import { RailError } from "./errors.js";
-import { MockRefundConnector } from "./mock-refund-connector.js";
+import {
+  MockRefundConnector,
+  measureMockRefundRecoveryImplementation,
+} from "./mock-refund-connector.js";
 import { ConsequenceRail } from "./rail.js";
 import {
   createDemoSigner,
   demoConnectorTrustedKeys,
+  demoRecoveryTrustedKeys,
   demoTrustedKeys,
 } from "./signing.js";
 import { verifyBundle } from "./verify.js";
@@ -85,8 +89,11 @@ export function buildRefundReservation(actionDigest, proposal, clock) {
   };
 }
 
-export function createDemoRuntime({ assuranceMode = "enforced" } = {}) {
-  const clock = new ManualClock();
+export function createDemoRuntime({
+  assuranceMode = "enforced",
+  requireRecoveryPreflight = false,
+  clock = new ManualClock(),
+} = {}) {
   const signer = createDemoSigner();
   const connector = new MockRefundConnector(clock);
   const rail = new ConsequenceRail({
@@ -94,6 +101,10 @@ export function createDemoRuntime({ assuranceMode = "enforced" } = {}) {
     clock,
     connector,
     connectorTrustedKeys: connector.trustedKeys(),
+    recoveryTrustedKeys: demoRecoveryTrustedKeys(),
+    requireRecoveryPreflight,
+    measureRecoveryImplementation: (candidateConnector) =>
+      measureMockRefundRecoveryImplementation(candidateConnector),
   });
   return {
     assuranceMode,

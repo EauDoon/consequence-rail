@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:recovery-drill-attestation:v0.1",
+  "title": "RecoveryDrillAttestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attestation_id",
+    "contract_digest",
+    "coverage_digest",
+    "adapter_digest",
+    "trace_digest",
+    "fixture_digest",
+    "checkpoint_digest",
+    "fault_digest",
+    "damaged_state_digest",
+    "procedure_digest",
+    "oracle_digest",
+    "recovered_state_digest",
+    "recovery_class",
+    "fixture_fidelity",
+    "qualification",
+    "drilled_at",
+    "expires_at",
+    "limitations",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/recovery-drill-attestation/v0.1"
+    },
+    "attestation_id": { "type": "string", "minLength": 1 },
+    "contract_digest": { "type": "string", "minLength": 32 },
+    "coverage_digest": { "type": "string", "minLength": 32 },
+    "adapter_digest": { "type": "string", "minLength": 32 },
+    "trace_digest": { "type": "string", "minLength": 32 },
+    "fixture_digest": { "type": "string", "minLength": 32 },
+    "checkpoint_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "fault_digest": { "type": "string", "minLength": 32 },
+    "damaged_state_digest": { "type": ["string", "null"] },
+    "procedure_digest": { "type": "string", "minLength": 32 },
+    "oracle_digest": { "type": "string", "minLength": 32 },
+    "recovered_state_digest": { "type": ["string", "null"] },
+    "recovery_class": {
+      "enum": ["exact", "compensation", "containment", "escalation"]
+    },
+    "fixture_fidelity": {
+      "enum": ["synthetic", "staging", "production-like"]
+    },
+    "qualification": {
+      "enum": [
+        "QUALIFIED_EXACT",
+        "REVIEW_COMPENSATED",
+        "NOT_QUALIFIED",
+        "NOT_TESTABLE_LOCAL"
+      ]
+    },
+    "drilled_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    }
+  }
+}

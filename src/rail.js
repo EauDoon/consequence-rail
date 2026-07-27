@@ -3,6 +3,7 @@ import { isExpired } from "./clock.js";
 import { MemoryEventStore } from "./event-store.js";
 import { RailError, UnknownExecutionError, UnknownRemedyError } from "./errors.js";
 import { evaluatePostcondition } from "./postconditions.js";
+import { verifyRecoveryPreflight } from "./recovery-preflight.js";
 import { signArtifact, verifyArtifact } from "./signing.js";
 
 export const ASSURANCE_MODES = ["enforced", "cooperative", "observed"];
@@ -64,6 +65,72 @@ const RECOURSE_INPUT_FIELDS = new Set([
   "max_amount_minor",
   "idempotency_key",
 ]);
+const AUTHORIZATION_FIELDS = new Set([
+  "allow",
+  "policy_id",
+  "policy_digest",
+  "evaluation_input_digest",
+  "require_recovery_preflight",
+]);
+const SUBJECT_FIELDS = new Set(["type", "id"]);
+const TARGET_FIELDS = new Set(["connector", "resource_type", "resource_id"]);
+const REFUND_PARAMETER_FIELDS = new Set(["amount_minor", "currency"]);
+const EMAIL_PARAMETER_FIELDS = new Set(["recipient_id", "subject"]);
+const EVIDENCE_PLAN_FIELDS = new Set(["source", "max_age_seconds"]);
+const EVIDENCE_FIELDS = new Set([
+  "schema_version",
+  "action_digest",
+  "source",
+  "resource",
+  "observed_at",
+  "facts",
+]);
+const EVIDENCE_RESOURCE_FIELDS = new Set(["type", "id"]);
+const CONNECTOR_COMMITMENT_FIELDS = new Set([
+  "schema_version",
+  "reservation_token",
+  "action_digest",
+  "connector",
+  "capability",
+  "kind",
+  "expires_at",
+  "max_attempts",
+  "max_amount_minor",
+  "reserved_at",
+  "status",
+  "signature",
+]);
+const RECOURSE_STATUS_FIELDS = new Set(["reservation_token", "status"]);
+const CONNECTOR_CAPABILITY_FIELDS = new Set([
+  "connector",
+  "exclusive_credential_custody",
+  "actions",
+  "remedies",
+  "connector_signing_key_id",
+]);
+const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
+const MAX_ACTIONS = 1_000;
+const EXECUTION_FAULTS = new Set([
+  "none",
+  "duplicate",
+  "lost-response-before-commit",
+  "lost-response-after-commit",
+  "remedy-failure",
+]);
+const EVIDENCE_FAULTS = new Set(["none", "stale-evidence"]);
+const REMEDIATION_FAULTS = new Set([
+  "none",
+  "remedy-failure",
+  "remedy-lost-response-before-commit",
+  "remedy-lost-response-after-commit",
+  "post-remedy-stale-evidence",
+  "post-remedy-false-evidence",
+]);
+const REMEDY_EVIDENCE_FAULTS = new Set([
+  "none",
+  "post-remedy-stale-evidence",
+  "post-remedy-false-evidence",
+]);
 
 function assert(condition, code, message, details = {}) {
   if (!condition) {
@@ -71,26 +138,110 @@ function assert(condition, code, message, details = {}) {
   }
 }
 
-function assertNoUnknownFields(object, allowed, objectName) {
+function assertPlainObject(object, objectName, code = "SCHEMA_INVALID") {
+  assert(
+    object &&
+      typeof object === "object" &&
+      !Array.isArray(object) &&
+      (Object.getPrototypeOf(object) === Object.prototype ||
+        Object.getPrototypeOf(object) === null),
+    code,
+    `${objectName} must be a plain object.`,
+  );
+}
+
+function assertNoUnknownFields(object, allowed, objectName, code = "SCHEMA_INVALID") {
+  assertPlainObject(object, objectName, code);
   const unknown = Object.keys(object).filter((key) => !allowed.has(key));
-  assert(unknown.length === 0, "SCHEMA_INVALID", `${objectName} contains unknown fields.`, {
+  assert(unknown.length === 0, code, `${objectName} contains unknown fields.`, {
     fields: unknown,
   });
 }
 
+function assertRequiredFields(object, required, objectName, code = "SCHEMA_INVALID") {
+  const missing = [...required].filter((key) => !Object.hasOwn(object, key));
+  assert(missing.length === 0, code, `${objectName} is missing required fields.`, {
+    fields: missing,
+  });
+}
+
+function assertExactFields(object, fields, objectName, code = "SCHEMA_INVALID") {
+  assertNoUnknownFields(object, fields, objectName, code);
+  assertRequiredFields(object, fields, objectName, code);
+}
+
+function assertNonEmptyString(value, label, code = "SCHEMA_INVALID") {
+  assert(typeof value === "string" && value.length > 0, code, `${label} is required.`);
+}
+
+function assertDigest(value, label, code = "SCHEMA_INVALID") {
+  assert(
+    typeof value === "string" && SHA256_BASE64URL.test(value),
+    code,
+    `${label} must be a SHA-256 base64url digest.`,
+  );
+}
+
+function assertTimestamp(value, label, code = "SCHEMA_INVALID") {
+  const milliseconds = new Date(value).getTime();
+  assert(
+    typeof value === "string" &&
+      Number.isFinite(milliseconds) &&
+      new Date(milliseconds).toISOString() === value,
+    code,
+    `${label} must be an ISO date-time string.`,
+  );
+  return milliseconds;
+}
+
 export class ConsequenceRail {
-  constructor({ signer, clock, connector, connectorTrustedKeys, eventStore } = {}) {
+  constructor({
+    signer,
+    clock,
+    connector,
+    connectorTrustedKeys,
+    recoveryTrustedKeys,
+    requireRecoveryPreflight = false,
+    measureRecoveryImplementation = null,
+    maxActions = MAX_ACTIONS,
+    eventStore,
+  } = {}) {
     assert(signer && clock && connector, "CONFIG_INVALID", "Signer, clock and connector are required.");
+    assert(
+      typeof requireRecoveryPreflight === "boolean",
+      "CONFIG_INVALID",
+      "requireRecoveryPreflight must be boolean.",
+    );
+    assert(
+      measureRecoveryImplementation === null ||
+        typeof measureRecoveryImplementation === "function",
+      "CONFIG_INVALID",
+      "measureRecoveryImplementation must be a function when supplied.",
+    );
+    assert(
+      Number.isInteger(maxActions) && maxActions > 0,
+      "CONFIG_INVALID",
+      "maxActions must be a positive integer.",
+    );
     this.signer = signer;
     this.clock = clock;
     this.connector = connector;
     this.connectorTrustedKeys = connectorTrustedKeys ?? new Map();
+    this.recoveryTrustedKeys = recoveryTrustedKeys ?? new Map();
+    this.requireRecoveryPreflight = requireRecoveryPreflight;
+    this.measureRecoveryImplementation = measureRecoveryImplementation;
+    this.maxActions = maxActions;
     this.eventStore = eventStore ?? new MemoryEventStore(signer, clock);
     this.actions = new Map();
     this.trustedKeys = new Map([[signer.kid, signer.publicKey]]);
   }
 
   propose(input) {
+    assert(
+      this.actions.size < this.maxActions,
+      "ACTION_CAPACITY_REACHED",
+      "The in-memory action capacity has been reached.",
+    );
     const proposal = this.validateProposal(input);
     const actionDigest = digest(proposal);
     const actionId = `act_${actionDigest.slice(0, 20)}`;
@@ -121,12 +272,26 @@ export class ConsequenceRail {
   authorize(actionId, decision) {
     const record = this.get(actionId);
     this.assertState(record, "PROPOSED");
-    assert(typeof decision?.allow === "boolean", "SCHEMA_INVALID", "Authorization requires allow.");
-    assert(typeof decision?.policy_id === "string", "SCHEMA_INVALID", "Authorization requires policy_id.");
+    assertNoUnknownFields(decision, AUTHORIZATION_FIELDS, "AuthorizationDecision");
+    assertRequiredFields(
+      decision,
+      new Set(["allow", "policy_id", "policy_digest"]),
+      "AuthorizationDecision",
+    );
+    assert(typeof decision.allow === "boolean", "SCHEMA_INVALID", "Authorization requires allow.");
+    assertNonEmptyString(decision.policy_id, "Authorization policy_id");
+    assertDigest(decision.policy_digest, "Authorization policy_digest");
+    if (decision.evaluation_input_digest !== undefined) {
+      assertDigest(
+        decision.evaluation_input_digest,
+        "Authorization evaluation_input_digest",
+      );
+    }
     assert(
-      typeof decision?.policy_digest === "string",
+      decision.require_recovery_preflight === undefined ||
+        typeof decision.require_recovery_preflight === "boolean",
       "SCHEMA_INVALID",
-      "Authorization requires policy_digest.",
+      "require_recovery_preflight must be boolean when supplied.",
     );
 
     record.authorization = deepFreeze(deepClone({
@@ -134,12 +299,69 @@ export class ConsequenceRail {
       policy_id: decision.policy_id,
       policy_digest: decision.policy_digest,
       evaluation_input_digest: decision.evaluation_input_digest ?? null,
+      require_recovery_preflight:
+        this.requireRecoveryPreflight ||
+        decision.require_recovery_preflight === true,
       decided_at: this.clock.now(),
     }));
     this.transition(record, decision.allow ? "AUTHORIZED" : "DENIED", decision.allow ? "POLICY_ALLOWED" : "POLICY_DENIED", {
       policy_id: decision.policy_id,
       policy_digest: decision.policy_digest,
     });
+    return this.inspect(actionId);
+  }
+
+  acceptRecoveryQualification(actionId, bundle) {
+    const record = this.get(actionId);
+    this.assertState(record, "RECOURSE_RESERVED");
+    const verification = verifyRecoveryPreflight(bundle, {
+      trustedKeys: this.recoveryTrustedKeys,
+      now: this.clock.now(),
+      requireCurrent: true,
+    });
+    assert(
+      verification.qualification === "QUALIFIED_EXACT",
+      "RECOVERY_PREFLIGHT_NOT_QUALIFIED",
+      "Recovery preflight did not qualify exact recovery.",
+      { qualification: verification.qualification },
+    );
+
+    const contract = bundle.recovery_contract;
+    assert(
+      contract.action_digest === record.action_digest &&
+        contract.action_class === record.proposal.action_type &&
+        contract.scope.connector === record.proposal.target.connector &&
+        contract.scope.resource_type === record.proposal.target.resource_type &&
+        contract.scope.assurance_mode === record.proposal.assurance_mode &&
+        contract.scope.parameters_digest === digest(record.proposal.parameters) &&
+        contract.scope.postcondition_digest ===
+          digest(record.proposal.postcondition) &&
+        contract.scope.evidence_plan_digest ===
+          digest(record.proposal.evidence_plan),
+      "RECOVERY_COVERAGE_MISMATCH",
+      "Recovery preflight does not cover the proposed action envelope.",
+    );
+    this.assertRecoveryBinding(
+      record,
+      contract,
+      "RECOVERY_COVERAGE_MISMATCH",
+    );
+
+    record.recovery_preflight = deepFreeze(deepClone(bundle));
+    record.recovery_preflight_verification = deepFreeze(
+      deepClone(verification),
+    );
+    this.eventStore.append(
+      actionId,
+      "RECOVERY_PREFLIGHT_ACCEPTED",
+      "recovery-preflight",
+      {
+        attestation_digest: verification.attestation_digest,
+        coverage_digest: verification.coverage_digest,
+        qualification: verification.qualification,
+        expires_at: verification.expires_at,
+      },
+    );
     return this.inspect(actionId);
   }
 
@@ -198,7 +420,7 @@ export class ConsequenceRail {
     this.assertNotExpired(record.proposal.expires_at, record, "ACTION_EXPIRED");
     this.assertNotExpired(record.reservation.expires_at, record, "RECOURSE_EXPIRED");
 
-    const capabilities = this.connector.capabilities();
+    const capabilities = this.connectorCapabilities();
     if (record.proposal.assurance_mode === "enforced") {
       assert(
         capabilities.exclusive_credential_custody === true,
@@ -206,9 +428,7 @@ export class ConsequenceRail {
         "Enforced mode requires rail-exclusive downstream credential custody.",
       );
     }
-    const recourseStatus = this.connector.recourseStatus(
-      record.reservation.connector_commitment.reservation_token,
-    );
+    const recourseStatus = this.readRecourseStatus(record);
     if (recourseStatus.status !== "active") {
       this.transition(record, "REVOKED", "CONNECTOR_RECOURSE_NOT_ACTIVE", {
         recourse_status: recourseStatus.status,
@@ -225,6 +445,15 @@ export class ConsequenceRail {
           state: record.state,
         },
       );
+    }
+
+    if (record.authorization.require_recovery_preflight) {
+      assert(
+        record.recovery_preflight,
+        "RECOVERY_PREFLIGHT_REQUIRED",
+        "A current qualified recovery preflight is required before permit issuance.",
+      );
+      this.assertAcceptedRecoveryPreflight(record, { requireCurrent: true });
     }
 
     const permitBody = {
@@ -250,11 +479,28 @@ export class ConsequenceRail {
       permit_digest: record.permit_digest,
       assurance_mode: record.permit.assurance_mode,
       bypass_possible: record.permit.bypass_possible,
+      ...(record.authorization.require_recovery_preflight
+        ? {
+            recovery_preflight_attestation_digest:
+              record.recovery_preflight_verification.attestation_digest,
+          }
+        : {}),
     });
     return this.inspect(actionId);
   }
 
-  async execute(actionId, { fault = "none", proposalOverride } = {}) {
+  async execute(actionId, options = {}) {
+    assertNoUnknownFields(
+      options,
+      new Set(["fault", "proposalOverride"]),
+      "Execution options",
+    );
+    const { fault = "none", proposalOverride } = options;
+    assert(
+      EXECUTION_FAULTS.has(fault),
+      "SCHEMA_INVALID",
+      "Execution fault is not supported.",
+    );
     const record = this.get(actionId);
     assert(record.permit_uses === 0, "PERMIT_USED", "The single-use permit has already been consumed.", {
       action_id: actionId,
@@ -264,6 +510,9 @@ export class ConsequenceRail {
     this.assertNotExpired(record.permit.expires_at, record, "PERMIT_EXPIRED");
     this.assertNotExpired(record.reservation.expires_at, record, "RECOURSE_EXPIRED");
     verifyArtifact(record.permit, this.trustedKeys);
+    if (record.recovery_preflight) {
+      this.assertAcceptedRecoveryPreflight(record, { requireCurrent: true });
+    }
 
     const candidate = proposalOverride ?? record.proposal;
     assert(
@@ -272,9 +521,7 @@ export class ConsequenceRail {
       "The execution payload does not match the authorized action digest.",
       { action_id: actionId, state: record.state },
     );
-    const recourseStatus = this.connector.recourseStatus(
-      record.reservation.connector_commitment.reservation_token,
-    );
+    const recourseStatus = this.readRecourseStatus(record);
     if (recourseStatus.status !== "active") {
       this.transition(record, "REVOKED", "CONNECTOR_RECOURSE_NOT_ACTIVE", {
         recourse_status: recourseStatus.status,
@@ -360,12 +607,23 @@ export class ConsequenceRail {
     return this.inspect(actionId);
   }
 
-  async verifyOutcome(actionId, { fault = "none", evidenceOverride } = {}) {
+  async verifyOutcome(actionId, options = {}) {
+    assertNoUnknownFields(
+      options,
+      new Set(["fault"]),
+      "Outcome verification options",
+    );
+    const { fault = "none" } = options;
+    assert(
+      EVIDENCE_FAULTS.has(fault),
+      "SCHEMA_INVALID",
+      "Outcome evidence fault is not supported.",
+    );
     const record = this.get(actionId);
     this.assertState(record, "EXECUTED");
     this.transition(record, "VERIFYING", "OUTCOME_VERIFICATION_STARTED", {});
 
-    let evidence = evidenceOverride ?? await this.connector.observe(record.proposal, {
+    let evidence = await this.connector.observe(record.proposal, {
       fault,
       actionDigest: record.action_digest,
     });
@@ -413,7 +671,18 @@ export class ConsequenceRail {
     return this.inspect(actionId);
   }
 
-  async remediate(actionId, { fault = "none" } = {}) {
+  async remediate(actionId, options = {}) {
+    assertNoUnknownFields(
+      options,
+      new Set(["fault"]),
+      "Remediation options",
+    );
+    const { fault = "none" } = options;
+    assert(
+      REMEDIATION_FAULTS.has(fault),
+      "SCHEMA_INVALID",
+      "Remediation fault is not supported.",
+    );
     const record = this.get(actionId);
     this.assertState(record, "REMEDY_DUE");
     if (isExpired(record.reservation.expires_at, this.clock.now())) {
@@ -421,9 +690,7 @@ export class ConsequenceRail {
       this.close(record);
       return this.inspect(actionId);
     }
-    const recourseStatus = this.connector.recourseStatus(
-      record.reservation.connector_commitment.reservation_token,
-    );
+    const recourseStatus = this.readRecourseStatus(record);
     if (recourseStatus.status !== "active") {
       this.transition(record, "REVIEW_REQUIRED", "RECOURSE_NOT_ACTIVE", {
         recourse_status: recourseStatus.status,
@@ -435,6 +702,15 @@ export class ConsequenceRail {
       record.remedy_attempts < record.reservation.max_attempts,
       "REMEDY_ATTEMPTS_EXHAUSTED",
       "The reserved remedy attempt limit has been reached.",
+    );
+    if (record.recovery_preflight) {
+      this.assertAcceptedRecoveryPreflight(record, { requireCurrent: false });
+    }
+    const remediate = this.connector.remediate;
+    assert(
+      typeof remediate === "function",
+      "RECOVERY_IMPLEMENTATION_INVALID",
+      "The measured connector remediation method is unavailable.",
     );
     assert(
       record.reservation.kind === "reverse" || record.reservation.kind === "compensate",
@@ -448,12 +724,12 @@ export class ConsequenceRail {
       reservation_digest: record.reservation_digest,
     });
     try {
-      record.remedy_result = await this.connector.remediate(
+      record.remedy_result = await Reflect.apply(remediate, this.connector, [
         record.proposal,
         record.reservation,
         record.remedy_idempotency_key,
         fault,
-      );
+      ]);
     } catch (error) {
       if (error instanceof UnknownRemedyError) {
         record.remedy_result = {
@@ -488,7 +764,18 @@ export class ConsequenceRail {
     return this.inspect(actionId);
   }
 
-  async reconcileRemedy(actionId, { evidenceFault = "none" } = {}) {
+  async reconcileRemedy(actionId, options = {}) {
+    assertNoUnknownFields(
+      options,
+      new Set(["evidenceFault"]),
+      "Remedy reconciliation options",
+    );
+    const { evidenceFault = "none" } = options;
+    assert(
+      REMEDY_EVIDENCE_FAULTS.has(evidenceFault),
+      "SCHEMA_INVALID",
+      "Remedy evidence fault is not supported.",
+    );
     const record = this.get(actionId);
     this.assertState(record, "REMEDY_UNKNOWN");
     const status = await this.connector.remedyStatus(record.remedy_idempotency_key);
@@ -564,6 +851,8 @@ export class ConsequenceRail {
   inspect(actionId) {
     const record = this.get(actionId);
     const events = this.eventStore.list(actionId);
+    const recoveryEnabled =
+      record.authorization?.require_recovery_preflight === true;
     return {
       action_id: record.action_id,
       action_digest: record.action_digest,
@@ -580,6 +869,15 @@ export class ConsequenceRail {
       event_count: events.length,
       event_chain_head: events.at(-1)?.event_hash ?? null,
       outcome: record.receipt?.outcome ?? null,
+      ...(recoveryEnabled
+        ? {
+            recovery_preflight_required: true,
+            recovery_preflight_qualification:
+              record.recovery_preflight_verification?.qualification ?? null,
+            recovery_preflight_attestation_digest:
+              record.recovery_preflight_verification?.attestation_digest ?? null,
+          }
+        : {}),
     };
   }
 
@@ -632,6 +930,129 @@ export class ConsequenceRail {
     return record;
   }
 
+  recoveryImplementationDigest(record, code) {
+    assert(
+      typeof this.measureRecoveryImplementation === "function",
+      code,
+      "A trusted recovery implementation measurer is required.",
+    );
+    let implementationDigest;
+    try {
+      implementationDigest = this.measureRecoveryImplementation(
+        this.connector,
+        record.reservation.capability,
+      );
+    } catch (error) {
+      throw new RailError(
+        code,
+        "The recovery implementation could not be measured.",
+        { cause_code: error.code ?? "RECOVERY_IMPLEMENTATION_INVALID" },
+      );
+    }
+    assertDigest(implementationDigest, "Recovery implementation digest", code);
+    return implementationDigest;
+  }
+
+  assertRecoveryBinding(record, contract, code) {
+    verifyArtifact(record.reservation, this.trustedKeys);
+    verifyArtifact(
+      record.reservation.connector_commitment,
+      this.connectorTrustedKeys,
+    );
+    const actualReservationDigest = digest(record.reservation);
+    const actualCommitmentDigest = digest(
+      record.reservation.connector_commitment,
+    );
+    const actualImplementationDigest =
+      this.recoveryImplementationDigest(record, code);
+    assert(
+      actualReservationDigest === record.reservation_digest &&
+        contract.recourse.kind === record.reservation.kind &&
+        contract.recourse.capability === record.reservation.capability &&
+        contract.recourse.reservation_digest === actualReservationDigest &&
+        contract.recourse.capability_reference_digest ===
+          record.reservation.capability_reference_digest &&
+        contract.recourse.connector_commitment_digest ===
+          actualCommitmentDigest &&
+        contract.recourse.implementation_digest ===
+          actualImplementationDigest,
+      code,
+      "Recovery preflight does not match the exact live recourse binding.",
+    );
+  }
+
+  assertAcceptedRecoveryPreflight(record, { requireCurrent }) {
+    assert(
+      record.recovery_preflight && record.recovery_preflight_verification,
+      "RECOVERY_PREFLIGHT_REQUIRED",
+      "A qualified recovery preflight is required.",
+    );
+    const verification = verifyRecoveryPreflight(record.recovery_preflight, {
+      trustedKeys: this.recoveryTrustedKeys,
+      now: requireCurrent ? this.clock.now() : null,
+      requireCurrent,
+    });
+    assert(
+      verification.qualification === "QUALIFIED_EXACT" &&
+        verification.attestation_digest ===
+          record.recovery_preflight_verification.attestation_digest,
+      "RECOVERY_PREFLIGHT_NOT_QUALIFIED",
+      "The accepted recovery preflight is no longer valid.",
+    );
+    this.assertRecoveryBinding(
+      record,
+      record.recovery_preflight.recovery_contract,
+      "RECOVERY_PREFLIGHT_NOT_QUALIFIED",
+    );
+  }
+
+  readRecourseStatus(record) {
+    const expectedToken =
+      record.reservation.connector_commitment.reservation_token;
+    const status = this.connector.recourseStatus(expectedToken);
+    assertExactFields(
+      status,
+      RECOURSE_STATUS_FIELDS,
+      "Connector recourse status",
+      "RECOURSE_STATUS_INVALID",
+    );
+    assert(
+      status.reservation_token === expectedToken &&
+        ["active", "expired", "released", "consumed", "unknown"].includes(
+          status.status,
+        ),
+      "RECOURSE_STATUS_INVALID",
+      "Connector recourse status is not bound to the expected reservation.",
+    );
+    return status;
+  }
+
+  connectorCapabilities(code = "RECOURSE_INVALID") {
+    const capabilities = this.connector.capabilities();
+    assertExactFields(
+      capabilities,
+      CONNECTOR_CAPABILITY_FIELDS,
+      "Connector capabilities",
+      code,
+    );
+    assertNonEmptyString(capabilities.connector, "Connector name", code);
+    assert(
+      typeof capabilities.exclusive_credential_custody === "boolean" &&
+        Array.isArray(capabilities.actions) &&
+        capabilities.actions.every((item) => typeof item === "string") &&
+        Array.isArray(capabilities.remedies) &&
+        capabilities.remedies.every((item) => typeof item === "string"),
+      code,
+      "Connector capabilities are malformed.",
+    );
+    assertNonEmptyString(
+      capabilities.connector_signing_key_id,
+      "Connector signing key id",
+      code,
+    );
+    return capabilities;
+  }
+
   transition(record, nextState, reasonCode, details) {
     const allowed = ALLOWED_TRANSITIONS[record.state] ?? [];
     assert(allowed.includes(nextState), "ILLEGAL_TRANSITION", `Cannot transition from ${record.state} to ${nextState}.`, {
@@ -662,7 +1083,7 @@ export class ConsequenceRail {
     if (release) {
       this.connector.releaseRecourse(reservationToken);
     }
-    const status = this.connector.recourseStatus(reservationToken);
+    const status = this.readRecourseStatus(record);
     this.eventStore.append(
       record.action_id,
       status.status === "active"
@@ -725,8 +1146,7 @@ export class ConsequenceRail {
   }
 
   validateProposal(input) {
-    assert(input && typeof input === "object", "SCHEMA_INVALID", "ActionProposal must be an object.");
-    assertNoUnknownFields(input, PROPOSAL_FIELDS, "ActionProposal");
+    assertExactFields(input, PROPOSAL_FIELDS, "ActionProposal");
     assert(
       input.schema_version === "consequence-rail/action-proposal/v0.1",
       "SCHEMA_INVALID",
@@ -737,20 +1157,37 @@ export class ConsequenceRail {
       "SCHEMA_INVALID",
       "Unsupported action type.",
     );
-    assert(input.subject?.id && input.subject?.type, "SCHEMA_INVALID", "Subject type and id are required.");
-    assert(
-      input.target?.connector && input.target?.resource_type && input.target?.resource_id,
-      "SCHEMA_INVALID",
-      "Target connector and resource are required.",
-    );
-    assert(typeof input.idempotency_key === "string", "SCHEMA_INVALID", "idempotency_key is required.");
+    assertExactFields(input.subject, SUBJECT_FIELDS, "ActionProposal.subject");
+    assertNonEmptyString(input.subject.type, "ActionProposal.subject.type");
+    assertNonEmptyString(input.subject.id, "ActionProposal.subject.id");
+    assertExactFields(input.target, TARGET_FIELDS, "ActionProposal.target");
+    for (const field of TARGET_FIELDS) {
+      assertNonEmptyString(input.target[field], `ActionProposal.target.${field}`);
+    }
+    assertNonEmptyString(input.idempotency_key, "ActionProposal.idempotency_key");
     assert(ASSURANCE_MODES.includes(input.assurance_mode), "SCHEMA_INVALID", "Unknown assurance mode.");
+    const requestedAt = assertTimestamp(
+      input.requested_at,
+      "ActionProposal.requested_at",
+    );
+    const expiresAt = assertTimestamp(
+      input.expires_at,
+      "ActionProposal.expires_at",
+    );
     assert(
-      new Date(input.expires_at).getTime() > new Date(input.requested_at).getTime(),
+      expiresAt > requestedAt,
       "SCHEMA_INVALID",
       "expires_at must be after requested_at.",
     );
-    assert(input.evidence_plan?.source, "SCHEMA_INVALID", "An evidence source is required.");
+    assertExactFields(
+      input.evidence_plan,
+      EVIDENCE_PLAN_FIELDS,
+      "ActionProposal.evidence_plan",
+    );
+    assertNonEmptyString(
+      input.evidence_plan.source,
+      "ActionProposal.evidence_plan.source",
+    );
     assert(
       Number.isInteger(input.evidence_plan?.max_age_seconds) &&
         input.evidence_plan.max_age_seconds > 0,
@@ -760,6 +1197,11 @@ export class ConsequenceRail {
     evaluatePostcondition(input.postcondition, { facts: {} });
 
     if (input.action_type === "demo.refund.issue/v1") {
+      assertExactFields(
+        input.parameters,
+        REFUND_PARAMETER_FIELDS,
+        "ActionProposal.parameters",
+      );
       assert(
         Number.isSafeInteger(input.parameters?.amount_minor) && input.parameters.amount_minor > 0,
         "SCHEMA_INVALID",
@@ -770,14 +1212,39 @@ export class ConsequenceRail {
         "SCHEMA_INVALID",
         "Refund currency must be a three-letter uppercase code.",
       );
+    } else {
+      assertExactFields(
+        input.parameters,
+        EMAIL_PARAMETER_FIELDS,
+        "ActionProposal.parameters",
+      );
+      assertNonEmptyString(
+        input.parameters.recipient_id,
+        "ActionProposal.parameters.recipient_id",
+      );
+      assertNonEmptyString(
+        input.parameters.subject,
+        "ActionProposal.parameters.subject",
+      );
     }
+
+    digest(input);
 
     return deepClone(input);
   }
 
   validateReservation(record, input) {
-    assert(input && typeof input === "object", "RECOURSE_INVALID", "RecourseReservation is required.");
-    assertNoUnknownFields(input, RECOURSE_INPUT_FIELDS, "RecourseReservation request");
+    assertExactFields(
+      input,
+      RECOURSE_INPUT_FIELDS,
+      "RecourseReservation request",
+      "RECOURSE_INVALID",
+    );
+    assertDigest(
+      input.action_digest,
+      "RecourseReservation action_digest",
+      "RECOURSE_INVALID",
+    );
     assert(
       input.action_digest === record.action_digest,
       "RECOURSE_INVALID",
@@ -793,9 +1260,12 @@ export class ConsequenceRail {
       "RECOURSE_INVALID",
       "Recourse connector does not match the action connector.",
     );
-    const capabilities = this.connector.capabilities();
+    const capabilities = this.connectorCapabilities();
     assert(
-      capabilities.remedies.includes(input.capability),
+      capabilities.connector === input.connector &&
+        Array.isArray(capabilities.remedies) &&
+        capabilities.remedies.every((item) => typeof item === "string") &&
+        capabilities.remedies.includes(input.capability),
       "RECOURSE_INVALID",
       "Connector does not advertise the reserved remedy capability.",
     );
@@ -827,6 +1297,11 @@ export class ConsequenceRail {
       "RECOURSE_INVALID",
       "Recourse idempotency key is required.",
     );
+    assertTimestamp(
+      input.expires_at,
+      "RecourseReservation expires_at",
+      "RECOURSE_INVALID",
+    );
     assert(!isExpired(input.expires_at, this.clock.now()), "RECOURSE_EXPIRED", "RecourseReservation has expired.");
     const requiredCoverage =
       new Date(record.proposal.expires_at).getTime() +
@@ -847,6 +1322,12 @@ export class ConsequenceRail {
   }
 
   validateConnectorCommitment(record, request, commitment) {
+    assertExactFields(
+      commitment,
+      CONNECTOR_COMMITMENT_FIELDS,
+      "ConnectorRecourseCommitment",
+      "RECOURSE_COMMITMENT_INVALID",
+    );
     assert(
       commitment.schema_version ===
         "consequence-rail/connector-recourse-commitment/v0.1",
@@ -855,7 +1336,8 @@ export class ConsequenceRail {
     );
     assert(
       commitment.status === "active" &&
-        typeof commitment.reservation_token === "string",
+        typeof commitment.reservation_token === "string" &&
+        commitment.reservation_token.length > 0,
       "RECOURSE_COMMITMENT_INVALID",
       "Connector did not return an active reservation token.",
     );
@@ -879,13 +1361,40 @@ export class ConsequenceRail {
       "RECOURSE_COMMITMENT_INVALID",
       "Connector commitment is bound to a different action.",
     );
+    assertTimestamp(
+      commitment.expires_at,
+      "ConnectorRecourseCommitment.expires_at",
+      "RECOURSE_COMMITMENT_INVALID",
+    );
+    assertTimestamp(
+      commitment.reserved_at,
+      "ConnectorRecourseCommitment.reserved_at",
+      "RECOURSE_COMMITMENT_INVALID",
+    );
   }
 
   validateEvidence(record, input) {
+    assertExactFields(
+      input,
+      EVIDENCE_FIELDS,
+      "OutcomeEvidence",
+      "EVIDENCE_SCHEMA_INVALID",
+    );
     assert(
       input?.schema_version === "consequence-rail/outcome-evidence/v0.1",
       "EVIDENCE_SCHEMA_INVALID",
       "Unsupported evidence schema.",
+    );
+    assertDigest(
+      input.action_digest,
+      "OutcomeEvidence.action_digest",
+      "EVIDENCE_SCHEMA_INVALID",
+    );
+    assertExactFields(
+      input.resource,
+      EVIDENCE_RESOURCE_FIELDS,
+      "OutcomeEvidence.resource",
+      "EVIDENCE_SCHEMA_INVALID",
     );
     assert(
       input.action_digest === record.action_digest,
@@ -903,8 +1412,14 @@ export class ConsequenceRail {
       "EVIDENCE_RESOURCE_MISMATCH",
       "Evidence describes a different resource.",
     );
-    const age =
-      new Date(this.clock.now()).getTime() - new Date(input.observed_at).getTime();
+    assertPlainObject(input.facts, "OutcomeEvidence.facts", "EVIDENCE_SCHEMA_INVALID");
+    digest(input.facts);
+    const observedAt = assertTimestamp(
+      input.observed_at,
+      "OutcomeEvidence.observed_at",
+      "EVIDENCE_SCHEMA_INVALID",
+    );
+    const age = new Date(this.clock.now()).getTime() - observedAt;
     assert(age >= 0, "EVIDENCE_FROM_FUTURE", "Evidence timestamp is in the future.");
     assert(
       age <= record.proposal.evidence_plan.max_age_seconds * 1_000,

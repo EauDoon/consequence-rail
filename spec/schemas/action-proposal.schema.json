@@ -69,7 +69,8 @@
       }
     },
     "parameters": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": true
     },
     "idempotency_key": {
       "type": "string",
@@ -112,6 +113,48 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action_type": { "const": "demo.refund.issue/v1" }
+        }
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["amount_minor", "currency"],
+            "properties": {
+              "amount_minor": { "type": "integer", "minimum": 1 },
+              "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action_type": { "const": "demo.email.send/v1" }
+        }
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["recipient_id", "subject"],
+            "properties": {
+              "recipient_id": { "type": "string", "minLength": 1 },
+              "subject": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "postcondition": {
       "type": "object",

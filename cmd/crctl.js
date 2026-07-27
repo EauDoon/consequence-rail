@@ -4,7 +4,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runIrreversibleDemo, runRefundDemo } from "../src/demo.js";
 import { RailError } from "../src/errors.js";
-import { demoConnectorTrustedKeys, demoTrustedKeys } from "../src/signing.js";
+import { runRecoveryPreflightDemo } from "../src/recovery-demo.js";
+import { verifyRecoveryPreflight } from "../src/recovery-preflight.js";
+import {
+  demoConnectorTrustedKeys,
+  demoRecoveryTrustedKeys,
+  demoTrustedKeys,
+} from "../src/signing.js";
 import { verifyBundle } from "../src/verify.js";
 
 function option(args, name, fallback = null) {
@@ -22,13 +28,16 @@ function printHelp() {
 Usage:
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo irreversible [--json]
+  crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
   crctl bundle verify <file> [--json]
+  crctl recovery-preflight verify <file> [--json]
 
 Examples:
   node ./cmd/crctl.js demo refund
   node ./cmd/crctl.js demo refund --fault duplicate
   node ./cmd/crctl.js demo refund --fault lost-response-after-commit
   node ./cmd/crctl.js demo irreversible
+  node ./cmd/crctl.js demo recovery-preflight
 `);
 }
 
@@ -57,6 +66,28 @@ function printRefund(summary, asJson) {
     lines.push(`tamper_detection: ${summary.tamper_detection.detected ? "pass" : "fail"}`);
   }
   process.stdout.write(`${lines.join("\n")}\n`);
+}
+
+function printRecoveryPreflight(summary, asJson) {
+  if (asJson) {
+    process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+    return;
+  }
+  process.stdout.write(
+    [
+      `scenario: ${summary.scenario}`,
+      `fault: ${summary.fault}`,
+      `fixture_fidelity: ${summary.fixture_fidelity}`,
+      `recovery_class: ${summary.recovery_class}`,
+      `qualification: ${summary.qualification}`,
+      `bundle_verification: ${summary.bundle_verification}`,
+      `permit_without_preflight: ${summary.permit_without_preflight}`,
+      `permit_after_preflight: ${summary.permit_after_preflight}`,
+      `live_connector_execute_calls: ${summary.live_connector_execute_calls}`,
+      `live_connector_remedy_calls: ${summary.live_connector_remedy_calls}`,
+      `production_recovery_claimed: ${summary.production_recovery_claimed}`,
+    ].join("\n") + "\n",
+  );
 }
 
 async function main() {
@@ -101,6 +132,21 @@ async function main() {
     return;
   }
 
+  if (args[0] === "demo" && args[1] === "recovery-preflight") {
+    const result = await runRecoveryPreflightDemo({
+      fault: option(args, "--fault", "none"),
+    });
+    const outputPath = option(args, "--out");
+    if (outputPath) {
+      writeFileSync(resolve(outputPath), `${JSON.stringify(result.bundle, null, 2)}\n`, {
+        encoding: "utf8",
+        flag: "wx",
+      });
+    }
+    printRecoveryPreflight(result.summary, has(args, "--json"));
+    return;
+  }
+
   if (args[0] === "bundle" && args[1] === "verify" && args[2]) {
     const bundle = JSON.parse(readFileSync(resolve(args[2]), "utf8"));
     const result = verifyBundle(bundle, {
@@ -119,6 +165,31 @@ async function main() {
           `assurance: ${result.assurance_mode}`,
           `events: ${result.event_count}`,
           `semantics: ${result.semantics.status}`,
+          `trusted_key: ${result.trusted_key_id}`,
+        ].join("\n") + "\n",
+      );
+    }
+    return;
+  }
+
+  if (
+    args[0] === "recovery-preflight" &&
+    args[1] === "verify" &&
+    args[2]
+  ) {
+    const bundle = JSON.parse(readFileSync(resolve(args[2]), "utf8"));
+    const result = verifyRecoveryPreflight(bundle, {
+      trustedKeys: demoRecoveryTrustedKeys(),
+    });
+    if (has(args, "--json")) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      process.stdout.write(
+        [
+          "recovery_preflight_verification: pass",
+          `qualification: ${result.qualification}`,
+          `freshness: ${result.freshness_checked ? "current" : "not_checked"}`,
+          `attestation: ${result.attestation_digest}`,
           `trusted_key: ${result.trusted_key_id}`,
         ].join("\n") + "\n",
       );

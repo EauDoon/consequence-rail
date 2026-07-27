@@ -56,8 +56,10 @@ idempotency key. It never repeats `Execute` from `UNKNOWN`.
 
 Threat: evidence is wrong, incomplete, stale, or collusive.
 
-Control: source, action digest, resource and freshness are checked. Signed
-artifacts preserve what the rail captured.
+Control: settlement evidence is obtained only through the configured connector
+observation method. Callers cannot submit an evidence override. Exact source,
+action digest, resource, structure and freshness are checked before the Rail
+signs what it captured.
 
 Residual risk: signatures do not prove truth, independence or causality.
 
@@ -73,8 +75,24 @@ Terminal no-effect, expiry and revocation paths release or finalize the
 reservation. A remedy is not considered complete until fresh evidence
 verifies the resulting state.
 
+When policy enables Recovery Preflight, the Rail additionally requires a
+current, separately trusted `QUALIFIED_EXACT` drill attestation. The contract
+binds the action envelope, exact signed reservation, capability reference,
+connector commitment, measured connector recovery callables, registered
+adapter live callable, precommitted checkpoint, fault, procedure and oracle. The reference drill uses fresh synthetic connector
+instances and the actual remedy implementation, never the live action
+connector.
+
+The synthetic runner accepts only a registered adapter implementation. It
+measures and captures the live `run` callable before invocation, so replacing
+the callable while retaining a stale declared digest fails closed. A global
+preflight requirement cannot be downgraded by an individual authorization.
+
 Residual risk: capability advertisement can be dishonest or become
-unavailable after reservation.
+unavailable after reservation. A passing synthetic drill does not establish
+production fidelity or future availability. The recovery signer or adapter
+can also be dishonest, so signatures prove provenance and integrity rather
+than operational truth.
 
 ### Recourse revocation race
 
@@ -144,10 +162,18 @@ evidence. The demo uses this profile only with synthetic data.
 Threat: hostile JSON causes denial of service or parser inconsistencies.
 
 Control: the runtime uses the platform JSON parser, rejects unknown proposal
-fields, and restricts postcondition operators.
+and operation fields, rejects prototype-sensitive keys and inherited or
+accessor-backed JSON shapes before canonicalization, uses own-property-only
+postcondition paths, and restricts postcondition operators. The loopback server
+also bounds bodies, headers, request time, concurrency, connection reuse, and
+stored actions; enforces JSON media types; and rejects hostile Host, Origin,
+and unknown or repeated query parameters before state mutation. Settlement
+verification checks every closed bundle object against its exact runtime shape
+before cryptographic and semantic validation.
 
-Residual risk: request-size limits, fuzzing and production resource controls
-are not yet implemented.
+Residual risk: the platform parser does not diagnose duplicate JSON object
+members, and these local limits are not a substitute for production ingress,
+authentication, process isolation, or sustained fuzzing.
 
 ## Publication blockers
 
@@ -158,6 +184,5 @@ Do not describe the reference as production-ready while any of these remain:
 - no external checkpoint
 - no production connector isolation
 - no independent evidence trust adapter
-- no request-size or rate controls
 - incomplete cross-language canonicalization vectors
 - no independent security review

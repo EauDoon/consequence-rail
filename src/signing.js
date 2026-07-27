@@ -12,6 +12,16 @@ const ED25519_PKCS8_PREFIX = Buffer.concat([
   Buffer.from("302e020100300506", "hex"),
   Buffer.from("032b657004220420", "hex"),
 ]);
+const SIGNATURE_FIELDS = new Set(["algorithm", "key_id", "value"]);
+const ED25519_BASE64URL = /^[A-Za-z0-9_-]{86}$/;
+
+function isPlainObject(value) {
+  return value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype ||
+      Object.getPrototypeOf(value) === null);
+}
 
 function deterministicSeed(label) {
   return createHash("sha256")
@@ -48,7 +58,17 @@ export function createDemoConnectorSigner() {
   );
 }
 
+export function createDemoRecoverySigner() {
+  return createDeterministicDemoSigner(
+    "recovery-preflight-signing-key",
+    "demo-recovery-ed25519",
+  );
+}
+
 export function signArtifact(body, signer) {
+  if (!isPlainObject(body) || !signer?.privateKey || !signer?.kid) {
+    throw new RailError("SIGNING_INVALID", "Artifact body and signer are required.");
+  }
   const unsigned = without(body, ["signature"]);
   const value = cryptoSign(null, Buffer.from(canonicalJson(unsigned), "utf8"), signer.privateKey)
     .toString("base64url");
@@ -64,9 +84,25 @@ export function signArtifact(body, signer) {
 }
 
 export function verifyArtifact(artifact, trustedKeys) {
-  const signature = artifact?.signature;
-  if (!signature || signature.algorithm !== "Ed25519") {
+  if (!isPlainObject(artifact) || !Object.hasOwn(artifact, "signature")) {
     throw new RailError("SIGNATURE_INVALID", "Artifact is missing a supported signature.");
+  }
+  const signature = artifact.signature;
+  if (
+    !isPlainObject(signature) ||
+    [...SIGNATURE_FIELDS].some((field) => !Object.hasOwn(signature, field)) ||
+    Object.keys(signature).some((field) => !SIGNATURE_FIELDS.has(field)) ||
+    signature.algorithm !== "Ed25519" ||
+    typeof signature.key_id !== "string" ||
+    signature.key_id.length === 0 ||
+    typeof signature.value !== "string" ||
+    !ED25519_BASE64URL.test(signature.value)
+  ) {
+    throw new RailError("SIGNATURE_INVALID", "Artifact is missing a supported signature.");
+  }
+
+  if (!(trustedKeys instanceof Map)) {
+    throw new RailError("TRUST_CONFIG_INVALID", "Trusted keys must be an explicit map.");
   }
 
   const publicKey = trustedKeys.get(signature.key_id);
@@ -102,5 +138,10 @@ export function demoTrustedKeys() {
 
 export function demoConnectorTrustedKeys() {
   const signer = createDemoConnectorSigner();
+  return new Map([[signer.kid, signer.publicKey]]);
+}
+
+export function demoRecoveryTrustedKeys() {
+  const signer = createDemoRecoverySigner();
   return new Map([[signer.kid, signer.publicKey]]);
 }

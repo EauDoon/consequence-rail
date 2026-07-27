@@ -1,13 +1,14 @@
 # Release status
 
-Current state: public experimental v0.1 source release.
+Current public state: experimental v0.2.0 source release with Recovery
+Preflight.
 
 ## GitHub metadata
 
 - Repository: `oonyl/consequence-rail`
 - Visibility: public
 - Default branch: `main`
-- About: `Recourse-gated execution and settlement receipts for autonomous actions.`
+- About: `Recourse-gated execution, recovery preflight, and signed settlement receipts for autonomous actions.`
 - Homepage: none
 - Public identity: Oonyl
 - Primary profile category: flagship systems
@@ -23,6 +24,7 @@ event-sourcing
 json-schema
 openapi
 recourse
+recovery-testing
 runtime-safety
 ```
 
@@ -32,6 +34,9 @@ runtime-safety
 - one Node.js reference runtime
 - one synthetic connector
 - deterministic conformance and fault tests
+- adversarial canonicalization, exact-binding, checkpoint, implementation
+  substitution, and loopback request-boundary regressions
+- one isolated synthetic recovery-drill adapter and replay verifier
 - no hosted service or support-level promise
 - no production-readiness claim
 

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Consequence Rail Reference API",
-    "version": "0.1.0",
-    "description": "Experimental local reference API for recourse-gated execution. The v0.1 server keeps runtime state in memory."
+    "version": "0.2.0",
+    "description": "Experimental loopback-only reference API for recourse-gated execution and optional recovery preflight. The server keeps runtime state in memory, accepts JSON bodies up to 65,536 bytes, enforces same-origin loopback Host and Origin values, rejects unknown or repeated query parameters before route mutation, and may return 400, 403, 405, 413, 415, 429, or 503 boundary errors before route-specific processing."
   },
   "servers": [
     {
@@ -21,7 +21,24 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "protocol_version",
+                    "implementation",
+                    "assurance_modes",
+                    "executable_modes",
+                    "optional_features",
+                    "connector"
+                  ],
+                  "properties": {
+                    "protocol_version": { "const": "v0.1" },
+                    "implementation": { "type": "string" },
+                    "assurance_modes": { "type": "array", "items": { "type": "string" } },
+                    "executable_modes": { "type": "array", "items": { "type": "string" } },
+                    "optional_features": { "type": "array", "items": { "type": "string" } },
+                    "connector": { "$ref": "#/components/schemas/ConnectorCapabilities" }
+                  }
                 }
               }
             }
@@ -134,6 +151,39 @@
         }
       }
     },
+    "/v0/actions/{action_id}/recovery-preflight": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ActionId"
+        }
+      ],
+      "post": {
+        "operationId": "acceptRecoveryPreflight",
+        "summary": "Verify and accept a signed recovery drill bundle",
+        "description": "The rail verifies evidence produced outside the live action path. This endpoint never executes a drill plan.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "../spec/schemas/recovery-drill-bundle.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ActionView"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/v0/actions/{action_id}/permit": {
       "parameters": [
         {
@@ -166,7 +216,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FaultInput"
+                "$ref": "#/components/schemas/ExecutionFaultInput"
               }
             }
           }
@@ -216,7 +266,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FaultInput"
+                "$ref": "#/components/schemas/EvidenceFaultInput"
               }
             }
           }
@@ -244,7 +294,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FaultInput"
+                "$ref": "#/components/schemas/RemediationFaultInput"
               }
             }
           }
@@ -276,7 +326,11 @@
                 "additionalProperties": false,
                 "properties": {
                   "evidenceFault": {
-                    "type": "string",
+                    "enum": [
+                      "none",
+                      "post-remedy-stale-evidence",
+                      "post-remedy-false-evidence"
+                    ],
                     "description": "Synthetic post-remedy evidence fault for the mock connector."
                   }
                 }
@@ -354,6 +408,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "required": [
                     "valid",
                     "action_id",
@@ -392,7 +447,8 @@
         "in": "path",
         "required": true,
         "schema": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^act_[A-Za-z0-9_-]{20}$"
         }
       }
     },
@@ -421,14 +477,20 @@
     "schemas": {
       "ActionView": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "action_id",
           "action_digest",
           "action_type",
+          "resource",
           "state",
           "assurance_mode",
           "bypass_possible",
-          "event_count"
+          "permit_uses",
+          "remedy_attempts",
+          "event_count",
+          "event_chain_head",
+          "outcome"
         ],
         "properties": {
           "action_id": {
@@ -439,6 +501,15 @@
           },
           "action_type": {
             "type": "string"
+          },
+          "resource": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "id_digest"],
+            "properties": {
+              "type": { "type": "string" },
+              "id_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+            }
           },
           "state": {
             "type": "string"
@@ -456,7 +527,33 @@
           "event_count": {
             "type": "integer"
           },
+          "permit_uses": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "remedy_attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "event_chain_head": {
+            "type": ["string", "null"]
+          },
           "outcome": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recovery_preflight_required": {
+            "type": "boolean"
+          },
+          "recovery_preflight_qualification": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recovery_preflight_attestation_digest": {
             "type": [
               "string",
               "null"
@@ -480,10 +577,16 @@
             "type": "string"
           },
           "policy_digest": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
           },
           "evaluation_input_digest": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "require_recovery_preflight": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -506,7 +609,7 @@
         "properties": {
           "action_digest": {
             "type": "string",
-            "minLength": 32
+            "pattern": "^[A-Za-z0-9_-]{43}$"
           },
           "kind": {
             "enum": [
@@ -549,18 +652,50 @@
           }
         }
       },
-      "FaultInput": {
+      "ExecutionFaultInput": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "fault": {
-            "type": "string",
+            "enum": [
+              "none",
+              "duplicate",
+              "lost-response-before-commit",
+              "lost-response-after-commit",
+              "remedy-failure"
+            ],
             "description": "Synthetic action, evidence, or remedy fault accepted only by the demo connector."
+          }
+        }
+      },
+      "EvidenceFaultInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fault": {
+            "enum": ["none", "stale-evidence"]
+          }
+        }
+      },
+      "RemediationFaultInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fault": {
+            "enum": [
+              "none",
+              "remedy-failure",
+              "remedy-lost-response-before-commit",
+              "remedy-lost-response-after-commit",
+              "post-remedy-stale-evidence",
+              "post-remedy-false-evidence"
+            ]
           }
         }
       },
       "Error": {
         "type": "object",
+        "additionalProperties": true,
         "required": [
           "code",
           "message"
@@ -578,6 +713,24 @@
           "state": {
             "type": "string"
           }
+        }
+      },
+      "ConnectorCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connector",
+          "exclusive_credential_custody",
+          "actions",
+          "remedies",
+          "connector_signing_key_id"
+        ],
+        "properties": {
+          "connector": { "type": "string", "minLength": 1 },
+          "exclusive_credential_custody": { "type": "boolean" },
+          "actions": { "type": "array", "items": { "type": "string" } },
+          "remedies": { "type": "array", "items": { "type": "string" } },
+          "connector_signing_key_id": { "type": "string", "minLength": 1 }
         }
       }
     }

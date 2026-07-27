@@ -1,4 +1,5 @@
 import { digest } from "./canonical.js";
+import { validateSettlementBundle } from "./bundle-validation.js";
 import { verifyEventChain } from "./event-store.js";
 import { RailError } from "./errors.js";
 import { evaluatePostcondition } from "./postconditions.js";
@@ -25,6 +26,7 @@ export function verifyBundle(
     requireSemantics = true,
   } = {},
 ) {
+  validateSettlementBundle(bundle);
   integrityAssert(
     bundle?.schema_version === "consequence-rail/settlement-bundle/v0.1",
     "Unsupported settlement bundle version.",

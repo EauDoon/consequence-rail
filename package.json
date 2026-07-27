@@ -1,6 +1,6 @@
 {
   "name": "consequence-rail",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Recourse-gated execution and settlement receipts for autonomous actions.",
   "type": "module",
@@ -12,6 +12,7 @@
     "demo": "node ./cmd/crctl.js demo refund",
     "demo:duplicate": "node ./cmd/crctl.js demo refund --fault duplicate",
     "demo:irreversible": "node ./cmd/crctl.js demo irreversible",
+    "demo:recovery": "node ./cmd/crctl.js demo recovery-preflight",
     "start": "node ./cmd/rail.js",
     "test": "node --test"
   },

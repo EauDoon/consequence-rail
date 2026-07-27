@@ -81,6 +81,14 @@ REMEDY_FAILED
   -> CLOSED(disputed)
 ```
 
+Recovery Preflight does not add a state. While an action remains
+`RECOURSE_RESERVED`, the Rail may accept a signed
+`RECOVERY_PREFLIGHT_ACCEPTED` evidence event. If the authorization decision
+requires preflight, the transition to `PERMITTED` MUST fail unless that
+attestation is current, explicitly trusted, `QUALIFIED_EXACT`, and matched to
+the action and recourse envelope. Running a drill against the live connector
+is outside the state machine and MUST NOT occur as part of permit issuance.
+
 ## Ambiguous execution
 
 A transport timeout after a connector call does not establish whether an

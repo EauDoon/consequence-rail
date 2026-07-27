@@ -46,10 +46,12 @@
       "format": "date-time"
     },
     "facts": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": true
     },
     "evaluation": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": true
     },
     "captured_by": {
       "type": "string"

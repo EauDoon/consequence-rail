@@ -11,6 +11,9 @@ general governance platform or API gateway.
 - Read the [threat model](docs/threat-model.md).
 - State the protocol invariant affected by the change.
 - Add deterministic tests for success, failure and ambiguous execution.
+- For boundary changes, add adversarial tests for unknown and inherited fields,
+  reserved object keys, digest or signature substitution, resource limits, and
+  zero state mutation on rejected HTTP requests.
 - Use synthetic data only.
 - Do not add network dependencies to the default test path.
 

@@ -11,7 +11,7 @@ been reserved for that exact action. It then verifies the configured
 postcondition and closes the action with a signed technical outcome:
 `settled`, `compensated`, or `disputed`.
 
-> Experimental v0.1 reference implementation. It does not provide insurance,
+> Experimental v0.2 reference implementation. It does not provide insurance,
 > legal compliance, guaranteed recovery, or proof that an evidence source is
 > truthful.
 
@@ -19,6 +19,9 @@ postcondition and closes the action with a signed technical outcome:
 
 1. **No verifiable recourse reservation, no enforced execution.**
 2. **No verified world-state outcome, no settlement receipt.**
+
+When an authorization decision enables Recovery Preflight, a third gate
+applies: **no current, trusted, coverage-matched recovery drill, no permit.**
 
 ## Try the failure path first
 
@@ -68,6 +71,69 @@ Run the complete deterministic suite:
 node --test
 ```
 
+## Recovery Preflight
+
+A reservation proves that a connector has declared and reserved a remedy. It
+does not prove that the remedy implementation currently restores the declared
+state. Recovery Preflight closes that narrower evidence gap before permit
+issuance when a policy requires it.
+
+Run the synthetic drill:
+
+```text
+node ./cmd/crctl.js demo recovery-preflight
+```
+
+Expected result:
+
+```text
+scenario: synthetic-refund-recovery-preflight
+fault: none
+fixture_fidelity: synthetic
+recovery_class: exact
+qualification: QUALIFIED_EXACT
+bundle_verification: pass
+permit_without_preflight: refused
+permit_after_preflight: issued
+live_connector_execute_calls: 0
+live_connector_remedy_calls: 0
+production_recovery_claimed: false
+```
+
+The drill creates fresh isolated refund connectors, establishes the clean
+declared evidence state, injects the duplicate-refund fault, invokes the same
+reserved remedy implementation used by the Rail, and compares the recovered
+state with the pinned oracle. It emits a separately signed and replayable
+`RecoveryDrillBundle`. It never exercises the live action connector.
+
+Negative controls are explicit:
+
+```text
+node ./cmd/crctl.js demo recovery-preflight --fault missing-checkpoint
+node ./cmd/crctl.js demo recovery-preflight --fault corrupt-checkpoint
+node ./cmd/crctl.js demo recovery-preflight --fault fault-not-observed
+node ./cmd/crctl.js demo recovery-preflight --fault remedy-failure
+node ./cmd/crctl.js demo recovery-preflight --fault not-testable-local
+node ./cmd/crctl.js demo recovery-preflight --fault out-of-scope
+```
+
+Offline `recovery-preflight verify` checks signatures and replay bindings. It
+reports freshness as `not_checked` unless a caller supplies a verification
+time through the library API. The Rail always supplies its clock and requires
+the attestation to be current.
+
+`QUALIFIED_EXACT` means exact only for the complete pinned action digest and
+within its declared envelope,
+exact signed reservation, capability reference, connector commitment,
+measured recovery callables, precommitted checkpoint, and the registered
+fixture adapter's live `run` callable captured immediately before invocation,
+plus the fault, procedure, and declared evidence surface. These bindings are checked when the
+drill is accepted and again before permit, execution, and remediation. The
+current runner refuses to invoke an adapter for
+staging or production-like fixtures; those labels produce
+`NOT_TESTABLE_LOCAL` without a recovery attempt.
+`REVIEW_COMPENSATED` is not accepted automatically by the reference Rail.
+
 ## What the reference implementation provides
 
 - Five versioned protocol artifacts: `ActionProposal`,
@@ -86,6 +152,8 @@ node --test
 - A synthetic refund connector with deterministic fault injection.
 - Signed event chains and offline bundle verification against an explicitly
   trusted key.
+- Recovery contracts, signed drill attestations, deterministic replay, and an
+  optional permit gate with a separately trusted recovery key.
 - An OpenAPI 3.1 reference surface and JSON Schemas.
 
 ## How it is used
@@ -99,7 +167,10 @@ permit and invoking the connector.
 flowchart LR
     A["Propose exact action"] --> B["Bind policy decision"]
     B --> C["Reserve bounded recourse"]
-    C --> D["Issue single-use permit"]
+    C --> P{"Recovery Preflight required?"}
+    P -->|No| D["Issue single-use permit"]
+    P -->|Yes, qualified| D
+    P -->|Missing, stale or failed| X["Refuse permit"]
     D --> E["Execute through protected connector"]
     E --> F["Verify declared world-state evidence"]
     F -->|Satisfied| G["Receipt: settled"]
@@ -116,7 +187,12 @@ node ./cmd/rail.js
 
 Its default address is `http://127.0.0.1:8787`. Read
 [`api/openapi.json`](api/openapi.json) for the request surface. The v0.1
-sidecar stores state in memory and exposes only the synthetic connector.
+sidecar stores bounded state in memory and exposes only the synthetic
+connector. It accepts only loopback clients and same-origin loopback Host and
+Origin values, caps JSON bodies at 65,536 bytes, restricts content types and
+encodings, bounds headers, request time, concurrency, and requests per socket,
+and emits restrictive response headers. It is still not an authenticated or
+production deployment boundary.
 
 ## Assurance modes
 
@@ -149,8 +225,8 @@ The CLI demo uses the `audit` profile. An embedded key is never trusted
 automatically.
 
 The conformance suite checks runtime presence of schema-required fields. It
-does not claim complete JSON Schema validation; that remains a cross-language
-conformance task.
+also requires every object schema to declare whether additional properties are
+allowed. It does not claim complete cross-language JSON Schema validation.
 
 A remote connector can still change reservation state between the final
 status check and execution. A production connector therefore needs an atomic
@@ -192,6 +268,10 @@ Its narrow contribution is the complete technical chain:
 5. Invoke and verify the reserved remedy when needed.
 6. Produce a portable technical settlement receipt.
 
+Recovery Preflight is an optional admission profile around step 3. It does
+not add a second permit system, execute remediation in the live action path,
+or change settlement semantics.
+
 ## Security and limits
 
 The demo rail and connector signing keys are deterministically derived from
@@ -207,6 +287,17 @@ Only a pre-authorized, bounded, reversible remedy may run automatically. An
 unanticipated or irreversible response must become a new consequential
 action.
 
+Recovery drill signatures prove artifact integrity and signer provenance.
+They do not prove fixture fidelity, production availability, legal remedy,
+insurance coverage, or reversibility of already-sent messages and other
+irreversible external effects.
+
+The verifier rejects undeclared fields across every closed settlement-bundle
+object before signature and lifecycle checks. The loopback sidecar likewise
+rejects unknown or repeated query parameters before reading a mutating request
+body. A process-wide Recovery Preflight requirement is monotonic: an individual
+authorization may strengthen it but cannot turn it off.
+
 Read:
 
 - [Threat model](docs/threat-model.md)
@@ -221,6 +312,10 @@ Read:
 - [`spec/schemas/`](spec/schemas/): JSON Schemas
 - [`api/openapi.json`](api/openapi.json): OpenAPI 3.1 surface
 - [`src/`](src/): reference rail, signing, connector, and verifier
+- [`src/recovery-preflight.js`](src/recovery-preflight.js): recovery contract,
+  qualification and replay verification
+- [`src/mock-refund-recovery-adapter.js`](src/mock-refund-recovery-adapter.js):
+  isolated synthetic drill adapter
 - [`cmd/`](cmd/): sidecar and CLI entry points
 - [`conformance/`](conformance/): synthetic portable fixtures
 - [`test/`](test/): deterministic behavior and fault tests
@@ -230,7 +325,8 @@ Read:
 
 ## Project status
 
-This is an experimental reference implementation, not a production release.
+This checkout contains the experimental v0.2.0 source release. It is a
+reference implementation, not a production deployment or hosted service.
 The public release status and maintenance boundaries are recorded in
 [`docs/release-status.md`](docs/release-status.md).
 

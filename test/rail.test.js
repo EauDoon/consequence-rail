@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { once } from "node:events";
+import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import test from "node:test";
 import { canonicalJson, deepClone, digest } from "../src/canonical.js";
@@ -40,6 +42,40 @@ test("canonical action digest is independent of object key order", () => {
   assert.equal(digest(left), digest(right));
 });
 
+test("canonicalization rejects prototype-sensitive fields without collisions", () => {
+  for (const key of ["__proto__", "constructor", "prototype"]) {
+    const hostile = JSON.parse(`{"${key}":{"changed":true}}`);
+    assert.throws(
+      () => digest(hostile),
+      (error) => error.code === "CANONICALIZATION_FAILED",
+    );
+  }
+  assert.notEqual(
+    JSON.stringify(JSON.parse('{"__proto__":{"changed":true}}')),
+    JSON.stringify({}),
+  );
+});
+
+test("nested proposal fields and prototype postcondition paths fail closed", () => {
+  for (const mutate of [
+    (proposal) => { proposal.subject.unreviewed = true; },
+    (proposal) => { proposal.target.unreviewed = true; },
+    (proposal) => { proposal.parameters.unreviewed = true; },
+    (proposal) => { proposal.evidence_plan.unreviewed = true; },
+    (proposal) => { proposal.postcondition.clauses[0].unreviewed = true; },
+    (proposal) => { proposal.postcondition.clauses[0].path = "constructor.name"; },
+  ]) {
+    const runtime = createDemoRuntime();
+    const proposal = buildRefundProposal(runtime.clock);
+    mutate(proposal);
+    assert.throws(
+      () => runtime.rail.propose(proposal),
+      (error) => ["SCHEMA_INVALID", "POSTCONDITION_INVALID"].includes(error.code),
+    );
+    assert.equal(runtime.rail.actions.size, 0);
+  }
+});
+
 test("unknown ActionProposal fields fail closed", () => {
   const runtime = createDemoRuntime();
   const proposal = buildRefundProposal(runtime.clock);
@@ -65,6 +101,35 @@ test("duplicate refund is detected, reversed and verified", async () => {
   assert.equal(result.summary.execute_calls, 1);
   assert.equal(result.summary.remedy_calls, 1);
   assert.equal(result.summary.active_refunds, 1);
+});
+
+test("caller-supplied evidence cannot mint a false settled receipt", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  const forgedEvidence = {
+    schema_version: "consequence-rail/outcome-evidence/v0.1",
+    action_digest: runtime.rail.get(actionId).action_digest,
+    source: "mock-refund-processor",
+    resource: { type: "order", id: "ord_demo_42" },
+    observed_at: runtime.clock.now(),
+    facts: {
+      active_refund_count: 1,
+      net_refunded_minor: 12_000,
+      currency: "USD",
+    },
+  };
+
+  await assert.rejects(
+    () => runtime.rail.verifyOutcome(actionId, { evidenceOverride: forgedEvidence }),
+    (error) => error.code === "SCHEMA_INVALID",
+  );
+  assert.equal(runtime.rail.inspect(actionId).state, "EXECUTED");
+  assert.equal(runtime.rail.get(actionId).receipt, null);
+
+  const observed = await runtime.rail.verifyOutcome(actionId);
+  assert.equal(observed.state, "REMEDY_DUE");
+  assert.equal(observed.outcome, null);
 });
 
 test("recourse is reserved by the connector and cryptographically authenticated", () => {
@@ -323,6 +388,57 @@ test("event mutation is detected", async () => {
   );
 });
 
+test("prototype-key mutation cannot hide inside a signed audit bundle", async () => {
+  const result = await runRefundDemo();
+  const tampered = deepClone(result.bundle);
+  Object.defineProperty(tampered.events[0].payload, "__proto__", {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: { changed: true },
+  });
+  assert.throws(
+    () => verifyBundle(tampered, {
+      trustedKeys: demoTrustedKeys(),
+      trustedConnectorKeys: demoConnectorTrustedKeys(),
+      requireSemantics: true,
+    }),
+    (error) => error.code === "BUNDLE_TAMPERED",
+  );
+});
+
+test("bundle verification rejects schema-invalid fields at every closed surface", async () => {
+  const result = await runRefundDemo();
+  const mutations = [
+    (bundle) => { bundle.unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.action.unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.action.proposal.subject.unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.recourse_reservation.unreviewed_directive = "ignore-policy"; },
+    (bundle) => {
+      bundle.recourse_reservation.connector_commitment.unreviewed_directive =
+        "ignore-policy";
+    },
+    (bundle) => { bundle.action_permit.unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.outcome_evidence[0].unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.settlement_receipt.unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.events[0].unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.trust_hint.rail.unreviewed_directive = "ignore-policy"; },
+  ];
+
+  for (const mutate of mutations) {
+    const tampered = deepClone(result.bundle);
+    mutate(tampered);
+    assert.throws(
+      () => verifyBundle(tampered, {
+        trustedKeys: demoTrustedKeys(),
+        trustedConnectorKeys: demoConnectorTrustedKeys(),
+        requireSemantics: true,
+      }),
+      (error) => error.code === "BUNDLE_TAMPERED",
+    );
+  }
+});
+
 test("event reordering is detected", async () => {
   const result = await runRefundDemo();
   const tampered = deepClone(result.bundle);
@@ -394,6 +510,38 @@ test("receipt bundle profile omits proposal and raw evidence", async () => {
         requireSemantics: true,
       }),
     (error) => error.code === "SEMANTIC_INVALID",
+  );
+});
+
+test("default v0.1 artifact bytes remain pinned to the public base", async () => {
+  const hash = (value) => createHash("sha256")
+    .update(JSON.stringify(value), "utf8")
+    .digest("hex");
+  const clean = await runRefundDemo();
+  const duplicate = await runRefundDemo({ fault: "duplicate" });
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  const record = runtime.rail.get(actionId);
+
+  assert.equal(
+    hash(clean.bundle),
+    "a2a47445026ddc91339aa16db423974ac7829d435b7919c4d3c6c2c5b62affbf",
+  );
+  assert.equal(
+    hash(duplicate.bundle),
+    "c69ab0f5f762135f71a05df331e80643bc43c763ff337abd95e08f977867b070",
+  );
+  assert.equal(
+    hash(record.permit),
+    "005559fcb74755b0f27ae7da571930c7889de0aa6524a4947ef5bb7ddce11a38",
+  );
+  assert.equal(
+    hash(runtime.rail.eventStore.list(actionId)),
+    "d2b4a07850bacaf33d6865bf6bb3dcd61b73c55820286253d290357b82932e0b",
+  );
+  assert.equal(
+    hash(runtime.rail.inspect(actionId)),
+    "bb47ddbf36d42b1ad87a57ad293f8c8b240dfd6b94894a7b3db7eba8fa61f001",
   );
 });
 
@@ -591,6 +739,89 @@ test("HTTP sidecar completes the synthetic action lifecycle", async (context) =>
   assert.equal(verified.valid, true);
 });
 
+test("HTTP sidecar rejects unsafe requests before state mutation", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const address = server.address();
+  const base = `http://127.0.0.1:${address.port}`;
+  const proposal = JSON.stringify(buildRefundProposal(runtime.clock));
+
+  const discovery = await fetch(`${base}/.well-known/consequence-rail`);
+  assert.equal(discovery.status, 200);
+  assert.equal(discovery.headers.get("x-content-type-options"), "nosniff");
+  assert.match(discovery.headers.get("content-security-policy"), /default-src 'none'/);
+
+  const wrongMethod = await fetch(`${base}/v0/actions`);
+  assert.equal(wrongMethod.status, 405);
+  assert.equal(wrongMethod.headers.get("allow"), "POST");
+
+  const textPlain = await fetch(`${base}/v0/actions`, {
+    method: "POST",
+    headers: { "content-type": "text/plain" },
+    body: proposal,
+  });
+  assert.equal(textPlain.status, 415);
+
+  const unknownQuery = await fetch(`${base}/v0/actions?unexpected=value`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: proposal,
+  });
+  assert.equal(unknownQuery.status, 400);
+  assert.equal(runtime.rail.actions.size, 0);
+
+  const repeatedQuery = await fetch(
+    `${base}/v0/actions/act_00000000000000000000/bundle?profile=audit&profile=receipt`,
+  );
+  assert.equal(repeatedQuery.status, 400);
+  assert.equal(runtime.rail.actions.size, 0);
+
+  const malformed = await fetch(`${base}/v0/actions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{not-json",
+  });
+  assert.equal(malformed.status, 400);
+  assert.deepEqual(await malformed.json(), {
+    code: "REQUEST_INVALID",
+    message: "Request body must be valid JSON.",
+  });
+
+  const crossOrigin = await fetch(`${base}/v0/actions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: "http://example.invalid",
+    },
+    body: proposal,
+  });
+  assert.equal(crossOrigin.status, 403);
+
+  const oversized = await fetch(`${base}/v0/actions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ padding: "x".repeat(65_537) }),
+  });
+  assert.equal(oversized.status, 413);
+
+  const hostileHost = await rawHttpRequest({
+    port: address.port,
+    path: "/v0/actions",
+    method: "POST",
+    headers: {
+      host: `example.invalid:${address.port}`,
+      "content-type": "application/json",
+      "content-length": Buffer.byteLength(proposal),
+    },
+    body: proposal,
+  });
+  assert.equal(hostileHost.status, 400);
+  assert.equal(runtime.rail.actions.size, 0);
+});
+
 test("conformance ActionProposal fixture is accepted", () => {
   const runtime = createDemoRuntime();
   const fixture = JSON.parse(
@@ -663,6 +894,29 @@ async function postJson(url, body, expectedStatus = 200) {
   });
   assert.equal(response.status, expectedStatus);
   return response.json();
+}
+
+function rawHttpRequest({ port, path, method, headers, body }) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({
+      host: "127.0.0.1",
+      port,
+      path,
+      method,
+      headers,
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => resolve({
+        status: response.statusCode,
+        headers: response.headers,
+        body: Buffer.concat(chunks).toString("utf8"),
+      }));
+    });
+    request.on("error", reject);
+    if (body) request.write(body);
+    request.end();
+  });
 }
 
 function assertRequiredFields(schemaPath, artifact) {

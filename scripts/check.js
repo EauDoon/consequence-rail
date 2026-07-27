@@ -15,12 +15,33 @@ const required = [
   "spec/model.md",
   "spec/state-machine.md",
   "spec/schemas/connector-recourse-commitment.schema.json",
+  "spec/schemas/recovery-contract.schema.json",
+  "spec/schemas/recovery-drill-attestation.schema.json",
+  "spec/schemas/recovery-drill-bundle.schema.json",
   "docs/threat-model.md",
   "conformance/refund-action.json",
+  "conformance/refund-recovery-contract.json",
 ];
 const textExtensions = new Set([".md", ".json", ".js", ".yaml", ".yml", ".txt"]);
 const workspaceMarker = ["do", "not", "edit", "or", "touch", "the"].join("-");
 const findings = [];
+
+function checkExplicitObjectSchemas(value, label, pointer = "") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      checkExplicitObjectSchemas(item, label, `${pointer}/${index}`));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  if (value.type === "object" && !Object.hasOwn(value, "additionalProperties")) {
+    findings.push(
+      `object schema must declare additionalProperties in ${label}${pointer}`,
+    );
+  }
+  for (const [key, item] of Object.entries(value)) {
+    checkExplicitObjectSchemas(item, label, `${pointer}/${key}`);
+  }
+}
 
 function walk(directory) {
   const output = [];
@@ -74,7 +95,10 @@ for (const path of files) {
 
   if (extname(path) === ".json") {
     try {
-      JSON.parse(text);
+      const parsed = JSON.parse(text);
+      if (label.startsWith("spec/schemas/") || label === "api/openapi.json") {
+        checkExplicitObjectSchemas(parsed, label);
+      }
     } catch (error) {
       findings.push(`invalid JSON in ${label}: ${error.message}`);
     }
@@ -107,7 +131,7 @@ if (
   Object.keys(packageJson.dependencies ?? {}).length > 0 ||
   Object.keys(packageJson.devDependencies ?? {}).length > 0
 ) {
-  findings.push("v0.1 must remain dependency-free");
+  findings.push("the reference implementation must remain dependency-free");
 }
 
 if (findings.length > 0) {

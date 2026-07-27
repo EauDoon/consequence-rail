@@ -1,5 +1,38 @@
 # Changelog
 
+## Version 0.2.0 - 27 July 2026
+
+- Added Recovery Preflight contracts, trace-bound signed drill attestations
+  and replayable drill bundles.
+- Added a synthetic isolated adapter that exercises the existing refund remedy
+  implementation without touching the live connector instance.
+- Added exact, review, unqualified and locally untestable result classes.
+- Added a policy-selectable Rail gate that refuses permit issuance without a
+  current, trusted and coverage-matched exact-recovery qualification.
+- Added negative controls for missing or corrupt checkpoints, absent faults,
+  failed remedies, unsupported local fixtures, expiry, tampering and scope
+  mismatch.
+- Preserved the existing v0.1 permit and settlement-bundle formats. Recovery
+  drill evidence remains a separately verifiable artifact in this release.
+- Bound qualifications to the exact signed reservation, capability reference,
+  connector commitment, measured recovery callables, measured adapter, and a
+  precommitted checkpoint.
+- Added registered live adapter-callable measurement and capture before drill
+  execution, and made the process-wide preflight requirement non-downgradable.
+- Removed caller-supplied outcome evidence and added exact nested runtime input
+  validation.
+- Hardened canonicalization against prototype-sensitive keys, exotic objects,
+  accessors, and sparse arrays; postconditions now traverse own safe fields
+  only.
+- Added bounded loopback HTTP request, origin, method, content, concurrency,
+  connection, and response-header controls.
+- Added exact closed-object validation for settlement bundles and rejection of
+  unknown or repeated query parameters before route mutation.
+- Added immutable hashes proving that default v0.1 permit, event, action-view,
+  and clean and duplicate audit-bundle bytes remain unchanged.
+
+Public source release on 27 July 2026.
+
 ## Version 0.1.0
 
 - Defined five versioned protocol artifacts and a technical settlement bundle.

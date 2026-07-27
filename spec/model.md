@@ -23,8 +23,9 @@ The `action_digest` is the SHA-256 digest, encoded as base64url without
 padding, of the proposal's canonical JSON bytes.
 
 The reference canonicalization profile recursively sorts object keys, rejects
-undefined values and non-finite numbers, preserves array order, and serializes
-the resulting JSON without insignificant whitespace. Protocol parameters that
+undefined values, non-finite numbers, prototype-sensitive keys, accessors,
+exotic object prototypes, sparse arrays, and array extension fields. It
+preserves array order and serializes the resulting JSON without insignificant whitespace. Protocol parameters that
 represent money MUST use integer minor units.
 
 The current implementation covers the interoperable subset exercised by the
@@ -70,6 +71,53 @@ the reservation status observed at close.
 
 A reservation establishes authenticated declared capability and scope. It
 does not guarantee that the remedy will succeed.
+
+## Recovery Preflight
+
+Recovery Preflight is optional evidence consumed between recourse reservation
+and permit issuance. It does not create a second remedy path or add lifecycle
+states.
+
+A `RecoveryContract` pins:
+
+- the complete immutable action digest plus its class, connector, resource
+  type and assurance mode
+- digests of the action parameters, postcondition and evidence plan
+- the recourse kind, named capability and connector implementation profile
+  digest, measured from the live recovery callables
+- the exact signed reservation digest, capability-reference digest, and
+  connector-commitment digest
+- recovery class
+- adapter identity and measured implementation digest, fixture fidelity,
+  fixture configuration, and checkpoint digest committed before execution
+- injected fault, recovery procedure and oracle
+- contract expiry and maximum attestation age
+
+An isolated adapter executes the contract and produces a trace containing the
+baseline, checkpoint, faulted and recovered observations. A separately trusted
+recovery signer issues a `RecoveryDrillAttestation` over their digests and the
+derived qualification. A `RecoveryDrillBundle` carries the contract, replay
+trace and attestation for offline verification.
+
+The result vocabulary is:
+
+- `QUALIFIED_EXACT`: the fault was observed, the pinned checkpoint was intact,
+  recovery ran, and the recovered observation exactly matched the baseline
+  under the pinned digest oracle
+- `REVIEW_COMPENSATED`: a compensation oracle was satisfied but automatic
+  exact-recovery admission is not justified
+- `NOT_QUALIFIED`: the local drill ran but a required condition failed
+- `NOT_TESTABLE_LOCAL`: the declared recovery class or fixture could not be
+  qualified by the local runner
+
+The v0.2 reference runner qualifies only synthetic exact-recovery drills. It
+does not invoke the recovery adapter when fixture fidelity is `staging` or
+`production-like`.
+Exact means exact within the declared evidence surface, not that every hidden
+or historical state was restored. A Rail policy may require a current
+`QUALIFIED_EXACT` attestation before the existing permit transition. The Rail
+records only bounded qualification metadata in its action event chain; the
+recovery bundle remains a separately verifiable artifact.
 
 For a remote connector, a status check followed by execution still has a
 time-of-check to time-of-use interval. Production connectors SHOULD expose an

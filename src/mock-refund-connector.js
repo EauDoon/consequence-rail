@@ -2,6 +2,38 @@ import { digest } from "./canonical.js";
 import { UnknownExecutionError, UnknownRemedyError, RailError } from "./errors.js";
 import { createDemoConnectorSigner, signArtifact } from "./signing.js";
 
+const RECOVERY_METHODS = [
+  "reserveRecourse",
+  "recourseStatus",
+  "releaseRecourse",
+  "execute",
+  "status",
+  "observe",
+  "remediate",
+  "remedyStatus",
+  "createRefund",
+];
+
+export function measureMockRefundRecoveryImplementation(connector) {
+  const methods = {};
+  for (const name of RECOVERY_METHODS) {
+    const implementation = connector?.[name];
+    if (typeof implementation !== "function") {
+      throw new RailError(
+        "RECOVERY_IMPLEMENTATION_INVALID",
+        `Recovery implementation is missing method ${name}.`,
+      );
+    }
+    methods[name] = Function.prototype.toString.call(implementation);
+  }
+  return digest({
+    connector: "mock-refund-processor",
+    capability: "void-duplicate-refund",
+    measurement_profile: "callable-source/v1",
+    methods,
+  });
+}
+
 export class MockRefundConnector {
   constructor(clock, { signer = createDemoConnectorSigner() } = {}) {
     this.clock = clock;
@@ -271,3 +303,6 @@ export class MockRefundConnector {
     return refund;
   }
 }
+
+export const MOCK_REFUND_IMPLEMENTATION_DIGEST =
+  measureMockRefundRecoveryImplementation(MockRefundConnector.prototype);

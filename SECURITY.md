@@ -20,16 +20,20 @@ issue.
 - ambiguous-remedy retry
 - assurance-mode misrepresentation
 - recourse-scope bypass
+- recovery reservation, implementation, adapter, or checkpoint substitution
 - evidence-binding or freshness bypass
+- settlement-bundle schema or unsigned-field bypass
+- loopback request-boundary bypass before state mutation
 - event-chain or receipt-verification bypass
 - unintended sensitive-data exposure
 
 ## Known limitations
 
 The deterministic rail and connector signing keys are public. State is
-process-local and in-memory. The loopback API accepts an unauthenticated policy
-decision. No external checkpoint, production key management, request-size
-limit, rate control, persistent transaction boundary or independent evidence
-trust adapter is implemented.
+process-local and in-memory. The bounded loopback API accepts an unauthenticated
+policy decision. It is not an Internet-facing security boundary. No external
+checkpoint, production key management, persistent transaction boundary, or
+independent evidence trust adapter is implemented. The platform JSON parser
+does not reject duplicate object members.
 
 Read the [threat model](docs/threat-model.md) before evaluating security claims.

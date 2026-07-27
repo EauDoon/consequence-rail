@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:recovery-drill-bundle:v0.1",
+  "title": "RecoveryDrillBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "recovery_contract",
+    "trace",
+    "drill_attestation",
+    "trust_hint"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/recovery-drill-bundle/v0.1"
+    },
+    "recovery_contract": {
+      "$ref": "recovery-contract.schema.json"
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adapter_id",
+        "adapter_version",
+        "adapter_implementation_digest",
+        "local_testable",
+        "checkpoint_reference_digest",
+        "baseline_state",
+        "checkpoint_state",
+        "damaged_state",
+        "recovered_state",
+        "fault_observed",
+        "recovery_attempted",
+        "oracle_satisfied",
+        "notes"
+      ],
+      "properties": {
+        "adapter_id": { "type": "string" },
+        "adapter_version": { "type": "string" },
+        "adapter_implementation_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "local_testable": { "type": "boolean" },
+        "checkpoint_reference_digest": { "type": ["string", "null"] },
+        "baseline_state": {},
+        "checkpoint_state": {},
+        "damaged_state": {},
+        "recovered_state": {},
+        "fault_observed": { "type": "boolean" },
+        "recovery_attempted": { "type": "boolean" },
+        "oracle_satisfied": { "type": "boolean" },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "drill_attestation": {
+      "$ref": "recovery-drill-attestation.schema.json"
+    },
+    "trust_hint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key_id", "public_key_pem", "warning"],
+      "properties": {
+        "key_id": { "type": "string", "minLength": 1 },
+        "public_key_pem": { "type": "string", "minLength": 1 },
+        "warning": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -1,6 +1,54 @@
 import { createHash } from "node:crypto";
 import { RailError } from "./errors.js";
 
+const RESERVED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+function canonicalizationError(message, details = {}) {
+  throw new RailError("CANONICALIZATION_FAILED", message, details);
+}
+
+function objectEntries(value) {
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    canonicalizationError("Only plain JSON objects are supported.");
+  }
+  if (Object.getOwnPropertySymbols(value).length > 0) {
+    canonicalizationError("Symbol object fields are not supported.");
+  }
+  return Object.keys(value).map((key) => {
+    if (RESERVED_KEYS.has(key)) {
+      canonicalizationError("Reserved object fields are not supported.", {
+        field: key,
+      });
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor) || descriptor.enumerable !== true) {
+      canonicalizationError("Only enumerable data fields are supported.", {
+        field: key,
+      });
+    }
+    return [key, descriptor.value];
+  });
+}
+
+function arrayValues(value) {
+  const ownKeys = Reflect.ownKeys(value);
+  const expectedKeys = new Set([
+    ...Array.from({ length: value.length }, (_, index) => String(index)),
+    "length",
+  ]);
+  if (ownKeys.some((key) => typeof key !== "string" || !expectedKeys.has(key))) {
+    canonicalizationError("Arrays with extra fields are not supported.");
+  }
+  return Array.from({ length: value.length }, (_, index) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor || !("value" in descriptor)) {
+      canonicalizationError("Sparse or accessor-backed arrays are not supported.");
+    }
+    return descriptor.value;
+  });
+}
+
 function normalize(value) {
   if (value === null || typeof value === "boolean" || typeof value === "string") {
     return value;
@@ -14,18 +62,24 @@ function normalize(value) {
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => normalize(item));
+    return arrayValues(value).map((item) => normalize(item));
   }
 
   if (typeof value === "object") {
-    const output = {};
-    for (const key of Object.keys(value).sort()) {
-      if (value[key] === undefined) {
+    const output = Object.create(null);
+    for (const [key, item] of objectEntries(value).sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0)) {
+      if (item === undefined) {
         throw new RailError("CANONICALIZATION_FAILED", "Undefined object fields are not supported.", {
           field: key,
         });
       }
-      output[key] = normalize(value[key]);
+      Object.defineProperty(output, key, {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: normalize(item),
+      });
     }
     return output;
   }
@@ -42,7 +96,36 @@ export function digest(value) {
 }
 
 export function deepClone(value) {
-  return JSON.parse(JSON.stringify(value));
+  if (value === null || typeof value === "boolean" || typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      canonicalizationError("Non-finite numbers are not supported.");
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return arrayValues(value).map((item) => deepClone(item));
+  }
+  if (typeof value === "object") {
+    const output = {};
+    for (const [key, item] of objectEntries(value)) {
+      if (item === undefined) {
+        canonicalizationError("Undefined object fields are not supported.", {
+          field: key,
+        });
+      }
+      Object.defineProperty(output, key, {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: deepClone(item),
+      });
+    }
+    return output;
+  }
+  canonicalizationError(`Unsupported value type: ${typeof value}.`);
 }
 
 export function deepFreeze(value) {
@@ -56,5 +139,16 @@ export function deepFreeze(value) {
 }
 
 export function without(object, fields) {
-  return Object.fromEntries(Object.entries(object).filter(([key]) => !fields.includes(key)));
+  const output = {};
+  for (const [key, value] of objectEntries(object)) {
+    if (!fields.includes(key)) {
+      Object.defineProperty(output, key, {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value,
+      });
+    }
+  }
+  return output;
 }

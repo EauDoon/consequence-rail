@@ -1,0 +1,115 @@
+{
+  "schema_version": "consequence-rail/recovery-contract/v0.1",
+  "contract_id": "demo-refund-duplicate-recovery/v1",
+  "action_digest": "x4ZgajdJZH1SM33KmKCUledwyCo3Wz6Hqn6H3AasaYU",
+  "action_class": "demo.refund.issue/v1",
+  "scope": {
+    "connector": "mock-refund-processor",
+    "resource_type": "order",
+    "assurance_mode": "enforced",
+    "parameters_digest": "TrP0r9gAiVoUugBEuEO0a_ks55u7E_ft5XltSa7Ypbo",
+    "postcondition_digest": "C-PzGY7l0uJcje1Wx4YBWJYA12FrGMNHs1rP1YQOrdg",
+    "evidence_plan_digest": "QcE9St8OSXbgImBO3f8dlr-4yu7bpx5NW3JQcYY5YzA"
+  },
+  "recourse": {
+    "kind": "reverse",
+    "capability": "void-duplicate-refund",
+    "implementation_digest": "QFqeDSiqs-7PMtW7PcuVLBQ5XMLq5bhyFUnRNVTFxBo",
+    "reservation_digest": "ojziEUQo4xQCHkY7lbdO9sSeDHcsxqUnqAPJ0rr9VyI",
+    "capability_reference_digest": "hQVGx_B4-JQBq8CvDw33swkg7Sil8DKE31TiKBc6bhM",
+    "connector_commitment_digest": "kjeRqSDyDGgcAWMuCP3Dmmhm8C6XYEZDGs9pvf0QI3s"
+  },
+  "recovery_class": "exact",
+  "fixture": {
+    "adapter": "mock-refund-recovery",
+    "adapter_version": "1",
+    "adapter_implementation_digest": "c5byhUGwImejy8UPHhFIOUkE-U6Z6izuVstnb-uRtIs",
+    "checkpoint_digest": "zVlys5dQ6taUaZjfXScY6F6qU2ArzfpAGAxB1pzGQ1o",
+    "fidelity": "synthetic",
+    "configuration": {
+      "proposal": {
+        "schema_version": "consequence-rail/action-proposal/v0.1",
+        "action_type": "demo.refund.issue/v1",
+        "subject": {
+          "type": "service",
+          "id": "support-agent-demo"
+        },
+        "target": {
+          "connector": "mock-refund-processor",
+          "resource_type": "order",
+          "resource_id": "ord_demo_42"
+        },
+        "parameters": {
+          "amount_minor": 12000,
+          "currency": "USD"
+        },
+        "idempotency_key": "refund:ord_demo_42:1",
+        "requested_at": "2035-01-01T00:00:00.000Z",
+        "expires_at": "2035-01-01T00:02:00.000Z",
+        "assurance_mode": "enforced",
+        "postcondition": {
+          "op": "all",
+          "clauses": [
+            {
+              "path": "active_refund_count",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "path": "net_refunded_minor",
+              "op": "eq",
+              "value": 12000
+            }
+          ]
+        },
+        "evidence_plan": {
+          "source": "mock-refund-processor",
+          "max_age_seconds": 60
+        }
+      },
+      "recourse_request": {
+        "action_digest": "x4ZgajdJZH1SM33KmKCUledwyCo3Wz6Hqn6H3AasaYU",
+        "kind": "reverse",
+        "connector": "mock-refund-processor",
+        "capability": "void-duplicate-refund",
+        "capability_reference": "demo-capability:void-duplicate-refund",
+        "expires_at": "2035-01-01T00:07:00.000Z",
+        "remedy_window_seconds": 120,
+        "max_attempts": 1,
+        "max_amount_minor": 12000,
+        "idempotency_key": "remedy:refund:ord_demo_42:1:void-duplicate"
+      }
+    }
+  },
+  "fault": {
+    "kind": "connector-fault-injection",
+    "version": "1",
+    "parameters": {
+      "fault": "duplicate"
+    }
+  },
+  "procedure": {
+    "kind": "connector-reserved-remedy",
+    "version": "1",
+    "parameters": {
+      "capability": "void-duplicate-refund"
+    }
+  },
+  "oracle": {
+    "kind": "exact-state-digest",
+    "version": "1",
+    "parameters": {
+      "paths": [
+        "source",
+        "resource.type",
+        "resource.id",
+        "facts.active_refund_count",
+        "facts.net_refunded_minor",
+        "facts.currency"
+      ]
+    }
+  },
+  "issued_at": "2035-01-01T00:00:00.000Z",
+  "expires_at": "2035-01-02T00:00:00.000Z",
+  "max_attestation_age_seconds": 300
+}
