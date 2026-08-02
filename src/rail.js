@@ -623,10 +623,16 @@ export class ConsequenceRail {
     this.assertState(record, "EXECUTED");
     this.transition(record, "VERIFYING", "OUTCOME_VERIFICATION_STARTED", {});
 
-    let evidence = await this.connector.observe(record.proposal, {
-      fault,
-      actionDigest: record.action_digest,
-    });
+    let evidence;
+    try {
+      evidence = await this.connector.observe(record.proposal, {
+        fault,
+        actionDigest: record.action_digest,
+      });
+    } catch {
+      this.failClosedEvidenceObservation(record, "outcome");
+      return this.inspect(actionId);
+    }
 
     try {
       evidence = this.validateEvidence(record, evidence);
@@ -639,7 +645,8 @@ export class ConsequenceRail {
         this.close(record);
         return this.inspect(actionId);
       }
-      throw error;
+      this.failClosedEvidenceObservation(record, "outcome");
+      return this.inspect(actionId);
     }
 
     const evaluation = evaluatePostcondition(record.proposal.postcondition, evidence);
@@ -804,13 +811,11 @@ export class ConsequenceRail {
     this.assertState(record, "REMEDY_VERIFYING");
     let evidence;
     try {
-      evidence = this.validateEvidence(
-        record,
-        await this.connector.observe(record.proposal, {
-          actionDigest: record.action_digest,
-          fault,
-        }),
-      );
+      const observed = await this.connector.observe(record.proposal, {
+        actionDigest: record.action_digest,
+        fault,
+      });
+      evidence = this.validateEvidence(record, observed);
     } catch (error) {
       if (error instanceof RailError && error.code.startsWith("EVIDENCE_")) {
         this.eventStore.append(record.action_id, "REMEDY_EVIDENCE_REJECTED", "rail", {
@@ -820,7 +825,8 @@ export class ConsequenceRail {
         this.close(record);
         return;
       }
-      throw error;
+      this.failClosedEvidenceObservation(record, "remedy");
+      return;
     }
 
     const evaluation = evaluatePostcondition(record.proposal.postcondition, evidence);
@@ -879,6 +885,24 @@ export class ConsequenceRail {
           }
         : {}),
     };
+  }
+
+  failClosedEvidenceObservation(record, phase) {
+    const remedy = phase === "remedy";
+    const code = remedy ? "REMEDY_EVIDENCE_UNAVAILABLE" : "EVIDENCE_UNAVAILABLE";
+    this.eventStore.append(
+      record.action_id,
+      remedy ? "REMEDY_EVIDENCE_REJECTED" : "EVIDENCE_REJECTED",
+      "rail",
+      { code },
+    );
+    this.transition(
+      record,
+      remedy ? "REMEDY_INCONCLUSIVE" : "INCONCLUSIVE",
+      code,
+      {},
+    );
+    this.close(record);
   }
 
   exportBundle(actionId, { profile = "receipt" } = {}) {

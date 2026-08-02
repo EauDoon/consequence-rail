@@ -11,7 +11,7 @@ import {
   demoRecoveryTrustedKeys,
   demoTrustedKeys,
 } from "../src/signing.js";
-import { verifyBundle } from "../src/verify.js";
+import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
 function option(args, name, fallback = null) {
   const index = args.indexOf(name);
@@ -30,6 +30,7 @@ Usage:
   crctl demo irreversible [--json]
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
   crctl bundle verify <file> [--json]
+  crctl bundle timeline <file> [--json]
   crctl recovery-preflight verify <file> [--json]
 
 Examples:
@@ -166,6 +167,33 @@ async function main() {
           `events: ${result.event_count}`,
           `semantics: ${result.semantics.status}`,
           `trusted_key: ${result.trusted_key_id}`,
+        ].join("\n") + "\n",
+      );
+    }
+    return;
+  }
+
+  if (args[0] === "bundle" && args[1] === "timeline" && args[2]) {
+    const bundle = JSON.parse(readFileSync(resolve(args[2]), "utf8"));
+    const result = verifyBundleTimeline(bundle, {
+      trustedKeys: demoTrustedKeys(),
+      trustedConnectorKeys: demoConnectorTrustedKeys(),
+    });
+    if (has(args, "--json")) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      process.stdout.write(
+        [
+          "bundle_verification: pass",
+          `action: ${result.action_id}`,
+          `outcome: ${result.outcome}`,
+          `events: ${result.event_count}`,
+          `event_chain_head: ${result.event_chain_head}`,
+          "timeline:",
+          ...result.events.map((event) =>
+            `${event.sequence} ${event.event_type} ${event.recorded_at}` +
+            (event.to_state ? ` ${event.from_state}->${event.to_state}` : ""),
+          ),
         ].join("\n") + "\n",
       );
     }

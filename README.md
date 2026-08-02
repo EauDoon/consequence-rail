@@ -122,6 +122,19 @@ reports freshness as `not_checked` unless a caller supplies a verification
 time through the library API. The Rail always supplies its clock and requires
 the attestation to be current.
 
+Settlement bundles can be verified and rendered as a metadata-only event
+timeline without network access:
+
+```text
+node ./cmd/crctl.js bundle timeline settlement-bundle.json
+node ./cmd/crctl.js bundle timeline settlement-bundle.json --json
+```
+
+The command performs the existing integrity checks first, and applies the
+existing lifecycle-semantic checks when the bundle has the audit profile. It
+then emits event types, timestamps, state transitions, and payload digests. It
+does not include raw outcome evidence.
+
 `QUALIFIED_EXACT` means exact only for the complete pinned action digest and
 within its declared envelope,
 exact signed reservation, capability reference, connector commitment,

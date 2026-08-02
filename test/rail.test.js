@@ -21,7 +21,7 @@ import {
   signArtifact,
   verifyArtifact,
 } from "../src/signing.js";
-import { verifyBundle } from "../src/verify.js";
+import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
 test("canonical action digest is independent of object key order", () => {
   const left = {
@@ -93,6 +93,34 @@ test("clean refund closes with a verified settled receipt", async () => {
   assert.equal(result.summary.execute_calls, 1);
   assert.equal(result.summary.remedy_calls, 0);
   assert.equal(result.summary.bundle_verification, "pass");
+});
+
+test("offline bundle timeline verification reuses full bundle integrity and lifecycle semantics", async () => {
+  const result = await runRefundDemo();
+  const timeline = verifyBundleTimeline(result.bundle, {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+  });
+  assert.equal(timeline.valid, true);
+  assert.equal(timeline.outcome, "settled");
+  assert.equal(timeline.event_count, result.bundle.events.length);
+  assert.equal(timeline.events.at(-1).to_state, "CLOSED");
+  assert.equal(Object.hasOwn(timeline.events[0], "payload"), false);
+  const receiptTimeline = verifyBundleTimeline(result.runtime.rail.exportBundle(result.summary.action_id), {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+  });
+  assert.equal(receiptTimeline.valid, true);
+  assert.equal(receiptTimeline.semantics.status, "not_requested");
+  const tampered = deepClone(result.bundle);
+  tampered.events[1].payload.reason_code = "MUTATED";
+  assert.throws(
+    () => verifyBundleTimeline(tampered, {
+      trustedKeys: demoTrustedKeys(),
+      trustedConnectorKeys: demoConnectorTrustedKeys(),
+    }),
+    (error) => error.code === "BUNDLE_TAMPERED" || error.code === "SEMANTIC_INVALID",
+  );
 });
 
 test("duplicate refund is detected, reversed and verified", async () => {
@@ -170,6 +198,48 @@ test("stale evidence closes as disputed", async () => {
   const result = await runRefundDemo({ fault: "stale-evidence" });
   assert.equal(result.summary.outcome, "disputed");
   assert.equal(result.summary.bundle_verification, "pass");
+});
+
+test("connector observation exceptions fail closed before remedy and cannot be retried", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId);
+  runtime.connector.observe = async () => {
+    throw new Error("connector timeout detail must not escape");
+  };
+
+  const result = await runtime.rail.verifyOutcome(actionId);
+  assert.equal(result.state, "CLOSED");
+  assert.equal(result.outcome, "disputed");
+  const events = runtime.rail.exportBundle(actionId, { profile: "receipt" }).events;
+  assert.equal(runtime.rail.get(actionId).state, "CLOSED");
+  assert.equal(runtime.rail.get(actionId).receipt.outcome, "disputed");
+  assert.equal(runtime.rail.get(actionId).receipt.limitations.some((item) => item.includes("truth")), true);
+  const rejection = events.find((event) => event.event_type === "EVIDENCE_REJECTED");
+  assert.equal(rejection?.payload.code, "EVIDENCE_UNAVAILABLE");
+  assert.equal(JSON.stringify(events).includes("connector timeout detail"), false);
+  await assert.rejects(
+    () => runtime.rail.verifyOutcome(actionId),
+    (error) => error.code === "ILLEGAL_TRANSITION",
+  );
+});
+
+test("timeout-like connector failures after a breach fail closed during remedy verification", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  const breached = await runtime.rail.verifyOutcome(actionId);
+  assert.equal(breached.state, "REMEDY_DUE");
+  runtime.connector.observe = async () => Promise.reject(new Error("timeout"));
+
+  const result = await runtime.rail.remediate(actionId);
+  assert.equal(result.state, "CLOSED");
+  assert.equal(result.outcome, "disputed");
+  assert.equal(runtime.rail.get(actionId).receipt.outcome, "disputed");
+  await assert.rejects(
+    () => runtime.rail.remediate(actionId),
+    (error) => error.code === "ILLEGAL_TRANSITION",
+  );
 });
 
 test("a failed bounded remedy closes as disputed without retry", async () => {

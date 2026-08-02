@@ -163,6 +163,43 @@ export function verifyBundle(
   };
 }
 
+export function verifyBundleTimeline(
+  bundle,
+  {
+    trustedKeys = new Map(),
+    trustedConnectorKeys = new Map(),
+  } = {},
+) {
+  const verification = verifyBundle(bundle, {
+    trustedKeys,
+    trustedConnectorKeys,
+    requireSemantics: bundle?.profile === "audit",
+  });
+  const events = (bundle.events ?? []).map((event) => ({
+    sequence: event.sequence,
+    event_type: event.event_type,
+    actor: event.actor,
+    recorded_at: event.recorded_at,
+    payload_digest: digest(event.payload),
+    ...(event.event_type === "STATE_TRANSITION"
+      ? {
+          from_state: event.payload.from_state,
+          to_state: event.payload.to_state,
+          reason_code: event.payload.reason_code,
+        }
+      : {}),
+  }));
+  return {
+    valid: verification.valid,
+    action_id: verification.action_id,
+    outcome: verification.outcome,
+    event_count: events.length,
+    event_chain_head: verification.event_chain_head,
+    semantics: verification.semantics,
+    events,
+  };
+}
+
 function verifySemantics(bundle) {
   semanticAssert(
     bundle.profile === "audit" &&
