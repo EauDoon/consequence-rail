@@ -5,12 +5,12 @@ Preflight.
 
 ## GitHub metadata
 
-- Repository: `oonyl/consequence-rail`
+- Repository: `EauDoon/consequence-rail`
 - Visibility: public
 - Default branch: `main`
 - About: `Recourse-gated execution, recovery preflight, and signed settlement receipts for autonomous actions.`
 - Homepage: none
-- Public identity: Oonyl
+- Public identity: EauDoon
 - Primary profile category: flagship systems
 - Profile role: featured project and first pin
 

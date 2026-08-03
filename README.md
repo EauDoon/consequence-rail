@@ -345,4 +345,4 @@ The public release status and maintenance boundaries are recorded in
 
 Licensed under the [Apache License 2.0](LICENSE).
 
-Public identity: Oonyl.
+Public identity: EauDoon.
