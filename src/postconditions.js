@@ -54,14 +54,15 @@ export function evaluatePostcondition(postcondition, evidence) {
     ) {
       throw new RailError("POSTCONDITION_INVALID", "Postcondition clauses must use exact safe fields.");
     }
-    const operator = OPERATORS[clause.op];
-    if (!operator) {
-      throw new RailError("POSTCONDITION_INVALID", `Unsupported operator: ${clause.op}.`);
+    const operatorName = clause.op;
+    if (typeof operatorName !== "string" || !Object.hasOwn(OPERATORS, operatorName)) {
+      throw new RailError("POSTCONDITION_INVALID", "Only eq, gte, and lte operators are supported.");
     }
+    const operator = OPERATORS[operatorName];
     const actual = readPath(evidence?.facts, clause.path);
     return {
       path: clause.path,
-      operator: clause.op,
+      operator: operatorName,
       expected: clause.value,
       actual,
       satisfied: operator(actual, clause.value),

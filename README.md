@@ -15,6 +15,8 @@ postcondition and closes the action with a signed technical outcome:
 > legal compliance, guaranteed recovery, or proof that an evidence source is
 > truthful.
 
+![Recourse is reserved before execution. A satisfied postcondition settles; a breach runs the reserved remedy, ending as compensated when verified or disputed when unresolved.](.github/assets/project-overview.svg)
+
 ## Two invariants
 
 1. **No verifiable recourse reservation, no enforced execution.**

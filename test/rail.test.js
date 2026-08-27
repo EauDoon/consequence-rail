@@ -14,6 +14,7 @@ import {
   runRefundDemo,
 } from "../src/demo.js";
 import { createReferenceServer } from "../src/http-server.js";
+import { evaluatePostcondition } from "../src/postconditions.js";
 import {
   createDemoSigner,
   demoConnectorTrustedKeys,
@@ -84,6 +85,78 @@ test("unknown ActionProposal fields fail closed", () => {
     () => runtime.rail.propose(proposal),
     (error) => error.code === "SCHEMA_INVALID",
   );
+});
+
+test("postcondition operators reject inherited and unknown names", () => {
+  for (const op of [...Object.getOwnPropertyNames(Object.prototype), "unknown", ""]) {
+    assert.throws(
+      () => evaluatePostcondition({
+        op: "all",
+        clauses: [{ path: "active_refund_count", op, value: 0 }],
+      }, { facts: { active_refund_count: 1 } }),
+      (error) => error.code === "POSTCONDITION_INVALID",
+      `Operator ${op} must be rejected.`,
+    );
+  }
+});
+
+test("postcondition operators reject non-string values without coercion", () => {
+  let coercionCalls = 0;
+  const coercible = {
+    [Symbol.toPrimitive]() {
+      coercionCalls += 1;
+      return "eq";
+    },
+  };
+  for (const op of [null, undefined, true, false, 1, 1n, [], ["eq"], {}, new String("eq"), Symbol("eq"), coercible]) {
+    assert.throws(
+      () => evaluatePostcondition({
+        op: "all",
+        clauses: [{ path: "active_refund_count", op, value: 1 }],
+      }, { facts: { active_refund_count: 1 } }),
+      (error) => error.code === "POSTCONDITION_INVALID",
+    );
+  }
+  assert.equal(coercionCalls, 0);
+});
+
+test("postcondition operators preserve eq gte and lte boolean results", () => {
+  for (const [op, actual, expected, satisfied] of [
+    ["eq", 1, 1, true],
+    ["eq", 1, 0, false],
+    ["eq", 1, "1", false],
+    ["gte", 2, 1, true],
+    ["gte", 1, 1, true],
+    ["gte", 0, 1, false],
+    ["lte", 0, 1, true],
+    ["lte", 1, 1, true],
+    ["lte", 2, 1, false],
+  ]) {
+    const result = evaluatePostcondition({
+      op: "all",
+      clauses: [{ path: "active_refund_count", op, value: expected }],
+    }, { facts: { active_refund_count: actual } });
+    assert.deepEqual(result, {
+      satisfied,
+      evaluations: [{ path: "active_refund_count", operator: op, expected, actual, satisfied }],
+    });
+  }
+});
+
+test("invalid postcondition operators are rejected before action admission", () => {
+  for (const op of [...Object.getOwnPropertyNames(Object.prototype), "unknown", "", null, true, 1, ["eq"], {}]) {
+    const runtime = createDemoRuntime();
+    const proposal = buildRefundProposal(runtime.clock);
+    proposal.postcondition.clauses = [{ path: "active_refund_count", op, value: 0 }];
+    assert.throws(
+      () => runtime.rail.propose(proposal),
+      (error) => error.code === "POSTCONDITION_INVALID",
+    );
+    assert.equal(runtime.rail.actions.size, 0);
+    assert.equal(runtime.connector.executeCalls, 0);
+    assert.equal(runtime.connector.reserveRecourseCalls, 0);
+    assert.equal(runtime.connector.refunds.length, 0);
+  }
 });
 
 test("clean refund closes with a verified settled receipt", async () => {

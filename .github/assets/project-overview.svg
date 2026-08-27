@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="510" viewBox="0 0 1200 510" role="img" aria-labelledby="title description" focusable="false">
+  <title id="title">Recourse before execution</title>
+  <desc id="description">An action requires reserved recourse before execution. A satisfied postcondition settles. A breach runs the reserved remedy: verified recovery is compensated; unresolved recovery is disputed.</desc>
+  <metadata>Original vector artwork for the repository overview.</metadata>
+  <defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3.5 L0,7 Z" fill="#58a6ff"/></marker></defs>
+  <rect width="1200" height="510" rx="20" fill="#0d1117"/>
+  <rect x="1" y="1" width="1198" height="508" rx="19" fill="none" stroke="#30363d" stroke-width="2"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="48" y="62" font-size="30" font-weight="750" fill="#f0f6fc">Recourse before execution</text>
+    <text x="48" y="96" font-size="18" fill="#8b949e">An action proceeds only after a bounded remedy is reserved for that exact action.</text>
+    <line x1="48" y1="126" x2="1152" y2="126" stroke="#21262d" stroke-width="2"/>
+    
+    <g><rect x="48" y="160" width="240" height="88" rx="12" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+    <rect x="48" y="160" width="5" height="88" rx="2.5" fill="#58a6ff"/>
+    <text x="168" y="200" text-anchor="middle" font-size="19" font-weight="700" fill="#f0f6fc">Proposed action</text>
+    <text x="168" y="227" text-anchor="middle" font-size="14" fill="#8b949e">Declared postcondition</text></g>
+    <path d="M288 204 H323" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+    <g><rect x="336" y="160" width="240" height="88" rx="12" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+    <rect x="336" y="160" width="5" height="88" rx="2.5" fill="#58a6ff"/>
+    <text x="456" y="200" text-anchor="middle" font-size="19" font-weight="700" fill="#f0f6fc">Reserve remedy</text>
+    <text x="456" y="227" text-anchor="middle" font-size="14" fill="#8b949e">Coverage matched</text></g>
+    <path d="M576 204 H611" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+    <g><rect x="624" y="160" width="240" height="88" rx="12" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+    <rect x="624" y="160" width="5" height="88" rx="2.5" fill="#58a6ff"/>
+    <text x="744" y="200" text-anchor="middle" font-size="19" font-weight="700" fill="#f0f6fc">Execute once</text>
+    <text x="744" y="227" text-anchor="middle" font-size="14" fill="#8b949e">Bounded connector</text></g>
+    <path d="M864 204 H899" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+    <g><rect x="912" y="160" width="240" height="88" rx="12" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+    <rect x="912" y="160" width="5" height="88" rx="2.5" fill="#58a6ff"/>
+    <text x="1032" y="200" text-anchor="middle" font-size="19" font-weight="700" fill="#f0f6fc">Verify outcome</text>
+    <text x="1032" y="227" text-anchor="middle" font-size="14" fill="#8b949e">World-state check</text></g>
+    <path d="M1032 248 V275 H590 V318" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="752" y="302" text-anchor="middle" font-size="15" fill="#8b949e">Satisfied</text>
+    <g><rect x="470" y="330" width="240" height="76" rx="12" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+    <rect x="470" y="330" width="5" height="76" rx="2.5" fill="#58a6ff"/>
+    <text x="590" y="364" text-anchor="middle" font-size="19" font-weight="700" fill="#f0f6fc">Settled</text>
+    <text x="590" y="391" text-anchor="middle" font-size="14" fill="#8b949e">Postcondition verified</text></g>
+    <path d="M1032 248 V318" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="1088" y="302" text-anchor="middle" font-size="15" fill="#8b949e">Breached</text>
+    <g><rect x="832" y="330" width="320" height="76" rx="12" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <rect x="832" y="330" width="5" height="76" rx="2.5" fill="#58a6ff"/>
+      <text x="992" y="355" text-anchor="middle" font-size="19" font-weight="700" fill="#f0f6fc">Run reserved remedy</text>
+      <text x="992" y="378" text-anchor="middle" font-size="14" fill="#8b949e">Verified: compensated</text>
+      <text x="992" y="398" text-anchor="middle" font-size="14" fill="#8b949e">Unresolved: disputed</text>
+    </g>
+  
+    <line x1="48" y1="432" x2="1152" y2="432" stroke="#21262d" stroke-width="2"/>
+    <text x="600" y="470" text-anchor="middle" font-size="14" font-weight="600" fill="#8b949e">No remedy reservation, no enforced execution  •  no verified outcome, no settlement</text>
+  </g>
+</svg>
