@@ -1182,6 +1182,11 @@ export class ConsequenceRail {
       "SCHEMA_INVALID",
       "expires_at must be after requested_at.",
     );
+    assert(
+      !isExpired(input.expires_at, this.clock.now()),
+      "ACTION_EXPIRED",
+      "ActionProposal has expired.",
+    );
     assertExactFields(
       input.evidence_plan,
       EVIDENCE_PLAN_FIELDS,
