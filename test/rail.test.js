@@ -729,6 +729,16 @@ test("receipt bundle profile omits proposal and raw evidence", async () => {
   );
 });
 
+test("mutating an exported bundle cannot corrupt stored evidence", async () => {
+  const result = await runRefundDemo();
+  result.bundle.events[0].payload.state = "CORRUPTED";
+  result.bundle.recourse_reservation.kind = "compensate";
+
+  const fresh = result.runtime.rail.exportBundle(result.summary.action_id, { profile: "audit" });
+  assert.equal(fresh.events[0].payload.state, "PROPOSED");
+  assert.equal(fresh.recourse_reservation.kind, "reverse");
+});
+
 test("default v0.1 artifact bytes remain pinned to the public base", async () => {
   const hash = (value) => createHash("sha256")
     .update(JSON.stringify(value), "utf8")

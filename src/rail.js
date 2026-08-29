@@ -893,7 +893,7 @@ export class ConsequenceRail {
       "BUNDLE_PROFILE_INVALID",
       "Bundle profile must be receipt or audit.",
     );
-    return {
+    return deepClone({
       schema_version: "consequence-rail/settlement-bundle/v0.1",
       profile: auditProfile ? "audit" : "receipt",
       action: {
@@ -901,7 +901,7 @@ export class ConsequenceRail {
         action_digest: record.action_digest,
         action_type: record.proposal.action_type,
         resource_id_digest: digest(record.proposal.target.resource_id),
-        ...(auditProfile ? { proposal: deepClone(record.proposal) } : {}),
+        ...(auditProfile ? { proposal: record.proposal } : {}),
       },
       recourse_reservation: record.reservation,
       action_permit: record.permit,
@@ -920,7 +920,7 @@ export class ConsequenceRail {
         },
         warning: "An embedded key is not trusted automatically.",
       },
-    };
+    });
   }
 
   get(actionId) {
