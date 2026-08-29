@@ -195,6 +195,18 @@ test("invalid postcondition operators are rejected before action admission", () 
   }
 });
 
+test("expired proposals are rejected before consuming action capacity", () => {
+  const runtime = createDemoRuntime();
+  const proposal = buildRefundProposal(runtime.clock);
+  runtime.clock.advance(120_000);
+
+  assert.throws(
+    () => runtime.rail.propose(proposal),
+    (error) => error.code === "ACTION_EXPIRED",
+  );
+  assert.equal(runtime.rail.actions.size, 0);
+});
+
 test("clean refund closes with a verified settled receipt", async () => {
   const result = await runRefundDemo();
   assert.equal(result.summary.state, "CLOSED");
