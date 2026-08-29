@@ -2,6 +2,7 @@
 
 ## Unreleased corrective candidate
 
+- HTTP sidecar failures now include a `request_id` (and the action id when the route named one). Unexpected exceptions are logged to stderr and returned as `INTERNAL_ERROR` instead of being swallowed as `REQUEST_INVALID`.
 - CLI usage now rejects missing flag values, unknown commands and flags, and empty or unreadable JSON files; `crctl --help` lists valid faults and modes, and `rail --help` prints usage instead of starting the sidecar.
 - JSON Schemas and OpenAPI now type digest and signature fields as the runtime's unpadded SHA-256 and Ed25519 base64url encodings, and the repository check rejects regressions.
 - Connector observation failures now fail closed into a signed disputed receipt with bounded `EVIDENCE_UNAVAILABLE` or `REMEDY_EVIDENCE_UNAVAILABLE` diagnostics instead of stranding verification states.
