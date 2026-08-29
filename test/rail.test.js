@@ -1257,6 +1257,9 @@ test("HTTP sidecar rejects unsafe requests before state mutation", async (contex
   const wrongMethod = await fetch(`${base}/v0/actions`);
   assert.equal(wrongMethod.status, 405);
   assert.equal(wrongMethod.headers.get("allow"), "POST");
+  const wrongMethodBody = await wrongMethod.json();
+  assert.equal(wrongMethodBody.code, "METHOD_NOT_ALLOWED");
+  assert.match(wrongMethodBody.request_id, /^req_[A-Za-z0-9_-]{22}$/);
 
   const textPlain = await fetch(`${base}/v0/actions`, {
     method: "POST",
@@ -1285,10 +1288,27 @@ test("HTTP sidecar rejects unsafe requests before state mutation", async (contex
     body: "{not-json",
   });
   assert.equal(malformed.status, 400);
-  assert.deepEqual(await malformed.json(), {
-    code: "REQUEST_INVALID",
-    message: "Request body must be valid JSON.",
-  });
+  const malformedBody = await malformed.json();
+  assert.equal(malformedBody.code, "REQUEST_INVALID");
+  assert.equal(malformedBody.message, "Request body must be valid JSON.");
+  assert.match(malformedBody.request_id, /^req_[A-Za-z0-9_-]{22}$/);
+  assert.equal(malformedBody.action_id, undefined);
+
+  const missing = await fetch(`${base}/v0/actions/act_00000000000000000000`);
+  assert.equal(missing.status, 404);
+  const missingBody = await missing.json();
+  assert.equal(missingBody.code, "ACTION_NOT_FOUND");
+  assert.equal(missingBody.action_id, "act_00000000000000000000");
+  assert.match(missingBody.request_id, /^req_[A-Za-z0-9_-]{22}$/);
+  assert.notEqual(missingBody.request_id, malformedBody.request_id);
+
+  const invalidId = await fetch(`${base}/v0/actions/not-an-action`);
+  assert.equal(invalidId.status, 400);
+  const invalidBody = await invalidId.json();
+  assert.equal(invalidBody.code, "REQUEST_INVALID");
+  assert.equal(invalidBody.message, "Action identifier is invalid.");
+  assert.equal(invalidBody.action_id, "not-an-action");
+  assert.match(invalidBody.request_id, /^req_[A-Za-z0-9_-]{22}$/);
 
   const crossOrigin = await fetch(`${base}/v0/actions`, {
     method: "POST",
@@ -1320,6 +1340,54 @@ test("HTTP sidecar rejects unsafe requests before state mutation", async (contex
   });
   assert.equal(hostileHost.status, 400);
   assert.equal(runtime.rail.actions.size, 0);
+});
+
+test("HTTP sidecar logs unexpected exceptions and returns INTERNAL_ERROR with a request id", async (context) => {
+  const runtime = createDemoRuntime();
+  runtime.rail.propose = () => {
+    throw new Error("connector timeout detail must not escape");
+  };
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+
+  const writes = [];
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (chunk, encoding, callback) => {
+    writes.push(String(chunk));
+    return originalWrite(chunk, encoding, callback);
+  };
+  context.after(() => {
+    process.stderr.write = originalWrite;
+  });
+
+  const address = server.address();
+  const response = await fetch(`http://127.0.0.1:${address.port}/v0/actions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(buildRefundProposal(runtime.clock)),
+  });
+  assert.equal(response.status, 500);
+  const body = await response.json();
+  assert.equal(body.code, "INTERNAL_ERROR");
+  assert.equal(body.message, "Request could not be processed.");
+  assert.match(body.request_id, /^req_[A-Za-z0-9_-]{22}$/);
+  assert.equal(JSON.stringify(body).includes("connector timeout detail"), false);
+  assert.equal(runtime.rail.actions.size, 0);
+
+  const diagnostic = writes
+    .flatMap((chunk) => chunk.trim().split("\n"))
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .find((item) => item?.code === "INTERNAL_ERROR" && item.request_id === body.request_id);
+  assert.ok(diagnostic);
+  assert.equal(diagnostic.message, "connector timeout detail must not escape");
 });
 
 test("conformance ActionProposal fixture is accepted", () => {

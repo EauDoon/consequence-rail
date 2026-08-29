@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { createDemoRuntime } from "./demo.js";
 import { RailError } from "./errors.js";
@@ -12,8 +13,12 @@ const ACTION_ID = /^act_[A-Za-z0-9_-]{20}$/;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const JSON_CONTENT_TYPE = /^application\/json(?:\s*;\s*charset=utf-8)?$/i;
 
-function requestError(code, message) {
-  return new RailError(code, message);
+function createRequestId() {
+  return `req_${randomBytes(16).toString("base64url")}`;
+}
+
+function requestError(code, message, details = {}) {
+  return new RailError(code, message, details);
 }
 
 async function readJson(request, { required = false } = {}) {
@@ -118,6 +123,7 @@ function send(response, status, body, extraHeaders = {}) {
 }
 
 function errorStatus(error) {
+  if (error.code === "INTERNAL_ERROR") return 500;
   if (error.code === "ACTION_NOT_FOUND" || error.code === "ROUTE_NOT_FOUND") return 404;
   if (error.code === "METHOD_NOT_ALLOWED") return 405;
   if (error.code === "REQUEST_TOO_LARGE") return 413;
@@ -141,6 +147,17 @@ function errorStatus(error) {
     return 409;
   }
   return 400;
+}
+
+function failureBody(error, requestId, extra = {}) {
+  return {
+    ...(error instanceof RailError ? error.toJSON() : {
+      code: error.code,
+      message: error.message,
+    }),
+    ...extra,
+    request_id: requestId,
+  };
 }
 
 function hostUrl(request) {
@@ -189,11 +206,15 @@ function assertRequestBoundary(request) {
   }
 }
 
-function methodNotAllowed(response, allowed) {
+function methodNotAllowed(response, allowed, requestId) {
   send(
     response,
     405,
-    { code: "METHOD_NOT_ALLOWED", message: "Method is not allowed for this route." },
+    {
+      code: "METHOD_NOT_ALLOWED",
+      message: "Method is not allowed for this route.",
+      request_id: requestId,
+    },
     { allow: allowed.join(", ") },
   );
 }
@@ -215,14 +236,17 @@ export function createReferenceServer({ runtime = createDemoRuntime() } = {}) {
   const rateByAddress = new Map();
 
   const server = createServer({ maxHeaderSize: 16_384 }, async (request, response) => {
+    const requestId = createRequestId();
     if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
       send(response, 503, {
         code: "SERVER_BUSY",
         message: "The local reference server is busy.",
+        request_id: requestId,
       });
       return;
     }
     activeRequests += 1;
+    let actionId;
     try {
       assertRequestBoundary(request);
       const now = Date.now();
@@ -243,7 +267,7 @@ export function createReferenceServer({ runtime = createDemoRuntime() } = {}) {
       if (path === "/.well-known/consequence-rail") {
         assertQueryParameters(url);
         if (request.method !== "GET") {
-          methodNotAllowed(response, ["GET"]);
+          methodNotAllowed(response, ["GET"], requestId);
           return;
         }
         assertNoBody(request);
@@ -261,7 +285,7 @@ export function createReferenceServer({ runtime = createDemoRuntime() } = {}) {
       if (path === "/v0/actions") {
         assertQueryParameters(url);
         if (request.method !== "POST") {
-          methodNotAllowed(response, ["POST"]);
+          methodNotAllowed(response, ["POST"], requestId);
           return;
         }
         send(response, 201, rail.propose(await readJson(request, { required: true })));
@@ -271,7 +295,7 @@ export function createReferenceServer({ runtime = createDemoRuntime() } = {}) {
       if (path === "/v0/bundles/verify") {
         assertQueryParameters(url);
         if (request.method !== "POST") {
-          methodNotAllowed(response, ["POST"]);
+          methodNotAllowed(response, ["POST"], requestId);
           return;
         }
         send(response, 200, verifyBundle(await readJson(request, { required: true }), {
@@ -284,10 +308,13 @@ export function createReferenceServer({ runtime = createDemoRuntime() } = {}) {
 
       const match = path.match(/^\/v0\/actions\/([^/]+)(?:\/([^/]+))?$/);
       if (match) {
-        const [, actionId, operation] = match;
+        const [, matchedActionId, operation] = match;
+        actionId = matchedActionId;
         assertQueryParameters(url, operation === "bundle" ? ["profile"] : []);
         if (!ACTION_ID.test(actionId)) {
-          throw requestError("REQUEST_INVALID", "Action identifier is invalid.");
+          throw requestError("REQUEST_INVALID", "Action identifier is invalid.", {
+            action_id: actionId,
+          });
         }
         const allowedMethod = !operation || operation === "bundle" ? "GET" : "POST";
         const knownOperations = new Set([
@@ -307,7 +334,7 @@ export function createReferenceServer({ runtime = createDemoRuntime() } = {}) {
           throw requestError("ROUTE_NOT_FOUND", "Route was not found.");
         }
         if (request.method !== allowedMethod) {
-          methodNotAllowed(response, [allowedMethod]);
+          methodNotAllowed(response, [allowedMethod], requestId);
           return;
         }
         if (!operation) {
@@ -365,10 +392,30 @@ export function createReferenceServer({ runtime = createDemoRuntime() } = {}) {
 
       throw requestError("ROUTE_NOT_FOUND", "Route was not found.");
     } catch (error) {
-      const railError = error instanceof RailError
-        ? error
-        : new RailError("REQUEST_INVALID", "Request could not be processed.");
-      send(response, errorStatus(railError), railError.toJSON());
+      const extra = actionId && error?.details?.action_id === undefined
+        ? { action_id: actionId }
+        : {};
+      if (error instanceof RailError) {
+        send(response, errorStatus(error), failureBody(error, requestId, extra));
+        return;
+      }
+      process.stderr.write(
+        `${JSON.stringify({
+          code: "INTERNAL_ERROR",
+          request_id: requestId,
+          ...(extra.action_id ? { action_id: extra.action_id } : {}),
+          message: error instanceof Error ? error.message : "Request could not be processed.",
+        })}\n`,
+      );
+      send(
+        response,
+        500,
+        failureBody(
+          new RailError("INTERNAL_ERROR", "Request could not be processed."),
+          requestId,
+          extra,
+        ),
+      );
     } finally {
       activeRequests -= 1;
     }

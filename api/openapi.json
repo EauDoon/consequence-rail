@@ -3,7 +3,7 @@
   "info": {
     "title": "Consequence Rail Reference API",
     "version": "0.2.0",
-    "description": "Experimental loopback-only reference API for recourse-gated execution and optional recovery preflight. The server keeps runtime state in memory, accepts JSON bodies up to 65,536 bytes, enforces same-origin loopback Host and Origin values, rejects unknown or repeated query parameters before route mutation, and may return 400, 403, 405, 413, 415, 429, or 503 boundary errors before route-specific processing."
+    "description": "Experimental loopback-only reference API for recourse-gated execution and optional recovery preflight. The server keeps runtime state in memory, accepts JSON bodies up to 65,536 bytes, enforces same-origin loopback Host and Origin values, rejects unknown or repeated query parameters before route mutation, and may return 400, 403, 405, 413, 415, 429, 500, or 503 boundary errors before route-specific processing. Failure bodies include a request_id for correlation; unexpected exceptions are logged to stderr and returned as INTERNAL_ERROR without leaking the cause."
   },
   "servers": [
     {
@@ -758,7 +758,8 @@
         "additionalProperties": true,
         "required": [
           "code",
-          "message"
+          "message",
+          "request_id"
         ],
         "properties": {
           "code": {
@@ -766,6 +767,10 @@
           },
           "message": {
             "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^req_[A-Za-z0-9_-]{22}$"
           },
           "action_id": {
             "type": "string"
