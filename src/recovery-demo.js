@@ -1,5 +1,6 @@
 import { digest } from "./canonical.js";
 import { addMilliseconds, ManualClock } from "./clock.js";
+import { RailError } from "./errors.js";
 import {
   buildRefundProposal,
   buildRefundReservation,
@@ -144,6 +145,12 @@ export async function runRecoveryPreflightDemo({
   fault = "none",
   clock = new ManualClock(),
 } = {}) {
+  if (!RECOVERY_DEMO_FAULTS.includes(fault)) {
+    throw new RailError(
+      "FAULT_UNKNOWN",
+      `Unknown recovery-preflight demo fault: ${fault}. Expected one of: ${RECOVERY_DEMO_FAULTS.join(", ")}.`,
+    );
+  }
   const runtime = createDemoRuntime({
     clock,
     requireRecoveryPreflight: true,

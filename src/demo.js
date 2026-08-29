@@ -144,7 +144,10 @@ export function prepareRefund(runtime) {
 
 export async function runRefundDemo({ fault = "none", assuranceMode = "enforced" } = {}) {
   if (!DEMO_FAULTS.includes(fault)) {
-    throw new RailError("FAULT_UNKNOWN", `Unknown demo fault: ${fault}.`);
+    throw new RailError(
+      "FAULT_UNKNOWN",
+      `Unknown demo fault: ${fault}. Expected one of: ${DEMO_FAULTS.join(", ")}.`,
+    );
   }
 
   const runtime = createDemoRuntime({ assuranceMode });
