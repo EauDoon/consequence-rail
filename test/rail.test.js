@@ -315,6 +315,157 @@ test("lost response before commit confirms no effect without retry", async () =>
   assert.equal(result.runtime.connector.recourseStatus(token).status, "released");
 });
 
+test("direct execution accepts only a bound executed connector result", async () => {
+  for (const invalidResult of [
+    (key) => ({ status: "executed", external_id: "rf_unrelated", idempotency_key: `${key}:other` }),
+    (key) => ({ status: "no_effect", idempotency_key: key }),
+  ]) {
+    const runtime = createDemoRuntime();
+    const { actionId } = prepareRefund(runtime);
+    const key = runtime.rail.get(actionId).proposal.idempotency_key;
+    runtime.connector.execute = async () => invalidResult(key);
+
+    assert.equal((await runtime.rail.execute(actionId)).state, "UNKNOWN");
+    assert.deepEqual(runtime.rail.get(actionId).execution, {
+      status: "unknown",
+      idempotency_key: key,
+      external_id: null,
+    });
+  }
+});
+
+test("execution connector results are immutable rail-owned snapshots", async () => {
+  const direct = createDemoRuntime();
+  const { actionId: directActionId } = prepareRefund(direct);
+  const directKey = direct.rail.get(directActionId).proposal.idempotency_key;
+  const directResult = {
+    status: "executed",
+    external_id: "rf_direct",
+    idempotency_key: directKey,
+  };
+  direct.connector.execute = async () => directResult;
+  await direct.rail.execute(directActionId);
+  directResult.idempotency_key = "foreign";
+  assert.equal(direct.rail.get(directActionId).execution.idempotency_key, directKey);
+  assert.equal(Object.isFrozen(direct.rail.get(directActionId).execution), true);
+
+  const reconciled = createDemoRuntime();
+  const { actionId: reconciledActionId } = prepareRefund(reconciled);
+  await reconciled.rail.execute(reconciledActionId, { fault: "lost-response-after-commit" });
+  const reconciledKey = reconciled.rail.get(reconciledActionId).proposal.idempotency_key;
+  const statusResult = {
+    status: "executed",
+    external_id: "rf_reconciled",
+    idempotency_key: reconciledKey,
+  };
+  reconciled.connector.status = async () => statusResult;
+  await reconciled.rail.reconcile(reconciledActionId);
+  statusResult.idempotency_key = "foreign";
+  assert.equal(reconciled.rail.get(reconciledActionId).execution.idempotency_key, reconciledKey);
+  assert.equal(Object.isFrozen(reconciled.rail.get(reconciledActionId).execution), true);
+});
+
+test("non-canonical reconciliation results map to the boundary error", async () => {
+  for (const invalidResult of [
+    (key) => Object.defineProperty({ idempotency_key: key }, "status", {
+      enumerable: true,
+      get() { throw new Error("must not run"); },
+    }),
+    (key) => new Proxy({ status: "executed", idempotency_key: key }, {}),
+  ]) {
+    const runtime = createDemoRuntime();
+    const { actionId } = prepareRefund(runtime);
+    await runtime.rail.execute(actionId, { fault: "lost-response-after-commit" });
+    const key = runtime.rail.get(actionId).proposal.idempotency_key;
+    runtime.connector.status = async () => invalidResult(key);
+
+    await assert.rejects(
+      runtime.rail.reconcile(actionId),
+      (error) => error.code === "RECONCILIATION_INVALID",
+    );
+    assert.equal(runtime.rail.inspect(actionId).state, "UNKNOWN");
+  }
+});
+
+test("connector result status and idempotency key must be own fields", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  const key = runtime.rail.get(actionId).proposal.idempotency_key;
+  const fields = new Map([
+    ["status", Object.getOwnPropertyDescriptor(Object.prototype, "status")],
+    ["idempotency_key", Object.getOwnPropertyDescriptor(Object.prototype, "idempotency_key")],
+  ]);
+  try {
+    Object.defineProperties(Object.prototype, {
+      status: { configurable: true, value: "executed" },
+      idempotency_key: { configurable: true, value: key },
+    });
+    runtime.connector.execute = async () => ({});
+
+    assert.equal((await runtime.rail.execute(actionId)).state, "UNKNOWN");
+    assert.equal(Object.hasOwn(runtime.rail.get(actionId).execution, "status"), true);
+    assert.equal(Object.hasOwn(runtime.rail.get(actionId).execution, "idempotency_key"), true);
+  } finally {
+    for (const [field, descriptor] of fields) {
+      if (descriptor) Object.defineProperty(Object.prototype, field, descriptor);
+      else Reflect.deleteProperty(Object.prototype, field);
+    }
+  }
+});
+
+test("connector result snapshots ignore inherited optional fields", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  const key = runtime.rail.get(actionId).proposal.idempotency_key;
+  const previous = Object.getOwnPropertyDescriptor(Object.prototype, "external_id");
+  try {
+    Object.defineProperty(Object.prototype, "external_id", {
+      configurable: true,
+      value: "rf_inherited",
+    });
+    runtime.connector.execute = async () => ({
+      status: "executed",
+      idempotency_key: key,
+    });
+
+    assert.equal((await runtime.rail.execute(actionId)).state, "EXECUTED");
+    const execution = runtime.rail.get(actionId).execution;
+    assert.equal(Object.getPrototypeOf(execution), null);
+    assert.equal(execution.external_id, undefined);
+    const event = runtime.rail.eventStore.list(actionId).find(
+      (item) => item.payload.reason_code === "CONNECTOR_EXECUTED",
+    );
+    assert.equal(event.payload.details_digest, digest({
+      external_reference_digest: digest(key),
+    }));
+  } finally {
+    if (previous) Object.defineProperty(Object.prototype, "external_id", previous);
+    else Reflect.deleteProperty(Object.prototype, "external_id");
+  }
+});
+
+test("reconciliation rejects status for another idempotency key", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  assert.equal(
+    (await runtime.rail.execute(actionId, {
+      fault: "lost-response-after-commit",
+    })).state,
+    "UNKNOWN",
+  );
+  runtime.connector.status = async () => ({
+    status: "executed",
+    external_id: "rf_unrelated",
+    idempotency_key: "unrelated",
+  });
+
+  await assert.rejects(
+    runtime.rail.reconcile(actionId),
+    (error) => error.code === "RECONCILIATION_INVALID",
+  );
+  assert.equal(runtime.rail.inspect(actionId).state, "UNKNOWN");
+});
+
 test("untyped execution errors reconcile without releasing recourse or re-executing", async () => {
   const runtime = createDemoRuntime();
   const { actionId } = prepareRefund(runtime);
@@ -388,6 +539,60 @@ test("a failed bounded remedy closes as disputed without retry", async () => {
   assert.equal(result.summary.active_refunds, 2);
 });
 
+test("direct remediation accepts only a bound remedy result", async () => {
+  for (const invalidResult of [
+    (key) => ({ status: "remediated", external_id: "rf_unrelated", idempotency_key: `${key}:other` }),
+    (key) => ({ status: "executed", idempotency_key: key }),
+  ]) {
+    const runtime = createDemoRuntime();
+    const { actionId } = prepareRefund(runtime);
+    await runtime.rail.execute(actionId, { fault: "duplicate" });
+    await runtime.rail.verifyOutcome(actionId);
+    const key = runtime.rail.get(actionId).remedy_idempotency_key;
+    runtime.connector.remediate = async () => invalidResult(key);
+
+    assert.equal((await runtime.rail.remediate(actionId)).state, "REMEDY_UNKNOWN");
+    assert.equal(runtime.rail.get(actionId).remedy_result.idempotency_key, key);
+  }
+});
+
+test("remedy connector results are immutable rail-owned snapshots", async () => {
+  const direct = createDemoRuntime();
+  const { actionId: directActionId } = prepareRefund(direct);
+  await direct.rail.execute(directActionId, { fault: "duplicate" });
+  await direct.rail.verifyOutcome(directActionId);
+  const remediate = direct.connector.remediate.bind(direct.connector);
+  let directResult;
+  direct.connector.remediate = async (...args) => {
+    directResult = await remediate(...args);
+    return directResult;
+  };
+  await direct.rail.remediate(directActionId);
+  const directKey = direct.rail.get(directActionId).remedy_idempotency_key;
+  directResult.idempotency_key = "foreign";
+  assert.equal(direct.rail.get(directActionId).remedy_result.idempotency_key, directKey);
+  assert.equal(Object.isFrozen(direct.rail.get(directActionId).remedy_result), true);
+
+  const reconciled = createDemoRuntime();
+  const { actionId: reconciledActionId } = prepareRefund(reconciled);
+  await reconciled.rail.execute(reconciledActionId, { fault: "duplicate" });
+  await reconciled.rail.verifyOutcome(reconciledActionId);
+  await reconciled.rail.remediate(reconciledActionId, {
+    fault: "remedy-lost-response-after-commit",
+  });
+  const reconciledKey = reconciled.rail.get(reconciledActionId).remedy_idempotency_key;
+  const statusResult = {
+    status: "remediated",
+    external_id: "rf_reconciled",
+    idempotency_key: reconciledKey,
+  };
+  reconciled.connector.remedyStatus = async () => statusResult;
+  await reconciled.rail.reconcileRemedy(reconciledActionId);
+  statusResult.idempotency_key = "foreign";
+  assert.equal(reconciled.rail.get(reconciledActionId).remedy_result.idempotency_key, reconciledKey);
+  assert.equal(Object.isFrozen(reconciled.rail.get(reconciledActionId).remedy_result), true);
+});
+
 test("lost remedy response after commit reconciles without retry", async () => {
   const result = await runRefundDemo({
     fault: "remedy-lost-response-after-commit",
@@ -396,6 +601,30 @@ test("lost remedy response after commit reconciles without retry", async () => {
   assert.equal(result.summary.remedy_calls, 1);
   assert.equal(result.summary.remedy_status_calls, 1);
   assert.equal(result.summary.active_refunds, 1);
+});
+
+test("remedy reconciliation rejects status for another idempotency key", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  assert.equal(
+    (await runtime.rail.remediate(actionId, {
+      fault: "remedy-lost-response-after-commit",
+    })).state,
+    "REMEDY_UNKNOWN",
+  );
+  runtime.connector.remedyStatus = async () => ({
+    status: "remediated",
+    external_id: "rf_unrelated",
+    idempotency_key: "unrelated",
+  });
+
+  await assert.rejects(
+    runtime.rail.reconcileRemedy(actionId),
+    (error) => error.code === "RECONCILIATION_INVALID",
+  );
+  assert.equal(runtime.rail.inspect(actionId).state, "REMEDY_UNKNOWN");
 });
 
 test("lost remedy response before commit closes disputed without retry", async () => {
