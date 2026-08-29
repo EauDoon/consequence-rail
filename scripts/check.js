@@ -24,6 +24,8 @@ const required = [
 ];
 const textExtensions = new Set([".md", ".json", ".js", ".yaml", ".yml", ".txt"]);
 const workspaceMarker = ["do", "not", "edit", "or", "touch", "the"].join("-");
+const SHA256_DIGEST_PATTERN = "^[A-Za-z0-9_-]{43}$";
+const ED25519_SIGNATURE_PATTERN = "^[A-Za-z0-9_-]{86}$";
 const findings = [];
 
 function checkExplicitObjectSchemas(value, label, pointer = "") {
@@ -40,6 +42,71 @@ function checkExplicitObjectSchemas(value, label, pointer = "") {
   }
   for (const [key, item] of Object.entries(value)) {
     checkExplicitObjectSchemas(item, label, `${pointer}/${key}`);
+  }
+}
+
+function isDigestFieldName(name) {
+  return (
+    name.endsWith("_digest") ||
+    name.endsWith("_digests") ||
+    name === "event_hash" ||
+    name === "previous_hash" ||
+    name === "event_chain_head" ||
+    name === "evidence_manifest"
+  );
+}
+
+function schemaDeclaresDigestEncoding(schema) {
+  if (!schema || typeof schema !== "object") return false;
+  if (schema.pattern === SHA256_DIGEST_PATTERN) return true;
+  if (schema.items) return schemaDeclaresDigestEncoding(schema.items);
+  return [...(schema.anyOf ?? []), ...(schema.oneOf ?? []), ...(schema.allOf ?? [])]
+    .some(schemaDeclaresDigestEncoding);
+}
+
+function isSchemaNode(value) {
+  return (
+    value.type !== undefined ||
+    value.pattern !== undefined ||
+    value.minLength !== undefined ||
+    value.items !== undefined ||
+    value.anyOf !== undefined ||
+    value.oneOf !== undefined ||
+    value.allOf !== undefined ||
+    value.const !== undefined
+  );
+}
+
+function checkTypedIdentifiers(value, label, pointer = "", propertyName = "") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      checkTypedIdentifiers(item, label, `${pointer}/${index}`, propertyName));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+
+  if (
+    isDigestFieldName(propertyName) &&
+    isSchemaNode(value) &&
+    !schemaDeclaresDigestEncoding(value)
+  ) {
+    findings.push(
+      `digest field must use unpadded SHA-256 base64url pattern ${SHA256_DIGEST_PATTERN} in ${label}${pointer}`,
+    );
+  }
+
+  if (
+    propertyName === "signature" &&
+    value.properties?.value &&
+    value.properties.value.pattern !== ED25519_SIGNATURE_PATTERN
+  ) {
+    findings.push(
+      `signature.value must use canonical Ed25519 base64url pattern ${ED25519_SIGNATURE_PATTERN} in ${label}${pointer}`,
+    );
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    checkTypedIdentifiers(item, label, `${pointer}/${key}`, key);
   }
 }
 
@@ -98,6 +165,7 @@ for (const path of files) {
       const parsed = JSON.parse(text);
       if (label.startsWith("spec/schemas/") || label === "api/openapi.json") {
         checkExplicitObjectSchemas(parsed, label);
+        checkTypedIdentifiers(parsed, label);
       }
     } catch (error) {
       findings.push(`invalid JSON in ${label}: ${error.message}`);

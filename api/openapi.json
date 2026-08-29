@@ -408,15 +408,50 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "required": [
                     "valid",
+                    "integrity",
+                    "semantics",
                     "action_id",
-                    "outcome"
+                    "outcome",
+                    "assurance_mode",
+                    "bypass_possible",
+                    "event_count",
+                    "event_chain_head",
+                    "trusted_key_id",
+                    "trusted_connector_key_id"
                   ],
                   "properties": {
                     "valid": {
                       "const": true
+                    },
+                    "integrity": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["valid", "event_count", "event_chain_head"],
+                      "properties": {
+                        "valid": { "const": true },
+                        "event_count": { "type": "integer", "minimum": 0 },
+                        "event_chain_head": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{43}$"
+                        }
+                      }
+                    },
+                    "semantics": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["status", "valid"],
+                      "properties": {
+                        "status": { "const": "verified" },
+                        "valid": { "const": true },
+                        "final_state": { "const": "CLOSED" },
+                        "derived_outcome": {
+                          "enum": ["settled", "compensated", "disputed"]
+                        },
+                        "evidence_count": { "type": "integer", "minimum": 0 }
+                      }
                     },
                     "action_id": {
                       "type": "string"
@@ -427,6 +462,28 @@
                         "compensated",
                         "disputed"
                       ]
+                    },
+                    "assurance_mode": {
+                      "enum": ["enforced", "cooperative"]
+                    },
+                    "bypass_possible": {
+                      "type": "boolean"
+                    },
+                    "event_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "event_chain_head": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{43}$"
+                    },
+                    "trusted_key_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "trusted_connector_key_id": {
+                      "type": "string",
+                      "minLength": 1
                     }
                   }
                 }
@@ -497,7 +554,8 @@
             "type": "string"
           },
           "action_digest": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
           },
           "action_type": {
             "type": "string"
@@ -536,7 +594,8 @@
             "minimum": 0
           },
           "event_chain_head": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]{43}$"
           },
           "outcome": {
             "type": [
@@ -557,7 +616,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "pattern": "^[A-Za-z0-9_-]{43}$"
           }
         }
       },

@@ -18,6 +18,32 @@ function semanticAssert(condition, message, details = {}) {
   }
 }
 
+/**
+ * @typedef {object} BundleVerification
+ * @property {true} valid
+ * @property {{valid: true, event_count: number, event_chain_head: string}} integrity
+ * @property {{status: "verified"|"not_requested", valid: boolean|null, final_state?: "CLOSED", derived_outcome?: string, evidence_count?: number}} semantics
+ * @property {string} action_id
+ * @property {"settled"|"compensated"|"disputed"} outcome
+ * @property {"enforced"|"cooperative"} assurance_mode
+ * @property {boolean} bypass_possible
+ * @property {number} event_count
+ * @property {string} event_chain_head
+ * @property {string} trusted_key_id
+ * @property {string} trusted_connector_key_id
+ */
+
+/**
+ * Verify settlement-bundle signatures, digest bindings, and optional lifecycle semantics.
+ * Failures throw; a returned object always has `valid: true`.
+ *
+ * @param {object} bundle
+ * @param {object} [options]
+ * @param {Map<string, unknown>} [options.trustedKeys]
+ * @param {Map<string, unknown>} [options.trustedConnectorKeys]
+ * @param {boolean} [options.requireSemantics=true]
+ * @returns {BundleVerification}
+ */
 export function verifyBundle(
   bundle,
   {
@@ -163,6 +189,16 @@ export function verifyBundle(
   };
 }
 
+/**
+ * Integrity-verify a bundle, then emit a metadata-only event timeline.
+ * Audit profiles also apply lifecycle-semantic checks; receipt profiles do not.
+ *
+ * @param {object} bundle
+ * @param {object} [options]
+ * @param {Map<string, unknown>} [options.trustedKeys]
+ * @param {Map<string, unknown>} [options.trustedConnectorKeys]
+ * @returns {object}
+ */
 export function verifyBundleTimeline(
   bundle,
   {

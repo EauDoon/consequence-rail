@@ -31,7 +31,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "pattern": "^[A-Za-z0-9_-]{43}$"
     },
     "event_type": {
       "type": "string"
@@ -58,7 +59,8 @@
       }
     },
     "event_hash": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
     }
   }
 }

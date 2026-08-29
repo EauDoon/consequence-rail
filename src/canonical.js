@@ -98,6 +98,7 @@ export function canonicalJson(value) {
   return JSON.stringify(normalize(value));
 }
 
+/** SHA-256 of canonical JSON as unpadded base64url (43 characters). */
 export function digest(value) {
   return createHash("sha256").update(canonicalJson(value), "utf8").digest("base64url");
 }
