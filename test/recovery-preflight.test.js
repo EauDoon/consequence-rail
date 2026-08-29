@@ -434,6 +434,57 @@ test("a rail rejects a signed drill that did not qualify", async () => {
   );
 });
 
+test("a gated rail refuses a permit after the accepted recovery attestation expires", async () => {
+  const runtime = createDemoRuntime({ requireRecoveryPreflight: true });
+  const { actionId } = prepareRefundWithoutPermit(runtime);
+  const bundle = await boundRecoveryDrill(runtime, actionId, (contract) => {
+    contract.max_attestation_age_seconds = 1;
+  });
+  runtime.rail.acceptRecoveryQualification(actionId, bundle);
+  runtime.clock.advance(1_000);
+
+  assert.throws(
+    () => runtime.rail.issuePermit(actionId),
+    (error) => error.code === "RECOVERY_ATTESTATION_EXPIRED",
+  );
+  assert.equal(runtime.rail.inspect(actionId).state, "RECOURSE_RESERVED");
+  assert.equal(runtime.connector.executeCalls, 0);
+});
+
+test("execution rechecks recovery freshness and does not consume an expired drill", async () => {
+  const runtime = createDemoRuntime({ requireRecoveryPreflight: true });
+  const { actionId } = prepareRefundWithoutPermit(runtime);
+  const bundle = await boundRecoveryDrill(runtime, actionId, (contract) => {
+    contract.max_attestation_age_seconds = 1;
+  });
+  runtime.rail.acceptRecoveryQualification(actionId, bundle);
+  runtime.rail.issuePermit(actionId);
+  runtime.clock.advance(1_000);
+
+  await assert.rejects(
+    () => runtime.rail.execute(actionId),
+    (error) => error.code === "RECOVERY_ATTESTATION_EXPIRED",
+  );
+  assert.equal(runtime.rail.inspect(actionId).state, "PERMITTED");
+  assert.equal(runtime.rail.get(actionId).permit_uses, 0);
+  assert.equal(runtime.connector.executeCalls, 0);
+});
+
+test("a gated rail rejects compensated-review recovery as unqualified", async () => {
+  const runtime = createDemoRuntime({ requireRecoveryPreflight: true });
+  const { actionId } = prepareRefundWithoutPermit(runtime);
+  const bundle = await boundRecoveryDrill(runtime, actionId, (contract) => {
+    contract.recovery_class = "compensation";
+  });
+  assert.equal(bundle.drill_attestation.qualification, "REVIEW_COMPENSATED");
+  assert.throws(
+    () => runtime.rail.acceptRecoveryQualification(actionId, bundle),
+    (error) => error.code === "RECOVERY_PREFLIGHT_NOT_QUALIFIED",
+  );
+  assert.equal(runtime.rail.inspect(actionId).recovery_preflight_qualification, null);
+  assert.equal(runtime.connector.executeCalls, 0);
+});
+
 test("permit issuance remeasures the qualified connector implementation", async () => {
   const runtime = createDemoRuntime({ requireRecoveryPreflight: true });
   const { actionId } = prepareRefundWithoutPermit(runtime);
@@ -447,6 +498,49 @@ test("permit issuance remeasures the qualified connector implementation", async 
   assert.throws(
     () => runtime.rail.issuePermit(actionId),
     (error) => error.code === "RECOVERY_PREFLIGHT_NOT_QUALIFIED",
+  );
+  assert.equal(runtime.connector.executeCalls, 0);
+  assert.equal(runtime.connector.remedyCalls, 0);
+});
+
+test("HTTP sidecar rejects failed recovery drills without mutating the action", async (context) => {
+  const runtime = createDemoRuntime({ requireRecoveryPreflight: true });
+  const { actionId } = prepareRefundWithoutPermit(runtime);
+  const unqualified = await runRecoveryPreflightDemo({
+    fault: "remedy-failure",
+    clock: runtime.clock,
+  });
+  const qualified = await runRecoveryPreflightDemo({ clock: runtime.clock });
+  const tampered = deepClone(qualified.bundle);
+  tampered.trace.oracle_satisfied = false;
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const address = server.address();
+  const base = `http://127.0.0.1:${address.port}`;
+
+  for (const [bundle, code] of [
+    [unqualified.bundle, "RECOVERY_PREFLIGHT_NOT_QUALIFIED"],
+    [tampered, "RECOVERY_BUNDLE_INVALID"],
+  ]) {
+    const response = await fetch(
+      `${base}/v0/actions/${actionId}/recovery-preflight`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(bundle),
+      },
+    );
+    assert.equal(response.status, 422);
+    assert.equal((await response.json()).code, code);
+    assert.equal(runtime.rail.inspect(actionId).state, "RECOURSE_RESERVED");
+    assert.equal(runtime.rail.get(actionId).recovery_preflight, undefined);
+  }
+
+  assert.throws(
+    () => runtime.rail.issuePermit(actionId),
+    (error) => error.code === "RECOVERY_PREFLIGHT_REQUIRED",
   );
   assert.equal(runtime.connector.executeCalls, 0);
   assert.equal(runtime.connector.remedyCalls, 0);
@@ -531,6 +625,26 @@ function prepareRefundWithoutPermit(runtime) {
     buildRefundReservation(proposed.action_digest, proposal, runtime.clock),
   );
   return { actionId: proposed.action_id };
+}
+
+async function boundRecoveryDrill(runtime, actionId, mutate) {
+  const record = runtime.rail.get(actionId);
+  const contract = deepClone(buildRefundRecoveryContract(runtime.clock, {
+    proposal: record.proposal,
+    reservation: record.reservation,
+    recourseRequest: buildRefundReservation(
+      record.action_digest,
+      record.proposal,
+      runtime.clock,
+    ),
+  }));
+  mutate?.(contract);
+  return runRecoveryPreflight({
+    contract,
+    adapter: new MockRefundRecoveryAdapter(runtime.clock),
+    signer: createDemoRecoverySigner(),
+    clock: runtime.clock,
+  });
 }
 
 function assertRequiredFields(schemaPath, artifact) {

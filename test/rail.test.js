@@ -924,6 +924,34 @@ test("receipt signature tampering is detected", async () => {
   );
 });
 
+test("integrity verification rejects an overclaiming settlement receipt", async () => {
+  const result = await runRefundDemo();
+  const signer = createDemoSigner();
+  for (const mutate of [
+    (receipt) => {
+      receipt.technical_claim = "This receipt is legally enforceable insurance coverage.";
+    },
+    (receipt) => {
+      receipt.limitations = ["Recovery is guaranteed."];
+    },
+    (receipt) => {
+      receipt.outcome = "paid";
+    },
+  ]) {
+    const tampered = deepClone(result.bundle);
+    mutate(tampered.settlement_receipt);
+    tampered.settlement_receipt = signArtifact(tampered.settlement_receipt, signer);
+    assert.throws(
+      () => verifyBundle(tampered, {
+        trustedKeys: demoTrustedKeys(),
+        trustedConnectorKeys: demoConnectorTrustedKeys(),
+        requireSemantics: false,
+      }),
+      (error) => error.code === "BUNDLE_TAMPERED",
+    );
+  }
+});
+
 test("inspection redacts raw resource identifiers and parameters", () => {
   const runtime = createDemoRuntime();
   const proposal = buildRefundProposal(runtime.clock);

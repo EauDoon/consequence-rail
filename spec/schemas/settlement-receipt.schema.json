@@ -94,13 +94,24 @@
       "format": "date-time"
     },
     "technical_claim": {
-      "type": "string"
+      "const": "The configured postcondition was evaluated against declared evidence sources."
     },
     "limitations": {
       "type": "array",
-      "items": {
-        "type": "string"
-      }
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "const": "Signatures establish integrity and provenance, not truth or causality."
+        },
+        {
+          "const": "Settlement is a technical protocol status, not a legal or financial determination."
+        },
+        {
+          "const": "Recovery is not guaranteed."
+        }
+      ],
+      "items": false
     },
     "signature": {
       "type": "object",

@@ -5,6 +5,8 @@
 - Connector observation failures now fail closed into a signed disputed receipt with bounded `EVIDENCE_UNAVAILABLE` or `REMEDY_EVIDENCE_UNAVAILABLE` diagnostics instead of stranding verification states.
 - Added an offline `bundle timeline` verifier that reuses settlement-bundle integrity and audit-profile lifecycle semantics before emitting a metadata-only event timeline.
 - Added Windows CI coverage for the supported Node.js matrix.
+- Integrity verification now rejects settlement receipts whose technical claim or limitations overreach the protocol's bounded language, including receipt-profile bundles.
+- Added tests that a recovery-gated rail refuses expired, review-compensated, and HTTP-submitted failed drills before permit or execution.
 
 ## Version 0.2.0 - 27 July 2026
 
