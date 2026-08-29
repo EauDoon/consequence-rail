@@ -1,7 +1,7 @@
 import { deepClone, deepFreeze, digest } from "./canonical.js";
 import { isExpired } from "./clock.js";
 import { MemoryEventStore } from "./event-store.js";
-import { RailError, UnknownExecutionError, UnknownRemedyError } from "./errors.js";
+import { RailError } from "./errors.js";
 import { evaluatePostcondition } from "./postconditions.js";
 import { verifyRecoveryPreflight } from "./recovery-preflight.js";
 import { signArtifact, verifyArtifact } from "./signing.js";
@@ -554,29 +554,15 @@ export class ConsequenceRail {
       this.transition(record, "EXECUTED", "CONNECTOR_EXECUTED", {
         external_reference_digest: digest(record.execution.external_id ?? record.execution.idempotency_key),
       });
-    } catch (error) {
-      if (error instanceof UnknownExecutionError) {
-        record.execution = {
-          status: "unknown",
-          idempotency_key: record.proposal.idempotency_key,
-          external_id: error.details.external_id ?? null,
-        };
-        this.transition(record, "UNKNOWN", "EXECUTION_AMBIGUOUS", {
-          idempotency_key_digest: digest(record.proposal.idempotency_key),
-        });
-      } else {
-        record.execution = {
-          status: "failed",
-          code: error.code ?? "CONNECTOR_FAILED",
-        };
-        this.transition(record, "FAILED", "CONNECTOR_FAILED", {
-          code: record.execution.code,
-        });
-        this.finalizeRecourse(record, {
-          release: true,
-          reason: "EXECUTION_FAILED_WITHOUT_EFFECT",
-        });
-      }
+    } catch {
+      record.execution = {
+        status: "unknown",
+        idempotency_key: record.proposal.idempotency_key,
+        external_id: null,
+      };
+      this.transition(record, "UNKNOWN", "EXECUTION_AMBIGUOUS", {
+        idempotency_key_digest: digest(record.proposal.idempotency_key),
+      });
     }
 
     return this.inspect(actionId);
@@ -737,22 +723,15 @@ export class ConsequenceRail {
         record.remedy_idempotency_key,
         fault,
       ]);
-    } catch (error) {
-      if (error instanceof UnknownRemedyError) {
-        record.remedy_result = {
-          status: "unknown",
-          idempotency_key: record.remedy_idempotency_key,
-          external_id: error.details.external_id ?? null,
-        };
-        this.transition(record, "REMEDY_UNKNOWN", "REMEDY_EXECUTION_AMBIGUOUS", {
-          idempotency_key_digest: record.reservation.idempotency_key_digest,
-        });
-        return this.inspect(actionId);
-      }
-      this.transition(record, "REMEDY_FAILED", "REMEDY_CONNECTOR_FAILED", {
-        code: error.code ?? "REMEDY_CONNECTOR_FAILED",
+    } catch {
+      record.remedy_result = {
+        status: "unknown",
+        idempotency_key: record.remedy_idempotency_key,
+        external_id: null,
+      };
+      this.transition(record, "REMEDY_UNKNOWN", "REMEDY_EXECUTION_AMBIGUOUS", {
+        idempotency_key_digest: record.reservation.idempotency_key_digest,
       });
-      this.close(record);
       return this.inspect(actionId);
     }
 
