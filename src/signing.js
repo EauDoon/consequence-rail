@@ -105,6 +105,11 @@ export function verifyArtifact(artifact, trustedKeys) {
     throw new RailError("TRUST_CONFIG_INVALID", "Trusted keys must be an explicit map.");
   }
 
+  const signatureBytes = Buffer.from(signature.value, "base64url");
+  if (signatureBytes.toString("base64url") !== signature.value) {
+    throw new RailError("SIGNATURE_INVALID", "Artifact signature encoding is not canonical.");
+  }
+
   const publicKey = trustedKeys.get(signature.key_id);
   if (!publicKey) {
     throw new RailError("UNTRUSTED_KEY", "Artifact was not signed by an explicitly trusted key.", {
@@ -117,7 +122,7 @@ export function verifyArtifact(artifact, trustedKeys) {
     null,
     Buffer.from(canonicalJson(unsigned), "utf8"),
     publicKey,
-    Buffer.from(signature.value, "base64url"),
+    signatureBytes,
   );
 
   if (!valid) {
