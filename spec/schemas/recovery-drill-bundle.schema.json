@@ -41,7 +41,10 @@
         "adapter_version": { "type": "string" },
         "adapter_implementation_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
         "local_testable": { "type": "boolean" },
-        "checkpoint_reference_digest": { "type": ["string", "null"] },
+        "checkpoint_reference_digest": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
         "baseline_state": {},
         "checkpoint_state": {},
         "damaged_state": {},

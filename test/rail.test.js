@@ -1232,6 +1232,11 @@ test("HTTP sidecar completes the synthetic action lifecycle", async (context) =>
   const bundle = await bundleResponse.json();
   const verified = await postJson(`${base}/v0/bundles/verify`, bundle);
   assert.equal(verified.valid, true);
+  assert.equal(verified.semantics.status, "verified");
+  assert.equal(verified.outcome, "settled");
+  assert.match(verified.event_chain_head, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(typeof verified.trusted_key_id, "string");
+  assert.equal(typeof verified.trusted_connector_key_id, "string");
 });
 
 test("HTTP sidecar rejects unsafe requests before state mutation", async (context) => {
@@ -1352,6 +1357,7 @@ test("runtime artifacts contain every schema-required field", async () => {
     "spec/schemas/settlement-bundle.schema.json",
     result.bundle,
   );
+  assertCanonicalEncodings(result.bundle);
 });
 
 function prepareRefundWithoutPermit(runtime) {
@@ -1422,6 +1428,38 @@ function assertRequiredFields(schemaPath, artifact) {
       true,
       `${schema.title} is missing required field ${field}`,
     );
+  }
+}
+
+const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
+const ED25519_BASE64URL = /^[A-Za-z0-9_-]{86}$/;
+
+function assertCanonicalEncodings(value, path = "") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertCanonicalEncodings(item, `${path}[${index}]`));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, item] of Object.entries(value)) {
+    const next = path ? `${path}.${key}` : key;
+    if (
+      key.endsWith("_digest") ||
+      key.endsWith("_digests") ||
+      key === "event_hash" ||
+      key === "previous_hash" ||
+      key === "event_chain_head" ||
+      key === "evidence_manifest"
+    ) {
+      for (const candidate of Array.isArray(item) ? item : [item]) {
+        if (candidate !== null) {
+          assert.match(candidate, SHA256_BASE64URL, next);
+        }
+      }
+    }
+    if (key === "signature" && item && typeof item === "object") {
+      assert.match(item.value, ED25519_BASE64URL, next);
+    }
+    assertCanonicalEncodings(item, next);
   }
 }
 

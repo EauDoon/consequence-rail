@@ -527,6 +527,30 @@ export async function runRecoveryPreflight({ contract, adapter, signer, clock })
   });
 }
 
+/**
+ * @typedef {object} RecoveryPreflightVerification
+ * @property {true} valid
+ * @property {boolean} freshness_checked
+ * @property {true|null} current
+ * @property {"QUALIFIED_EXACT"|"REVIEW_COMPENSATED"|"NOT_QUALIFIED"|"NOT_TESTABLE_LOCAL"} qualification
+ * @property {string} contract_digest
+ * @property {string} coverage_digest
+ * @property {string} attestation_digest
+ * @property {string} expires_at
+ * @property {string} trusted_key_id
+ */
+
+/**
+ * Replay-verify a signed recovery drill bundle against an explicit trusted key set.
+ * Freshness is `not_checked` unless `requireCurrent` is true and `now` is supplied.
+ *
+ * @param {object} bundle
+ * @param {object} [options]
+ * @param {Map<string, unknown>} [options.trustedKeys]
+ * @param {string|null} [options.now]
+ * @param {boolean} [options.requireCurrent=false]
+ * @returns {RecoveryPreflightVerification}
+ */
 export function verifyRecoveryPreflight(
   bundle,
   { trustedKeys = new Map(), now = null, requireCurrent = false } = {},

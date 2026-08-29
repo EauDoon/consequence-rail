@@ -30,10 +30,12 @@
       "type": "string"
     },
     "action_digest": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
     },
     "recourse_reservation_digest": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
     },
     "assurance_mode": {
       "enum": [
@@ -74,10 +76,12 @@
           "const": "Ed25519"
         },
         "key_id": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "value": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
         }
       }
     }

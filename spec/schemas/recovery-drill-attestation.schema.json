@@ -31,17 +31,17 @@
       "const": "consequence-rail/recovery-drill-attestation/v0.1"
     },
     "attestation_id": { "type": "string", "minLength": 1 },
-    "contract_digest": { "type": "string", "minLength": 32 },
-    "coverage_digest": { "type": "string", "minLength": 32 },
-    "adapter_digest": { "type": "string", "minLength": 32 },
-    "trace_digest": { "type": "string", "minLength": 32 },
-    "fixture_digest": { "type": "string", "minLength": 32 },
+    "contract_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "coverage_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "adapter_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "trace_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "fixture_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
     "checkpoint_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
-    "fault_digest": { "type": "string", "minLength": 32 },
-    "damaged_state_digest": { "type": ["string", "null"] },
-    "procedure_digest": { "type": "string", "minLength": 32 },
-    "oracle_digest": { "type": "string", "minLength": 32 },
-    "recovered_state_digest": { "type": ["string", "null"] },
+    "fault_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "damaged_state_digest": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "procedure_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "oracle_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "recovered_state_digest": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{43}$" },
     "recovery_class": {
       "enum": ["exact", "compensation", "containment", "escalation"]
     },
@@ -68,8 +68,8 @@
       "required": ["algorithm", "key_id", "value"],
       "properties": {
         "algorithm": { "const": "Ed25519" },
-        "key_id": { "type": "string" },
-        "value": { "type": "string" }
+        "key_id": { "type": "string", "minLength": 1 },
+        "value": { "type": "string", "pattern": "^[A-Za-z0-9_-]{86}$" }
       }
     }
   }

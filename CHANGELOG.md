@@ -2,6 +2,7 @@
 
 ## Unreleased corrective candidate
 
+- JSON Schemas and OpenAPI now type digest and signature fields as the runtime's unpadded SHA-256 and Ed25519 base64url encodings, and the repository check rejects regressions.
 - Connector observation failures now fail closed into a signed disputed receipt with bounded `EVIDENCE_UNAVAILABLE` or `REMEDY_EVIDENCE_UNAVAILABLE` diagnostics instead of stranding verification states.
 - Added an offline `bundle timeline` verifier that reuses settlement-bundle integrity and audit-profile lifecycle semantics before emitting a metadata-only event timeline.
 - Added Windows CI coverage for the supported Node.js matrix.

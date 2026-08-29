@@ -31,7 +31,7 @@
     },
     "action_digest": {
       "type": "string",
-      "minLength": 32
+      "pattern": "^[A-Za-z0-9_-]{43}$"
     },
     "kind": {
       "enum": [
@@ -49,7 +49,8 @@
       "minLength": 1
     },
     "capability_reference_digest": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
     },
     "expires_at": {
       "type": "string",
@@ -69,7 +70,7 @@
     },
     "idempotency_key_digest": {
       "type": "string",
-      "minLength": 1
+      "pattern": "^[A-Za-z0-9_-]{43}$"
     },
     "reserved_by": {
       "type": "string"
@@ -103,10 +104,12 @@
           "const": "Ed25519"
         },
         "key_id": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "value": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
         }
       }
     }

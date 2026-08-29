@@ -19,8 +19,11 @@ external action. It includes:
 - data-only postcondition
 - declared evidence source and freshness window
 
-The `action_digest` is the SHA-256 digest, encoded as base64url without
-padding, of the proposal's canonical JSON bytes.
+The `action_digest` is the SHA-256 digest, encoded as unpadded base64url
+(43 characters), of the proposal's canonical JSON bytes. Artifact fields
+named as digests, event hashes, and evidence manifests use that same
+encoding. Ed25519 signature values are unpadded base64url encodings of the
+64-byte signature (86 characters).
 
 The reference canonicalization profile recursively sorts object keys, rejects
 undefined values, non-finite numbers, prototype-sensitive keys, accessors,
