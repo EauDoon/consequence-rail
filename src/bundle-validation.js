@@ -152,6 +152,13 @@ const EVENT_FIELDS = new Set([
 const SIGNATURE_FIELDS = new Set(["algorithm", "key_id", "value"]);
 const TRUST_HINT_FIELDS = new Set(["rail", "connector", "warning"]);
 const TRUST_KEY_FIELDS = new Set(["key_id", "public_key_pem"]);
+const RECEIPT_TECHNICAL_CLAIM =
+  "The configured postcondition was evaluated against declared evidence sources.";
+const RECEIPT_LIMITATIONS = [
+  "Signatures establish integrity and provenance, not truth or causality.",
+  "Settlement is a technical protocol status, not a legal or financial determination.",
+  "Recovery is not guaranteed.",
+];
 
 function invalid(message, details = {}) {
   throw new RailError("BUNDLE_TAMPERED", message, details);
@@ -439,6 +446,15 @@ function receipt(value) {
   stringArray(value.evidence_digests, "SettlementReceipt.evidence_digests", { digests: true });
   timestamp(value.closed_at, "SettlementReceipt.closed_at");
   stringArray(value.limitations, "SettlementReceipt.limitations");
+  if (value.technical_claim !== RECEIPT_TECHNICAL_CLAIM) {
+    invalid("SettlementReceipt technical claim is unsupported.");
+  }
+  if (
+    value.limitations.length !== RECEIPT_LIMITATIONS.length ||
+    value.limitations.some((item, index) => item !== RECEIPT_LIMITATIONS[index])
+  ) {
+    invalid("SettlementReceipt limitations are unsupported.");
+  }
   signature(value.signature, "SettlementReceipt.signature");
 }
 
