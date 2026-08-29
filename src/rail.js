@@ -131,6 +131,11 @@ const REMEDY_EVIDENCE_FAULTS = new Set([
   "post-remedy-stale-evidence",
   "post-remedy-false-evidence",
 ]);
+const EXECUTION_RESULTS = new Set(["executed"]);
+const EXECUTION_STATUSES = new Set(["executed", "no_effect", "unknown"]);
+const REMEDY_RESULTS = new Set(["remediated", "failed", "no_effect", "no_change"]);
+const REMEDY_STATUSES = new Set([...REMEDY_RESULTS, "unknown"]);
+const CONNECTOR_RESULT_FIELDS = new Set(["status", "idempotency_key"]);
 
 function assert(condition, code, message, details = {}) {
   if (!condition) {
@@ -192,6 +197,29 @@ function assertTimestamp(value, label, code = "SCHEMA_INVALID") {
     `${label} must be an ISO date-time string.`,
   );
   return milliseconds;
+}
+
+function assertConnectorResult(result, idempotencyKey, allowedStatuses, label, code) {
+  let clone;
+  try {
+    clone = deepClone(result);
+  } catch {
+    throw new RailError(code, `${label} must be canonical JSON.`);
+  }
+  assertPlainObject(clone, label, code);
+  const owned = deepFreeze(Object.assign(Object.create(null), clone));
+  assertRequiredFields(owned, CONNECTOR_RESULT_FIELDS, label, code);
+  assert(
+    owned.idempotency_key === idempotencyKey,
+    code,
+    `${label} is not bound to the requested idempotency key.`,
+  );
+  assert(
+    allowedStatuses.has(owned.status),
+    code,
+    `${label} has an unsupported status.`,
+  );
+  return owned;
 }
 
 export class ConsequenceRail {
@@ -546,10 +574,16 @@ export class ConsequenceRail {
     });
 
     try {
-      record.execution = await this.connector.execute(
-        record.proposal,
+      record.execution = assertConnectorResult(
+        await this.connector.execute(
+          record.proposal,
+          record.proposal.idempotency_key,
+          fault,
+        ),
         record.proposal.idempotency_key,
-        fault,
+        EXECUTION_RESULTS,
+        "Connector execution result",
+        "CONNECTOR_RESULT_INVALID",
       );
       this.transition(record, "EXECUTED", "CONNECTOR_EXECUTED", {
         external_reference_digest: digest(record.execution.external_id ?? record.execution.idempotency_key),
@@ -571,7 +605,13 @@ export class ConsequenceRail {
   async reconcile(actionId) {
     const record = this.get(actionId);
     this.assertState(record, "UNKNOWN");
-    const status = await this.connector.status(record.proposal.idempotency_key);
+    const status = assertConnectorResult(
+      await this.connector.status(record.proposal.idempotency_key),
+      record.proposal.idempotency_key,
+      EXECUTION_STATUSES,
+      "Connector execution status",
+      "RECONCILIATION_INVALID",
+    );
     record.execution = status;
 
     if (status.status === "executed") {
@@ -717,12 +757,18 @@ export class ConsequenceRail {
       reservation_digest: record.reservation_digest,
     });
     try {
-      record.remedy_result = await Reflect.apply(remediate, this.connector, [
-        record.proposal,
-        record.reservation,
+      record.remedy_result = assertConnectorResult(
+        await Reflect.apply(remediate, this.connector, [
+          record.proposal,
+          record.reservation,
+          record.remedy_idempotency_key,
+          fault,
+        ]),
         record.remedy_idempotency_key,
-        fault,
-      ]);
+        REMEDY_RESULTS,
+        "Connector remedy result",
+        "CONNECTOR_RESULT_INVALID",
+      );
     } catch {
       record.remedy_result = {
         status: "unknown",
@@ -764,7 +810,13 @@ export class ConsequenceRail {
     );
     const record = this.get(actionId);
     this.assertState(record, "REMEDY_UNKNOWN");
-    const status = await this.connector.remedyStatus(record.remedy_idempotency_key);
+    const status = assertConnectorResult(
+      await this.connector.remedyStatus(record.remedy_idempotency_key),
+      record.remedy_idempotency_key,
+      REMEDY_STATUSES,
+      "Connector remedy status",
+      "RECONCILIATION_INVALID",
+    );
     record.remedy_result = status;
 
     if (status.status === "remediated") {
