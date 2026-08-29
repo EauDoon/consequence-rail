@@ -267,6 +267,24 @@ test("lost response before commit confirms no effect without retry", async () =>
   assert.equal(result.runtime.connector.recourseStatus(token).status, "released");
 });
 
+test("untyped execution errors reconcile without releasing recourse or re-executing", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  const execute = runtime.connector.execute.bind(runtime.connector);
+  const failure = Proxy.revocable({}, {});
+  failure.revoke();
+  runtime.connector.execute = async (...args) => {
+    await execute(...args);
+    throw failure.proxy;
+  };
+
+  assert.equal((await runtime.rail.execute(actionId)).state, "UNKNOWN");
+  const token = runtime.rail.get(actionId).reservation.connector_commitment.reservation_token;
+  assert.equal(runtime.connector.recourseStatus(token).status, "active");
+  assert.equal((await runtime.rail.reconcile(actionId)).state, "EXECUTED");
+  assert.equal(runtime.connector.executeCalls, 1);
+});
+
 test("stale evidence closes as disputed", async () => {
   const result = await runRefundDemo({ fault: "stale-evidence" });
   assert.equal(result.summary.outcome, "disputed");
@@ -340,6 +358,25 @@ test("lost remedy response before commit closes disputed without retry", async (
   assert.equal(result.summary.remedy_calls, 1);
   assert.equal(result.summary.remedy_status_calls, 1);
   assert.equal(result.summary.active_refunds, 2);
+});
+
+test("untyped remedy errors reconcile without repeating remediation", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  const remediate = runtime.connector.remediate.bind(runtime.connector);
+  const failure = Proxy.revocable({}, {});
+  failure.revoke();
+  runtime.connector.remediate = async (...args) => {
+    await remediate(...args);
+    throw failure.proxy;
+  };
+
+  assert.equal((await runtime.rail.remediate(actionId)).state, "REMEDY_UNKNOWN");
+  const reconciled = await runtime.rail.reconcileRemedy(actionId);
+  assert.equal(reconciled.outcome, "compensated");
+  assert.equal(runtime.connector.remedyCalls, 1);
 });
 
 test("stale post-remedy evidence closes disputed", async () => {
