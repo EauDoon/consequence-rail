@@ -57,6 +57,29 @@ test("canonicalization rejects prototype-sensitive fields without collisions", (
   );
 });
 
+test("canonicalization rejects proxies without invoking their traps", () => {
+  for (const target of [{ safe: true }, [true]]) {
+    let trapCalls = 0;
+    const proxy = new Proxy(target, {
+      getPrototypeOf() {
+        trapCalls += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys() {
+        trapCalls += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    for (const operation of [canonicalJson, deepClone]) {
+      assert.throws(
+        () => operation(proxy),
+        (error) => error.code === "CANONICALIZATION_FAILED",
+      );
+    }
+    assert.equal(trapCalls, 0);
+  }
+});
+
 test("nested proposal fields and prototype postcondition paths fail closed", () => {
   for (const mutate of [
     (proposal) => { proposal.subject.unreviewed = true; },

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types } from "node:util";
 import { RailError } from "./errors.js";
 
 const RESERVED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
@@ -8,6 +9,9 @@ function canonicalizationError(message, details = {}) {
 }
 
 function objectEntries(value) {
+  if (types.isProxy(value)) {
+    canonicalizationError("Proxy objects are not supported.");
+  }
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {
     canonicalizationError("Only plain JSON objects are supported.");
@@ -32,6 +36,9 @@ function objectEntries(value) {
 }
 
 function arrayValues(value) {
+  if (types.isProxy(value)) {
+    canonicalizationError("Proxy arrays are not supported.");
+  }
   const ownKeys = Reflect.ownKeys(value);
   const expectedKeys = new Set([
     ...Array.from({ length: value.length }, (_, index) => String(index)),
