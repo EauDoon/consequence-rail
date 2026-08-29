@@ -80,6 +80,19 @@ test("canonicalization rejects proxies without invoking their traps", () => {
   }
 });
 
+test("signature verification rejects non-canonical base64url encodings", () => {
+  const signer = createDemoSigner();
+  const artifact = signArtifact({ safe: true }, signer);
+  const canonical = artifact.signature.value;
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  artifact.signature.value = `${canonical.slice(0, -1)}${alphabet[alphabet.indexOf(canonical.at(-1)) + 1]}`;
+  assert.deepEqual(Buffer.from(artifact.signature.value, "base64url"), Buffer.from(canonical, "base64url"));
+  assert.throws(
+    () => verifyArtifact(artifact, new Map([[signer.kid, signer.publicKey]])),
+    (error) => error.code === "SIGNATURE_INVALID",
+  );
+});
+
 test("nested proposal fields and prototype postcondition paths fail closed", () => {
   for (const mutate of [
     (proposal) => { proposal.subject.unreviewed = true; },
