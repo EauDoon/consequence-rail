@@ -31,6 +31,7 @@ Requirements: Node.js 20 or newer. The project has no third-party runtime
 dependencies.
 
 ```text
+node ./cmd/crctl.js --help
 node ./cmd/crctl.js demo refund --fault duplicate
 ```
 
@@ -197,6 +198,7 @@ flowchart LR
 Start the local sidecar:
 
 ```text
+node ./cmd/rail.js --help
 node ./cmd/rail.js
 ```
 

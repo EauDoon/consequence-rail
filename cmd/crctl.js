@@ -2,9 +2,13 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { runIrreversibleDemo, runRefundDemo } from "../src/demo.js";
+import { DEMO_FAULTS, runIrreversibleDemo, runRefundDemo } from "../src/demo.js";
+import { ASSURANCE_MODES } from "../src/rail.js";
 import { RailError } from "../src/errors.js";
-import { runRecoveryPreflightDemo } from "../src/recovery-demo.js";
+import {
+  RECOVERY_DEMO_FAULTS,
+  runRecoveryPreflightDemo,
+} from "../src/recovery-demo.js";
 import { verifyRecoveryPreflight } from "../src/recovery-preflight.js";
 import {
   demoConnectorTrustedKeys,
@@ -13,13 +17,64 @@ import {
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
-function option(args, name, fallback = null) {
-  const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : fallback;
+const VALUE_FLAGS = {
+  "--fault": "fault",
+  "--assurance": "assurance",
+  "--out": "out",
+};
+const BOOL_FLAGS = {
+  "--json": "json",
+};
+
+function usage(message) {
+  return new RailError("USAGE_INVALID", `${message} Run with --help.`);
 }
 
-function has(args, name) {
-  return args.includes(name);
+function parseCliArgs(args) {
+  const positional = [];
+  const options = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--") {
+      positional.push(...args.slice(index + 1));
+      break;
+    }
+    if (!arg.startsWith("-")) {
+      positional.push(arg);
+      continue;
+    }
+    const boolName = BOOL_FLAGS[arg];
+    if (boolName) {
+      if (Object.hasOwn(options, boolName)) {
+        throw usage(`Flag ${arg} was supplied more than once.`);
+      }
+      options[boolName] = true;
+      continue;
+    }
+    const valueName = VALUE_FLAGS[arg];
+    if (valueName) {
+      const value = args[index + 1];
+      if (value === undefined || value.startsWith("-")) {
+        throw usage(`${arg} requires a value.`);
+      }
+      if (Object.hasOwn(options, valueName)) {
+        throw usage(`Flag ${arg} was supplied more than once.`);
+      }
+      options[valueName] = value;
+      index += 1;
+      continue;
+    }
+    throw usage(`Unknown flag ${arg}.`);
+  }
+  return { positional, options };
+}
+
+function assertFlags(options, allowed) {
+  for (const name of Object.keys(options)) {
+    if (!allowed.has(name)) {
+      throw usage(`Flag --${name} is not valid for this command.`);
+    }
+  }
 }
 
 function printHelp() {
@@ -32,6 +87,23 @@ Usage:
   crctl bundle verify <file> [--json]
   crctl bundle timeline <file> [--json]
   crctl recovery-preflight verify <file> [--json]
+  crctl --help
+
+Refund demo faults:
+  ${DEMO_FAULTS.join(", ")}
+
+Recovery-preflight demo faults:
+  ${RECOVERY_DEMO_FAULTS.join(", ")}
+
+Assurance modes:
+  ${ASSURANCE_MODES.join(", ")} (refund demo default: enforced)
+
+Flags:
+  --fault <name>        Synthetic fault to inject
+  --assurance <mode>    Refund demo assurance mode
+  --json                Print machine-readable JSON
+  --out <file>          Write the settlement or drill bundle (must not exist)
+  -h, --help            Show this help
 
 Examples:
   node ./cmd/crctl.js demo refund
@@ -91,95 +163,162 @@ function printRecoveryPreflight(summary, asJson) {
   );
 }
 
+function readJsonFile(path) {
+  let text;
+  try {
+    text = readFileSync(resolve(path), "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw usage(`File not found: ${path}.`);
+    }
+    throw usage(`Could not read file: ${path}.`);
+  }
+  if (text.trim() === "") {
+    throw usage(`File is empty: ${path}.`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw usage(`File is not valid JSON: ${path}.`);
+  }
+}
+
+function writeExclusiveJson(path, value) {
+  try {
+    writeFileSync(resolve(path), `${JSON.stringify(value, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+    });
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      throw usage(`Refusing to overwrite existing file: ${path}.`);
+    }
+    throw usage(`Could not write file: ${path}.`);
+  }
+}
+
+function requireNoExtra(positional, count, command) {
+  if (positional.length > count) {
+    throw usage(`Unexpected extra argument for ${command}.`);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length === 0 || has(args, "--help") || has(args, "-h")) {
+  if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     printHelp();
     return;
   }
 
-  if (args[0] === "demo" && args[1] === "refund") {
-    const fault = option(args, "--fault", "none");
-    const assuranceMode = option(args, "--assurance", "enforced");
-    const result = await runRefundDemo({ fault, assuranceMode });
-    const outputPath = option(args, "--out");
-    if (outputPath) {
-      if (!result.bundle) {
-        throw new RailError("RECEIPT_NOT_AVAILABLE", "This scenario did not produce a settlement bundle.");
+  const { positional, options } = parseCliArgs(args);
+  const [command, subcommand, target] = positional;
+
+  if (command === "demo") {
+    if (!subcommand) {
+      throw usage("Missing demo scenario. Expected refund, irreversible, or recovery-preflight.");
+    }
+    if (subcommand === "refund") {
+      requireNoExtra(positional, 2, "demo refund");
+      assertFlags(options, new Set(["fault", "assurance", "json", "out"]));
+      const fault = options.fault ?? "none";
+      const assuranceMode = options.assurance ?? "enforced";
+      if (!DEMO_FAULTS.includes(fault)) {
+        throw usage(
+          `Unknown refund demo fault '${fault}'. Expected one of: ${DEMO_FAULTS.join(", ")}.`,
+        );
       }
-      writeFileSync(resolve(outputPath), `${JSON.stringify(result.bundle, null, 2)}\n`, {
-        encoding: "utf8",
-        flag: "wx",
+      if (!ASSURANCE_MODES.includes(assuranceMode)) {
+        throw usage(
+          `Unknown assurance mode '${assuranceMode}'. Expected one of: ${ASSURANCE_MODES.join(", ")}.`,
+        );
+      }
+      const result = await runRefundDemo({ fault, assuranceMode });
+      if (options.out) {
+        if (!result.bundle) {
+          throw new RailError("RECEIPT_NOT_AVAILABLE", "This scenario did not produce a settlement bundle.");
+        }
+        writeExclusiveJson(options.out, result.bundle);
+      }
+      printRefund(result.summary, Boolean(options.json));
+      return;
+    }
+    if (subcommand === "irreversible") {
+      requireNoExtra(positional, 2, "demo irreversible");
+      assertFlags(options, new Set(["json"]));
+      const result = runIrreversibleDemo();
+      if (options.json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      } else {
+        process.stdout.write(
+          [
+            `scenario: ${result.scenario}`,
+            `admitted: ${result.admitted}`,
+            `decision: ${result.code}`,
+            `reason: ${result.reason}`,
+          ].join("\n") + "\n",
+        );
+      }
+      return;
+    }
+    if (subcommand === "recovery-preflight") {
+      requireNoExtra(positional, 2, "demo recovery-preflight");
+      assertFlags(options, new Set(["fault", "json", "out"]));
+      const fault = options.fault ?? "none";
+      if (!RECOVERY_DEMO_FAULTS.includes(fault)) {
+        throw usage(
+          `Unknown recovery-preflight demo fault '${fault}'. Expected one of: ${RECOVERY_DEMO_FAULTS.join(", ")}.`,
+        );
+      }
+      const result = await runRecoveryPreflightDemo({ fault });
+      if (options.out) {
+        writeExclusiveJson(options.out, result.bundle);
+      }
+      printRecoveryPreflight(result.summary, Boolean(options.json));
+      return;
+    }
+    throw usage(
+      `Unknown demo scenario '${subcommand}'. Expected refund, irreversible, or recovery-preflight.`,
+    );
+  }
+
+  if (command === "bundle") {
+    if (subcommand !== "verify" && subcommand !== "timeline") {
+      throw usage("Missing or unknown bundle command. Expected verify or timeline, plus a file.");
+    }
+    if (!target) {
+      throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
+    }
+    requireNoExtra(positional, 3, `bundle ${subcommand}`);
+    assertFlags(options, new Set(["json"]));
+    const bundle = readJsonFile(target);
+    if (subcommand === "verify") {
+      const result = verifyBundle(bundle, {
+        trustedKeys: demoTrustedKeys(),
+        trustedConnectorKeys: demoConnectorTrustedKeys(),
+        requireSemantics: true,
       });
+      if (options.json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      } else {
+        process.stdout.write(
+          [
+            "bundle_verification: pass",
+            `action: ${result.action_id}`,
+            `outcome: ${result.outcome}`,
+            `assurance: ${result.assurance_mode}`,
+            `events: ${result.event_count}`,
+            `semantics: ${result.semantics.status}`,
+            `trusted_key: ${result.trusted_key_id}`,
+          ].join("\n") + "\n",
+        );
+      }
+      return;
     }
-    printRefund(result.summary, has(args, "--json"));
-    return;
-  }
-
-  if (args[0] === "demo" && args[1] === "irreversible") {
-    const result = runIrreversibleDemo();
-    if (has(args, "--json")) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    } else {
-      process.stdout.write(
-        [
-          `scenario: ${result.scenario}`,
-          `admitted: ${result.admitted}`,
-          `decision: ${result.code}`,
-          `reason: ${result.reason}`,
-        ].join("\n") + "\n",
-      );
-    }
-    return;
-  }
-
-  if (args[0] === "demo" && args[1] === "recovery-preflight") {
-    const result = await runRecoveryPreflightDemo({
-      fault: option(args, "--fault", "none"),
-    });
-    const outputPath = option(args, "--out");
-    if (outputPath) {
-      writeFileSync(resolve(outputPath), `${JSON.stringify(result.bundle, null, 2)}\n`, {
-        encoding: "utf8",
-        flag: "wx",
-      });
-    }
-    printRecoveryPreflight(result.summary, has(args, "--json"));
-    return;
-  }
-
-  if (args[0] === "bundle" && args[1] === "verify" && args[2]) {
-    const bundle = JSON.parse(readFileSync(resolve(args[2]), "utf8"));
-    const result = verifyBundle(bundle, {
-      trustedKeys: demoTrustedKeys(),
-      trustedConnectorKeys: demoConnectorTrustedKeys(),
-      requireSemantics: true,
-    });
-    if (has(args, "--json")) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    } else {
-      process.stdout.write(
-        [
-          "bundle_verification: pass",
-          `action: ${result.action_id}`,
-          `outcome: ${result.outcome}`,
-          `assurance: ${result.assurance_mode}`,
-          `events: ${result.event_count}`,
-          `semantics: ${result.semantics.status}`,
-          `trusted_key: ${result.trusted_key_id}`,
-        ].join("\n") + "\n",
-      );
-    }
-    return;
-  }
-
-  if (args[0] === "bundle" && args[1] === "timeline" && args[2]) {
-    const bundle = JSON.parse(readFileSync(resolve(args[2]), "utf8"));
     const result = verifyBundleTimeline(bundle, {
       trustedKeys: demoTrustedKeys(),
       trustedConnectorKeys: demoConnectorTrustedKeys(),
     });
-    if (has(args, "--json")) {
+    if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
       process.stdout.write(
@@ -200,16 +339,20 @@ async function main() {
     return;
   }
 
-  if (
-    args[0] === "recovery-preflight" &&
-    args[1] === "verify" &&
-    args[2]
-  ) {
-    const bundle = JSON.parse(readFileSync(resolve(args[2]), "utf8"));
+  if (command === "recovery-preflight") {
+    if (subcommand !== "verify") {
+      throw usage("Missing or unknown recovery-preflight command. Expected verify, plus a file.");
+    }
+    if (!target) {
+      throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
+    }
+    requireNoExtra(positional, 3, "recovery-preflight verify");
+    assertFlags(options, new Set(["json"]));
+    const bundle = readJsonFile(target);
     const result = verifyRecoveryPreflight(bundle, {
       trustedKeys: demoRecoveryTrustedKeys(),
     });
-    if (has(args, "--json")) {
+    if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
       process.stdout.write(
@@ -225,7 +368,11 @@ async function main() {
     return;
   }
 
-  throw new RailError("USAGE_INVALID", "Unknown command. Run with --help.");
+  throw usage(
+    command
+      ? `Unknown command '${command}'.`
+      : "Missing command.",
+  );
 }
 
 main().catch((error) => {
