@@ -285,7 +285,25 @@ export class ConsequenceRail {
     this.requireRecoveryPreflight = requireRecoveryPreflight;
     this.measureRecoveryImplementation = measureRecoveryImplementation;
     this.maxActions = maxActions;
-    this.eventStore = eventStore ?? new MemoryEventStore(signer, clock);
+    const configuredEventStore = eventStore ?? new MemoryEventStore(signer, clock);
+    // Contract: append returns after exactly one event is visible, or throws
+    // without changing the event list. Durable stores must enforce this atomically.
+    assert(
+      configuredEventStore?.failureAtomicAppend === true &&
+        typeof configuredEventStore.append === "function" &&
+        typeof configuredEventStore.list === "function",
+      "CONFIG_INVALID",
+      "The event store must provide failure-atomic append and list operations.",
+    );
+    const eventStoreFacade = Object.freeze({
+      failureAtomicAppend: true,
+      append: configuredEventStore.append.bind(configuredEventStore),
+      list: configuredEventStore.list.bind(configuredEventStore),
+    });
+    Object.defineProperty(this, "eventStore", {
+      value: eventStoreFacade,
+      enumerable: true,
+    });
     this.actions = new Map();
     this.trustedKeys = new Map([[signer.kid, signer.publicKey]]);
   }
@@ -348,7 +366,7 @@ export class ConsequenceRail {
       "require_recovery_preflight must be boolean when supplied.",
     );
 
-    record.authorization = deepFreeze(deepClone({
+    const authorization = deepFreeze(deepClone({
       allow: decision.allow,
       policy_id: decision.policy_id,
       policy_digest: decision.policy_digest,
@@ -362,6 +380,7 @@ export class ConsequenceRail {
       policy_id: decision.policy_id,
       policy_digest: decision.policy_digest,
     });
+    record.authorization = authorization;
     return this.inspect(actionId);
   }
 
@@ -1142,13 +1161,14 @@ export class ConsequenceRail {
       requested_state: nextState,
     });
     const previousState = record.state;
-    record.state = nextState;
-    this.eventStore.append(record.action_id, "STATE_TRANSITION", "rail", {
+    const eventPayload = {
       from_state: previousState,
       to_state: nextState,
       reason_code: reasonCode,
       details_digest: digest(details ?? {}),
-    });
+    };
+    this.eventStore.append(record.action_id, "STATE_TRANSITION", "rail", eventPayload);
+    record.state = nextState;
   }
 
   finalizeRecourse(record, { release, reason }) {

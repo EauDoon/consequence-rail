@@ -4,6 +4,10 @@ import { signArtifact, verifyArtifact } from "./signing.js";
 
 export class MemoryEventStore {
   constructor(signer, clock) {
+    Object.defineProperty(this, "failureAtomicAppend", {
+      value: true,
+      enumerable: true,
+    });
     this.signer = signer;
     this.clock = clock;
     this.byAction = new Map();
@@ -27,9 +31,10 @@ export class MemoryEventStore {
       ...signed,
       event_hash: digest(signed),
     });
-    events.push(event);
-    this.byAction.set(actionId, events);
-    return deepClone(event);
+    const returnedEvent = deepClone(event);
+    const nextEvents = [...events, event];
+    this.byAction.set(actionId, nextEvents);
+    return returnedEvent;
   }
 
   list(actionId) {
