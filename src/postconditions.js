@@ -1,11 +1,21 @@
 import { RailError } from "./errors.js";
 
+function isFiniteBinary64(value) {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= -Number.MAX_VALUE &&
+    value <= Number.MAX_VALUE;
+}
+
 const OPERATORS = {
   eq: (actual, expected) => actual === expected,
-  gte: (actual, expected) => actual >= expected,
-  lte: (actual, expected) => actual <= expected,
+  gte: (actual, expected) =>
+    isFiniteBinary64(actual) && actual >= expected,
+  lte: (actual, expected) =>
+    isFiniteBinary64(actual) && actual <= expected,
 };
 
+const ORDERED_OPERATORS = new Set(["gte", "lte"]);
 const RESERVED_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 const POSTCONDITION_FIELDS = new Set(["op", "clauses"]);
 const CLAUSE_FIELDS = new Set(["path", "op", "value"]);
@@ -57,6 +67,15 @@ export function evaluatePostcondition(postcondition, evidence) {
     const operatorName = clause.op;
     if (typeof operatorName !== "string" || !Object.hasOwn(OPERATORS, operatorName)) {
       throw new RailError("POSTCONDITION_INVALID", "Only eq, gte, and lte operators are supported.");
+    }
+    if (
+      ORDERED_OPERATORS.has(operatorName) &&
+      !isFiniteBinary64(clause.value)
+    ) {
+      throw new RailError(
+        "POSTCONDITION_INVALID",
+        "Ordered postcondition values must be finite numbers.",
+      );
     }
     const operator = OPERATORS[operatorName];
     const actual = readPath(evidence?.facts, clause.path);

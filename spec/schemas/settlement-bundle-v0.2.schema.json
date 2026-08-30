@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:settlement-bundle:v0.2",
+  "title": "SettlementBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile",
+    "action",
+    "recourse_reservation",
+    "action_permit",
+    "evidence_manifest",
+    "outcome_evidence",
+    "settlement_receipt",
+    "events",
+    "trust_hint"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/settlement-bundle/v0.2"
+    },
+    "profile": {
+      "enum": [
+        "receipt",
+        "audit"
+      ]
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "action_digest",
+        "action_type",
+        "resource_id_digest"
+      ],
+      "properties": {
+        "action_id": { "type": "string", "minLength": 1 },
+        "action_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "action_type": { "type": "string", "minLength": 1 },
+        "resource_id_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "proposal": { "$ref": "action-proposal-v0.2.schema.json" }
+      }
+    },
+    "recourse_reservation": {
+      "$ref": "recourse-reservation.schema.json"
+    },
+    "action_permit": {
+      "$ref": "action-permit.schema.json"
+    },
+    "evidence_manifest": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{43}$"
+      }
+    },
+    "outcome_evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "outcome-evidence.schema.json"
+      }
+    },
+    "settlement_receipt": {
+      "$ref": "settlement-receipt-v0.2.schema.json"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "event.schema.json"
+      }
+    },
+    "trust_hint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rail", "connector", "warning"],
+      "properties": {
+        "rail": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["key_id", "public_key_pem"],
+          "properties": {
+            "key_id": { "type": "string", "minLength": 1 },
+            "public_key_pem": { "type": "string", "minLength": 1 }
+          }
+        },
+        "connector": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["key_id", "public_key_pem"],
+          "properties": {
+            "key_id": { "type": "string", "minLength": 1 },
+            "public_key_pem": { "type": ["string", "null"] }
+          }
+        },
+        "warning": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

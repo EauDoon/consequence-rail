@@ -6,6 +6,17 @@ import { evaluatePostcondition } from "./postconditions.js";
 import { ALLOWED_TRANSITIONS } from "./rail.js";
 import { verifyArtifact } from "./signing.js";
 
+const SETTLEMENT_VERSION_BINDINGS = new Map([
+  ["consequence-rail/settlement-bundle/v0.1", {
+    proposal: "consequence-rail/action-proposal/v0.1",
+    receipt: "consequence-rail/settlement-receipt/v0.1",
+  }],
+  ["consequence-rail/settlement-bundle/v0.2", {
+    proposal: "consequence-rail/action-proposal/v0.2",
+    receipt: "consequence-rail/settlement-receipt/v0.2",
+  }],
+]);
+
 function integrityAssert(condition, message, details = {}) {
   if (!condition) {
     throw new RailError("BUNDLE_TAMPERED", message, details);
@@ -53,8 +64,9 @@ export function verifyBundle(
   } = {},
 ) {
   validateSettlementBundle(bundle);
+  const versionBinding = SETTLEMENT_VERSION_BINDINGS.get(bundle?.schema_version);
   integrityAssert(
-    bundle?.schema_version === "consequence-rail/settlement-bundle/v0.1",
+    versionBinding,
     "Unsupported settlement bundle version.",
   );
   integrityAssert(
@@ -76,6 +88,17 @@ export function verifyBundle(
   const permit = bundle.action_permit;
   const receipt = bundle.settlement_receipt;
   const evidenceManifest = bundle.evidence_manifest ?? [];
+
+  integrityAssert(
+    receipt.schema_version === versionBinding.receipt,
+    "Receipt schema version does not match the bundle.",
+  );
+  if (versionBinding.receipt === "consequence-rail/settlement-receipt/v0.2") {
+    integrityAssert(
+      receipt.proposal_schema_version === versionBinding.proposal,
+      "Signed receipt proposal version does not match the bundle.",
+    );
+  }
 
   integrityAssert(permit.action_id === action.action_id, "Permit action id does not match the bundle.");
   integrityAssert(
@@ -135,6 +158,10 @@ export function verifyBundle(
   );
 
   if (action.proposal) {
+    integrityAssert(
+      action.proposal.schema_version === versionBinding.proposal,
+      "Included proposal schema version does not match the bundle.",
+    );
     integrityAssert(
       digest(action.proposal) === action.action_digest,
       "Included proposal does not match the action digest.",

@@ -55,7 +55,10 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "../spec/schemas/action-proposal.schema.json"
+                "oneOf": [
+                  { "$ref": "../spec/schemas/action-proposal.schema.json" },
+                  { "$ref": "../spec/schemas/action-proposal-v0.2.schema.json" }
+                ]
               }
             }
           }
@@ -376,7 +379,10 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "../spec/schemas/settlement-bundle.schema.json"
+                  "oneOf": [
+                    { "$ref": "../spec/schemas/settlement-bundle.schema.json" },
+                    { "$ref": "../spec/schemas/settlement-bundle-v0.2.schema.json" }
+                  ]
                 }
               }
             }
@@ -396,7 +402,10 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "../spec/schemas/settlement-bundle.schema.json"
+                "oneOf": [
+                  { "$ref": "../spec/schemas/settlement-bundle.schema.json" },
+                  { "$ref": "../spec/schemas/settlement-bundle-v0.2.schema.json" }
+                ]
               }
             }
           }

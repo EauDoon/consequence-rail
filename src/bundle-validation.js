@@ -4,6 +4,20 @@ import { RailError } from "./errors.js";
 const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
 const ED25519_BASE64URL = /^[A-Za-z0-9_-]{86}$/;
 const MAX_DURATION_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
+const PROPOSAL_VERSIONS = new Set([
+  "consequence-rail/action-proposal/v0.1",
+  "consequence-rail/action-proposal/v0.2",
+]);
+const BUNDLE_VERSION_BINDINGS = new Map([
+  ["consequence-rail/settlement-bundle/v0.1", {
+    proposal: "consequence-rail/action-proposal/v0.1",
+    receipt: "consequence-rail/settlement-receipt/v0.1",
+  }],
+  ["consequence-rail/settlement-bundle/v0.2", {
+    proposal: "consequence-rail/action-proposal/v0.2",
+    receipt: "consequence-rail/settlement-receipt/v0.2",
+  }],
+]);
 
 const BUNDLE_FIELDS = new Set([
   "schema_version",
@@ -138,6 +152,10 @@ const RECEIPT_FIELDS = new Set([
   "limitations",
   "signature",
 ]);
+const RECEIPT_V2_FIELDS = new Set([
+  ...RECEIPT_FIELDS,
+  "proposal_schema_version",
+]);
 const EVENT_FIELDS = new Set([
   "schema_version",
   "action_id",
@@ -235,6 +253,13 @@ function signature(value, label) {
   }
 }
 
+function finiteBinary64(value) {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= -Number.MAX_VALUE &&
+    value <= Number.MAX_VALUE;
+}
+
 function postcondition(value) {
   exactObject(value, POSTCONDITION_FIELDS, POSTCONDITION_FIELDS, "ActionProposal.postcondition");
   if (value.op !== "all" || !Array.isArray(value.clauses) || value.clauses.length === 0) {
@@ -247,13 +272,22 @@ function postcondition(value) {
     if (!new Set(["eq", "gte", "lte"]).has(clause.op)) {
       invalid(`${label}.op is unsupported.`);
     }
+    if (
+      (clause.op === "gte" || clause.op === "lte") &&
+      !finiteBinary64(clause.value)
+    ) {
+      invalid(`${label}.value must be a finite number for ordered comparison.`);
+    }
   });
 }
 
-function proposal(value) {
+function proposal(value, expectedVersion) {
   exactObject(value, PROPOSAL_FIELDS, PROPOSAL_FIELDS, "ActionProposal");
-  if (value.schema_version !== "consequence-rail/action-proposal/v0.1") {
+  if (!PROPOSAL_VERSIONS.has(value.schema_version)) {
     invalid("ActionProposal schema version is unsupported.");
+  }
+  if (expectedVersion && value.schema_version !== expectedVersion) {
+    invalid("ActionProposal schema version does not match the settlement bundle.");
   }
   if (!new Set(["demo.refund.issue/v1", "demo.email.send/v1"]).has(value.action_type)) {
     invalid("ActionProposal action type is unsupported.");
@@ -308,13 +342,13 @@ function proposal(value) {
   );
 }
 
-function action(value) {
+function action(value, expectedProposalVersion) {
   exactObject(value, ACTION_FIELDS, ACTION_REQUIRED_FIELDS, "SettlementBundle.action");
   string(value.action_id, "SettlementBundle.action.action_id", { nonempty: true });
   digestString(value.action_digest, "SettlementBundle.action.action_digest");
   string(value.action_type, "SettlementBundle.action.action_type", { nonempty: true });
   digestString(value.resource_id_digest, "SettlementBundle.action.resource_id_digest");
-  if (Object.hasOwn(value, "proposal")) proposal(value.proposal);
+  if (Object.hasOwn(value, "proposal")) proposal(value.proposal, expectedProposalVersion);
 }
 
 function commitment(value) {
@@ -422,10 +456,19 @@ function evidence(value, index) {
   signature(value.signature, `${label}.signature`);
 }
 
-function receipt(value) {
-  exactObject(value, RECEIPT_FIELDS, RECEIPT_FIELDS, "SettlementReceipt");
-  if (value.schema_version !== "consequence-rail/settlement-receipt/v0.1") {
-    invalid("SettlementReceipt schema version is unsupported.");
+function receipt(value, versionBinding) {
+  const fields = versionBinding.receipt === "consequence-rail/settlement-receipt/v0.2"
+    ? RECEIPT_V2_FIELDS
+    : RECEIPT_FIELDS;
+  exactObject(value, fields, fields, "SettlementReceipt");
+  if (value.schema_version !== versionBinding.receipt) {
+    invalid("SettlementReceipt schema version does not match the settlement bundle.");
+  }
+  if (
+    versionBinding.receipt === "consequence-rail/settlement-receipt/v0.2" &&
+    value.proposal_schema_version !== versionBinding.proposal
+  ) {
+    invalid("SettlementReceipt proposal schema version does not match the settlement bundle.");
   }
   for (const field of ["receipt_id", "action_id", "technical_claim"]) {
     string(value[field], `SettlementReceipt.${field}`, { nonempty: true });
@@ -517,13 +560,14 @@ export function validateSettlementBundle(bundle) {
     });
   }
   exactObject(bundle, BUNDLE_FIELDS, BUNDLE_FIELDS, "SettlementBundle");
-  if (bundle.schema_version !== "consequence-rail/settlement-bundle/v0.1") {
+  const versionBinding = BUNDLE_VERSION_BINDINGS.get(bundle.schema_version);
+  if (!versionBinding) {
     invalid("SettlementBundle schema version is unsupported.");
   }
   if (!new Set(["receipt", "audit"]).has(bundle.profile)) {
     invalid("SettlementBundle profile is unsupported.");
   }
-  action(bundle.action);
+  action(bundle.action, versionBinding.proposal);
   reservation(bundle.recourse_reservation);
   permit(bundle.action_permit);
   stringArray(bundle.evidence_manifest, "SettlementBundle.evidence_manifest", { digests: true });
@@ -531,7 +575,7 @@ export function validateSettlementBundle(bundle) {
     invalid("SettlementBundle.outcome_evidence must be an array.");
   }
   bundle.outcome_evidence.forEach(evidence);
-  receipt(bundle.settlement_receipt);
+  receipt(bundle.settlement_receipt, versionBinding);
   if (!Array.isArray(bundle.events)) invalid("SettlementBundle.events must be an array.");
   bundle.events.forEach(event);
   trustHint(bundle.trust_hint);

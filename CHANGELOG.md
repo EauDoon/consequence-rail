@@ -2,6 +2,14 @@
 
 ## Unreleased corrective candidate
 
+- Added opt-in ActionProposal, SettlementReceipt, and SettlementBundle v0.2 schemas that bound
+  ordered `gte` and `lte` thresholds to finite JavaScript binary64 numbers.
+  The v0.2 receipt signs its proposal schema version, and verification rejects
+  bundle, receipt, or audit-proposal version substitution.
+  Published v0.1 schema bytes and default v0.1 artifact hashes remain
+  unchanged. Existing v0.1 `eq` and finite numeric ordered clauses remain
+  compatible; non-numeric ordered thresholds or evidence now fail closed
+  instead of using JavaScript coercion.
 - The loopback sidecar now uses the host clock by default so current-time proposals are admissible, and accepts `--clock demo|system` plus `CONSEQUENCE_RAIL_PORT` / `CONSEQUENCE_RAIL_CLOCK` when flags are omitted.
 - ActionProposal and RecourseReservation parsers now reject unsafe, non-integral, and overflow-scale duration values so evidence freshness and remedy-window arithmetic stay exact.
 - HTTP sidecar failures now include a `request_id` (and the action id when the route named one). Unexpected exceptions are logged to stderr and returned as `INTERNAL_ERROR` instead of being swallowed as `REQUEST_INVALID`.

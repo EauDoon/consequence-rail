@@ -8,6 +8,10 @@ conforming implementation must accept it, produce the same action digest for
 any semantically identical object-key ordering, and reject any unknown
 top-level field.
 
+`refund-action-v0.2.json` is the ordered-comparison example. It uses both
+numeric `gte` and `lte` clauses under the bounded v0.2 proposal schema while
+the original v0.1 fixture remains unchanged.
+
 `refund-recovery-contract.json` is the canonical Recovery Preflight contract.
 It pins a synthetic duplicate-refund fault, the actual mock connector remedy,
 an exact declared-state oracle, the signed reservation and connector

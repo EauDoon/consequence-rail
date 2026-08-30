@@ -1,0 +1,40 @@
+{
+  "schema_version": "consequence-rail/action-proposal/v0.2",
+  "action_type": "demo.refund.issue/v1",
+  "subject": {
+    "type": "service",
+    "id": "support-agent-demo"
+  },
+  "target": {
+    "connector": "mock-refund-processor",
+    "resource_type": "order",
+    "resource_id": "ord_demo_42"
+  },
+  "parameters": {
+    "amount_minor": 12000,
+    "currency": "USD"
+  },
+  "idempotency_key": "refund:ord_demo_42:ordered:1",
+  "requested_at": "2035-01-01T00:00:00.000Z",
+  "expires_at": "2035-01-01T00:02:00.000Z",
+  "assurance_mode": "enforced",
+  "postcondition": {
+    "op": "all",
+    "clauses": [
+      {
+        "path": "active_refund_count",
+        "op": "gte",
+        "value": 1
+      },
+      {
+        "path": "net_refunded_minor",
+        "op": "lte",
+        "value": 12000
+      }
+    ]
+  },
+  "evidence_plan": {
+    "source": "mock-refund-processor",
+    "max_age_seconds": 60
+  }
+}
