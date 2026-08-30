@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { once } from "node:events";
 import { request as httpRequest } from "node:http";
+import { createConnection } from "node:net";
 import { join } from "node:path";
 import test from "node:test";
 import { canonicalJson, deepClone, digest } from "../src/canonical.js";
@@ -1463,6 +1464,37 @@ test("HTTP sidecar advertises executable and observed assurance modes", async (c
   const body = await response.json();
   assert.deepEqual(body.executable_modes, ["enforced", "cooperative"]);
   assert.ok(body.assurance_modes.includes("observed"));
+});
+
+test("HTTP sidecar rejects ambiguous Host authorities before routing", async (context) => {
+  const server = createReferenceServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const { port } = server.address();
+
+  const rawRequest = (hostLines) => new Promise((resolve, reject) => {
+    const socket = createConnection({ host: "127.0.0.1", port }, () => {
+      socket.end(
+        `GET /.well-known/consequence-rail HTTP/1.1\r\n${hostLines}\r\nConnection: close\r\n\r\n`,
+      );
+    });
+    let response = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => { response += chunk; });
+    socket.on("end", () => resolve(response));
+    socket.on("error", reject);
+  });
+
+  for (const hostLines of [
+    `Host: 127.0.0.1:${port}\r\nHost: attacker.invalid:${port}`,
+    `Host: user@127.0.0.1:${port}`,
+    `Host: 127.0.0.1:${port}/unexpected`,
+  ]) {
+    const response = await rawRequest(hostLines);
+    assert.match(response, /^HTTP\/1\.1 400 /u);
+    assert.match(response, /"code":"HOST_INVALID"/u);
+  }
 });
 
 test("HTTP sidecar completes the synthetic action lifecycle", async (context) => {

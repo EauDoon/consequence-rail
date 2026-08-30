@@ -163,7 +163,10 @@ function failureBody(error, requestId, extra = {}) {
 
 function hostUrl(request) {
   const host = request.headers.host;
-  if (typeof host !== "string" || host.length > 255) {
+  const hostHeaderCount = request.rawHeaders.filter(
+    (value, index) => index % 2 === 0 && value.toLowerCase() === "host",
+  ).length;
+  if (hostHeaderCount !== 1 || typeof host !== "string" || host.length > 255) {
     throw requestError("HOST_INVALID", "Host must identify this loopback server.");
   }
   let parsed;
@@ -173,7 +176,15 @@ function hostUrl(request) {
     throw requestError("HOST_INVALID", "Host must identify this loopback server.");
   }
   const localPort = String(request.socket.localPort);
-  if (!LOOPBACK_HOSTS.has(parsed.hostname) || parsed.port !== localPort) {
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash ||
+    !LOOPBACK_HOSTS.has(parsed.hostname) ||
+    parsed.port !== localPort
+  ) {
     throw requestError("HOST_INVALID", "Host must identify this loopback server.");
   }
   return parsed;
