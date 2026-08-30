@@ -6,6 +6,7 @@ import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import test from "node:test";
 import { canonicalJson, deepClone, digest } from "../src/canonical.js";
+import { ManualClock, SystemClock } from "../src/clock.js";
 import {
   buildRefundProposal,
   buildRefundReservation,
@@ -1256,6 +1257,35 @@ test("semantic verification rejects recourse finalized before execution", async 
       }),
     (error) => error.code === "SEMANTIC_INVALID",
   );
+});
+
+test("system clock admits current-time proposals that a frozen demo clock expires", () => {
+  const live = createDemoRuntime({ clock: new SystemClock() });
+  const currentProposal = buildRefundProposal(live.clock);
+  assert.match(live.clock.now(), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.equal(live.rail.propose(currentProposal).state, "PROPOSED");
+
+  const frozen = createDemoRuntime({ clock: new ManualClock() });
+  assert.equal(frozen.clock.now(), "2035-01-01T00:00:00.000Z");
+  assert.throws(
+    () => frozen.rail.propose(currentProposal),
+    (error) => error.code === "ACTION_EXPIRED",
+  );
+  assert.equal(frozen.rail.actions.size, 0);
+});
+
+test("HTTP sidecar default runtime admits current-time proposals", async (context) => {
+  const server = createReferenceServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const address = server.address();
+  const proposed = await postJson(
+    `http://127.0.0.1:${address.port}/v0/actions`,
+    buildRefundProposal(new SystemClock()),
+    201,
+  );
+  assert.equal(proposed.state, "PROPOSED");
 });
 
 test("HTTP sidecar advertises executable and observed assurance modes", async (context) => {

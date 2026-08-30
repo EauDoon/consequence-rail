@@ -202,9 +202,12 @@ node ./cmd/rail.js --help
 node ./cmd/rail.js
 ```
 
-Its default address is `http://127.0.0.1:8787`. Read
-[`api/openapi.json`](api/openapi.json) for the request surface. The v0.1
-sidecar stores bounded state in memory and exposes only the synthetic
+Its default address is `http://127.0.0.1:8787`. It uses the host clock so
+OpenAPI clients can send current timestamps. Pass `--clock demo` to freeze
+time at the conformance epoch `2035-01-01T00:00:00.000Z`. When flags are
+omitted, `CONSEQUENCE_RAIL_PORT` and `CONSEQUENCE_RAIL_CLOCK` supply the same
+defaults. Read [`api/openapi.json`](api/openapi.json) for the request surface.
+The v0.1 sidecar stores bounded state in memory and exposes only the synthetic
 connector. It accepts only loopback clients and same-origin loopback Host and
 Origin values, caps JSON bodies at 65,536 bytes, restricts content types and
 encodings, bounds headers, request time, concurrency, and requests per socket,

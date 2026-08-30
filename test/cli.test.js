@@ -8,11 +8,12 @@ import test from "node:test";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-function runCli(script, args, { timeout = 5_000 } = {}) {
+function runCli(script, args, { timeout = 5_000, env } = {}) {
   return spawnSync(process.execPath, [join(root, "cmd", script), ...args], {
     cwd: root,
     encoding: "utf8",
     timeout,
+    env: env === undefined ? process.env : { ...process.env, ...env },
   });
 }
 
@@ -132,6 +133,9 @@ test("rail --help prints usage and does not start the sidecar", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /Usage:/);
   assert.match(result.stdout, /--port <number>/);
+  assert.match(result.stdout, /--clock <system\|demo>/);
+  assert.match(result.stdout, /CONSEQUENCE_RAIL_PORT/);
+  assert.match(result.stdout, /CONSEQUENCE_RAIL_CLOCK/);
   assert.doesNotMatch(result.stdout, /listening/);
   assert.equal(result.stderr, "");
 });
@@ -150,4 +154,55 @@ test("rail rejects missing --port values and unknown arguments", () => {
     code: "USAGE_INVALID",
     message: "Unknown argument --help-me.",
   });
+});
+
+test("rail rejects invalid --clock values and CONSEQUENCE_RAIL_* defaults", () => {
+  const missingClock = runCli("rail.js", ["--clock"]);
+  assert.equal(missingClock.status, 1);
+  assert.deepEqual(stderrJson(missingClock), {
+    code: "USAGE_INVALID",
+    message: "--clock requires a value of system or demo.",
+  });
+
+  const unknownClock = runCli("rail.js", ["--clock", "production"]);
+  assert.equal(unknownClock.status, 1);
+  assert.deepEqual(stderrJson(unknownClock), {
+    code: "USAGE_INVALID",
+    message: "--clock must be one of: system, demo.",
+  });
+
+  const duplicateClock = runCli("rail.js", ["--clock", "demo", "--clock", "system"]);
+  assert.equal(duplicateClock.status, 1);
+  assert.deepEqual(stderrJson(duplicateClock), {
+    code: "USAGE_INVALID",
+    message: "Flag --clock was supplied more than once.",
+  });
+
+  const envPort = runCli("rail.js", [], { env: { CONSEQUENCE_RAIL_PORT: "70000" } });
+  assert.equal(envPort.status, 1);
+  assert.deepEqual(stderrJson(envPort), {
+    code: "USAGE_INVALID",
+    message: "CONSEQUENCE_RAIL_PORT must be an integer between 0 and 65535.",
+  });
+
+  const envClock = runCli("rail.js", [], { env: { CONSEQUENCE_RAIL_CLOCK: "frozen" } });
+  assert.equal(envClock.status, 1);
+  assert.deepEqual(stderrJson(envClock), {
+    code: "USAGE_INVALID",
+    message: "CONSEQUENCE_RAIL_CLOCK must be one of: system, demo.",
+  });
+
+  const emptyEnvUsesFlags = runCli("rail.js", ["--clock"], {
+    env: { CONSEQUENCE_RAIL_PORT: "", CONSEQUENCE_RAIL_CLOCK: "" },
+  });
+  assert.equal(emptyEnvUsesFlags.status, 1);
+  assert.equal(
+    stderrJson(emptyEnvUsesFlags).message,
+    "--clock requires a value of system or demo.",
+  );
+
+  const flagOverridesInvalidEnv = runCli("rail.js", ["--help"], {
+    env: { CONSEQUENCE_RAIL_PORT: "not-a-port", CONSEQUENCE_RAIL_CLOCK: "frozen" },
+  });
+  assert.equal(flagOverridesInvalidEnv.status, 0);
 });
