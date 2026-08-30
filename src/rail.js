@@ -110,6 +110,7 @@ const CONNECTOR_CAPABILITY_FIELDS = new Set([
 ]);
 const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
 const MAX_ACTIONS = 1_000;
+const MAX_DURATION_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
 const EXECUTION_FAULTS = new Set([
   "none",
   "duplicate",
@@ -177,6 +178,19 @@ function assertExactFields(object, fields, objectName, code = "SCHEMA_INVALID") 
 
 function assertNonEmptyString(value, label, code = "SCHEMA_INVALID") {
   assert(typeof value === "string" && value.length > 0, code, `${label} is required.`);
+}
+
+function assertSafeInteger(value, label, {
+  min = 0,
+  max = Number.MAX_SAFE_INTEGER,
+  code = "SCHEMA_INVALID",
+  message,
+} = {}) {
+  assert(
+    Number.isSafeInteger(value) && value >= min && value <= max,
+    code,
+    message ?? `${label} must be an integer between ${min} and ${max}.`,
+  );
 }
 
 function assertDigest(value, label, code = "SCHEMA_INVALID") {
@@ -1248,11 +1262,14 @@ export class ConsequenceRail {
       input.evidence_plan.source,
       "ActionProposal.evidence_plan.source",
     );
-    assert(
-      Number.isInteger(input.evidence_plan?.max_age_seconds) &&
-        input.evidence_plan.max_age_seconds > 0,
-      "SCHEMA_INVALID",
-      "A positive evidence max age is required.",
+    assertSafeInteger(
+      input.evidence_plan.max_age_seconds,
+      "ActionProposal.evidence_plan.max_age_seconds",
+      {
+        min: 1,
+        max: MAX_DURATION_SECONDS,
+        message: "A positive evidence max age is required.",
+      },
     );
     evaluatePostcondition(input.postcondition, { facts: {} });
 
@@ -1262,10 +1279,13 @@ export class ConsequenceRail {
         REFUND_PARAMETER_FIELDS,
         "ActionProposal.parameters",
       );
-      assert(
-        Number.isSafeInteger(input.parameters?.amount_minor) && input.parameters.amount_minor > 0,
-        "SCHEMA_INVALID",
-        "Refund amount_minor must be a positive integer.",
+      assertSafeInteger(
+        input.parameters.amount_minor,
+        "ActionProposal.parameters.amount_minor",
+        {
+          min: 1,
+          message: "Refund amount_minor must be a positive integer.",
+        },
       );
       assert(
         /^[A-Z]{3}$/.test(input.parameters?.currency ?? ""),
@@ -1329,28 +1349,35 @@ export class ConsequenceRail {
       "RECOURSE_INVALID",
       "Connector does not advertise the reserved remedy capability.",
     );
-    assert(
-      Number.isInteger(input.max_attempts) && input.max_attempts > 0,
-      "RECOURSE_INVALID",
-      "Recourse max_attempts must be a positive integer.",
-    );
+    assertSafeInteger(input.max_attempts, "RecourseReservation.max_attempts", {
+      min: 1,
+      code: "RECOURSE_INVALID",
+      message: "Recourse max_attempts must be a positive integer.",
+    });
     assert(
       typeof input.capability_reference === "string" &&
         input.capability_reference.length > 0,
       "RECOURSE_INVALID",
       "Recourse capability_reference is required.",
     );
-    assert(
-      Number.isInteger(input.remedy_window_seconds) &&
-        input.remedy_window_seconds >= 0,
-      "RECOURSE_INVALID",
-      "Recourse remedy_window_seconds must be a non-negative integer.",
+    assertSafeInteger(
+      input.remedy_window_seconds,
+      "RecourseReservation.remedy_window_seconds",
+      {
+        min: 0,
+        max: MAX_DURATION_SECONDS,
+        code: "RECOURSE_INVALID",
+        message: "Recourse remedy_window_seconds must be a non-negative integer.",
+      },
     );
-    assert(
-      Number.isSafeInteger(input.max_amount_minor) &&
-        input.max_amount_minor >= 0,
-      "RECOURSE_INVALID",
-      "Recourse max_amount_minor must be a non-negative integer.",
+    assertSafeInteger(
+      input.max_amount_minor,
+      "RecourseReservation.max_amount_minor",
+      {
+        min: 0,
+        code: "RECOURSE_INVALID",
+        message: "Recourse max_amount_minor must be a non-negative integer.",
+      },
     );
     assert(
       typeof input.idempotency_key === "string" && input.idempotency_key.length > 0,

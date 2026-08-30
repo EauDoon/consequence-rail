@@ -3,6 +3,7 @@ import { RailError } from "./errors.js";
 
 const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
 const ED25519_BASE64URL = /^[A-Za-z0-9_-]{86}$/;
+const MAX_DURATION_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
 
 const BUNDLE_FIELDS = new Set([
   "schema_version",
@@ -190,9 +191,9 @@ function string(value, label, { nonempty = false } = {}) {
   }
 }
 
-function integer(value, label, minimum = 0) {
-  if (!Number.isSafeInteger(value) || value < minimum) {
-    invalid(`${label} must be an integer of at least ${minimum}.`);
+function integer(value, label, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    invalid(`${label} must be an integer between ${minimum} and ${maximum}.`);
   }
 }
 
@@ -299,7 +300,12 @@ function proposal(value) {
     "ActionProposal.evidence_plan",
   );
   string(value.evidence_plan.source, "ActionProposal.evidence_plan.source", { nonempty: true });
-  integer(value.evidence_plan.max_age_seconds, "ActionProposal.evidence_plan.max_age_seconds", 1);
+  integer(
+    value.evidence_plan.max_age_seconds,
+    "ActionProposal.evidence_plan.max_age_seconds",
+    1,
+    MAX_DURATION_SECONDS,
+  );
 }
 
 function action(value) {
@@ -354,7 +360,12 @@ function reservation(value) {
     invalid("RecourseReservation kind is unsupported.");
   }
   timestamp(value.expires_at, "RecourseReservation.expires_at");
-  integer(value.remedy_window_seconds, "RecourseReservation.remedy_window_seconds");
+  integer(
+    value.remedy_window_seconds,
+    "RecourseReservation.remedy_window_seconds",
+    0,
+    MAX_DURATION_SECONDS,
+  );
   integer(value.max_attempts, "RecourseReservation.max_attempts", 1);
   integer(value.max_amount_minor, "RecourseReservation.max_amount_minor");
   if (Object.hasOwn(value, "reserved_by")) {
