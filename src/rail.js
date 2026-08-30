@@ -1142,13 +1142,14 @@ export class ConsequenceRail {
       requested_state: nextState,
     });
     const previousState = record.state;
-    record.state = nextState;
-    this.eventStore.append(record.action_id, "STATE_TRANSITION", "rail", {
+    const eventPayload = {
       from_state: previousState,
       to_state: nextState,
       reason_code: reasonCode,
       details_digest: digest(details ?? {}),
-    });
+    };
+    this.eventStore.append(record.action_id, "STATE_TRANSITION", "rail", eventPayload);
+    record.state = nextState;
   }
 
   finalizeRecourse(record, { release, reason }) {

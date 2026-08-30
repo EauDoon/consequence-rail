@@ -103,6 +103,27 @@ test("event store snapshots cannot be mutated through inputs or returned events"
   });
 });
 
+test("a failed transition append cannot advance the in-memory action state", () => {
+  const runtime = createDemoRuntime();
+  const proposed = runtime.rail.propose(buildRefundProposal(runtime.clock));
+  const before = runtime.rail.inspect(proposed.action_id);
+  const append = runtime.rail.eventStore.append.bind(runtime.rail.eventStore);
+  runtime.rail.eventStore.append = (...args) => {
+    if (args[1] === "STATE_TRANSITION") throw new Error("event store unavailable");
+    return append(...args);
+  };
+
+  assert.throws(
+    () => runtime.rail.authorize(proposed.action_id, {
+      allow: true,
+      policy_id: "demo-refund-policy/v1",
+      policy_digest: digest({ max_amount_minor: 25_000, currency: "USD" }),
+    }),
+    /event store unavailable/,
+  );
+  assert.deepEqual(runtime.rail.inspect(proposed.action_id), before);
+});
+
 test("signature verification rejects non-canonical base64url encodings", () => {
   const signer = createDemoSigner();
   const artifact = signArtifact({ safe: true }, signer);
