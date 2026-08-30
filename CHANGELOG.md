@@ -2,6 +2,7 @@
 
 ## Unreleased corrective candidate
 
+- ActionProposal and RecourseReservation parsers now reject unsafe, non-integral, and overflow-scale duration values so evidence freshness and remedy-window arithmetic stay exact.
 - HTTP sidecar failures now include a `request_id` (and the action id when the route named one). Unexpected exceptions are logged to stderr and returned as `INTERNAL_ERROR` instead of being swallowed as `REQUEST_INVALID`.
 - CLI usage now rejects missing flag values, unknown commands and flags, and empty or unreadable JSON files; `crctl --help` lists valid faults and modes, and `rail --help` prints usage instead of starting the sidecar.
 - JSON Schemas and OpenAPI now type digest and signature fields as the runtime's unpadded SHA-256 and Ed25519 base64url encodings, and the repository check rejects regressions.

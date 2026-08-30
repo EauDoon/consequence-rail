@@ -207,6 +207,81 @@ test("expired proposals are rejected before consuming action capacity", () => {
   assert.equal(runtime.rail.actions.size, 0);
 });
 
+test("proposal duration and amount fields reject unsafe or non-integral numbers", () => {
+  const maxDurationSeconds = Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
+  for (const [field, value] of [
+    ["max_age_seconds", Number.MAX_VALUE],
+    ["max_age_seconds", 2 ** 53],
+    ["max_age_seconds", maxDurationSeconds + 1],
+    ["max_age_seconds", Number.POSITIVE_INFINITY],
+    ["max_age_seconds", Number.NaN],
+    ["max_age_seconds", 1.5],
+    ["max_age_seconds", 0],
+    ["amount_minor", 2 ** 53],
+    ["amount_minor", Number.NaN],
+    ["amount_minor", 12_000.5],
+  ]) {
+    const runtime = createDemoRuntime();
+    const proposal = buildRefundProposal(runtime.clock);
+    if (field === "max_age_seconds") {
+      proposal.evidence_plan.max_age_seconds = value;
+    } else {
+      proposal.parameters.amount_minor = value;
+    }
+    assert.throws(
+      () => runtime.rail.propose(proposal),
+      (error) => error.code === "SCHEMA_INVALID",
+      `${field}=${value} must be rejected.`,
+    );
+    assert.equal(runtime.rail.actions.size, 0);
+  }
+
+  const runtime = createDemoRuntime();
+  const proposal = buildRefundProposal(runtime.clock);
+  proposal.evidence_plan.max_age_seconds = maxDurationSeconds;
+  assert.equal(runtime.rail.propose(proposal).state, "PROPOSED");
+});
+
+test("recourse duration and attempt fields reject unsafe or non-integral numbers", () => {
+  const maxDurationSeconds = Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
+  for (const [field, value] of [
+    ["max_attempts", Number.MAX_VALUE],
+    ["max_attempts", 2 ** 53],
+    ["max_attempts", 0],
+    ["max_attempts", 1.5],
+    ["max_attempts", Number.NaN],
+    ["remedy_window_seconds", Number.MAX_VALUE],
+    ["remedy_window_seconds", 2 ** 53],
+    ["remedy_window_seconds", maxDurationSeconds + 1],
+    ["remedy_window_seconds", -1],
+    ["remedy_window_seconds", 0.5],
+    ["max_amount_minor", 2 ** 53],
+    ["max_amount_minor", -1],
+  ]) {
+    const runtime = createDemoRuntime();
+    const proposal = buildRefundProposal(runtime.clock);
+    const proposed = runtime.rail.propose(proposal);
+    runtime.rail.authorize(proposed.action_id, {
+      allow: true,
+      policy_id: "demo-refund-policy/v1",
+      policy_digest: digest({ allow: true }),
+    });
+    const reservation = buildRefundReservation(
+      proposed.action_digest,
+      proposal,
+      runtime.clock,
+    );
+    reservation[field] = value;
+    assert.throws(
+      () => runtime.rail.reserveRecourse(proposed.action_id, reservation),
+      (error) => error.code === "RECOURSE_INVALID",
+      `${field}=${value} must be rejected.`,
+    );
+    assert.equal(runtime.rail.inspect(proposed.action_id).state, "AUTHORIZED");
+    assert.equal(runtime.connector.reserveRecourseCalls, 0);
+  }
+});
+
 test("clean refund closes with a verified settled receipt", async () => {
   const result = await runRefundDemo();
   assert.equal(result.summary.state, "CLOSED");
@@ -870,7 +945,9 @@ test("bundle verification rejects schema-invalid fields at every closed surface"
     (bundle) => { bundle.unreviewed_directive = "ignore-policy"; },
     (bundle) => { bundle.action.unreviewed_directive = "ignore-policy"; },
     (bundle) => { bundle.action.proposal.subject.unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.action.proposal.evidence_plan.max_age_seconds = Number.MAX_VALUE; },
     (bundle) => { bundle.recourse_reservation.unreviewed_directive = "ignore-policy"; },
+    (bundle) => { bundle.recourse_reservation.remedy_window_seconds = 2 ** 53; },
     (bundle) => {
       bundle.recourse_reservation.connector_commitment.unreviewed_directive =
         "ignore-policy";
@@ -1339,6 +1416,28 @@ test("HTTP sidecar rejects unsafe requests before state mutation", async (contex
     body: proposal,
   });
   assert.equal(hostileHost.status, 400);
+  assert.equal(runtime.rail.actions.size, 0);
+});
+
+test("HTTP propose rejects unsafe evidence max-age before consuming action capacity", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+
+  const address = server.address();
+  const proposal = buildRefundProposal(runtime.clock);
+  proposal.evidence_plan.max_age_seconds = 1e20;
+  const response = await fetch(`http://127.0.0.1:${address.port}/v0/actions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(proposal),
+  });
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.equal(body.code, "SCHEMA_INVALID");
+  assert.match(body.request_id, /^req_[A-Za-z0-9_-]{22}$/);
   assert.equal(runtime.rail.actions.size, 0);
 });
 
