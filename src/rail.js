@@ -295,10 +295,14 @@ export class ConsequenceRail {
       "CONFIG_INVALID",
       "The event store must provide failure-atomic append and list operations.",
     );
-    this.eventStore = Object.freeze({
+    const eventStoreFacade = Object.freeze({
       failureAtomicAppend: true,
       append: configuredEventStore.append.bind(configuredEventStore),
       list: configuredEventStore.list.bind(configuredEventStore),
+    });
+    Object.defineProperty(this, "eventStore", {
+      value: eventStoreFacade,
+      enumerable: true,
     });
     this.actions = new Map();
     this.trustedKeys = new Map([[signer.kid, signer.publicKey]]);

@@ -174,6 +174,10 @@ test("a declared failure-atomic transition append preserves state and revision",
     () => { runtime.rail.eventStore.append = () => {}; },
     TypeError,
   );
+  assert.throws(
+    () => { runtime.rail.eventStore = createFailingAtomicEventStore; },
+    TypeError,
+  );
 
   assert.throws(
     () => runtime.rail.authorize(proposed.action_id, {
