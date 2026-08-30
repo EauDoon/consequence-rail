@@ -191,6 +191,17 @@ function hostUrl(request) {
 }
 
 function assertRequestBoundary(request) {
+  const target = request.url;
+  if (
+    typeof target !== "string" ||
+    Buffer.byteLength(target, "utf8") > MAX_URL_BYTES ||
+    !target.startsWith("/") ||
+    target.startsWith("//") ||
+    target.includes("\\") ||
+    target.includes("#")
+  ) {
+    throw requestError("REQUEST_INVALID", "Request target is invalid.");
+  }
   const remoteAddress = request.socket.remoteAddress;
   if (
     !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remoteAddress)
@@ -210,12 +221,7 @@ function assertRequestBoundary(request) {
       throw requestError("ORIGIN_FORBIDDEN", "Origin is not accepted.");
     }
   }
-  if (
-    typeof request.url !== "string" ||
-    Buffer.byteLength(request.url, "utf8") > MAX_URL_BYTES
-  ) {
-    throw requestError("REQUEST_INVALID", "Request target is invalid.");
-  }
+  return new URL(target, "http://127.0.0.1");
 }
 
 function methodNotAllowed(response, allowed, requestId) {
@@ -262,7 +268,7 @@ export function createReferenceServer({
     activeRequests += 1;
     let actionId;
     try {
-      assertRequestBoundary(request);
+      const url = assertRequestBoundary(request);
       const now = Date.now();
       const address = request.socket.remoteAddress;
       const rate = rateByAddress.get(address);
@@ -275,7 +281,6 @@ export function createReferenceServer({
         throw requestError("RATE_LIMITED", "Request rate limit exceeded.");
       }
 
-      const url = new URL(request.url, "http://127.0.0.1");
       const path = url.pathname;
 
       if (path === "/.well-known/consequence-rail") {

@@ -1473,28 +1473,51 @@ test("HTTP sidecar rejects ambiguous Host authorities before routing", async (co
   context.after(() => server.close());
   const { port } = server.address();
 
-  const rawRequest = (hostLines) => new Promise((resolve, reject) => {
-    const socket = createConnection({ host: "127.0.0.1", port }, () => {
-      socket.end(
-        `GET /.well-known/consequence-rail HTTP/1.1\r\n${hostLines}\r\nConnection: close\r\n\r\n`,
-      );
-    });
-    let response = "";
-    socket.setEncoding("utf8");
-    socket.on("data", (chunk) => { response += chunk; });
-    socket.on("end", () => resolve(response));
-    socket.on("error", reject);
-  });
-
   for (const hostLines of [
     `Host: 127.0.0.1:${port}\r\nHost: attacker.invalid:${port}`,
     `Host: user@127.0.0.1:${port}`,
     `Host: 127.0.0.1:${port}/unexpected`,
   ]) {
-    const response = await rawRequest(hostLines);
+    const response = await rawSocketRequest(
+      port,
+      `GET /.well-known/consequence-rail HTTP/1.1\r\n${hostLines}\r\nConnection: close\r\n\r\n`,
+    );
     assert.match(response, /^HTTP\/1\.1 400 /u);
     assert.match(response, /"code":"HOST_INVALID"/u);
   }
+});
+
+test("HTTP sidecar rejects non-origin-form targets without state or rate mutation", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const { port } = server.address();
+  const host = `127.0.0.1:${port}`;
+  const body = JSON.stringify(buildRefundProposal(runtime.clock));
+  const absoluteGet =
+    `GET http://attacker.invalid/.well-known/consequence-rail HTTP/1.1\r\n` +
+    `Host: ${host}\r\nConnection: close\r\n\r\n`;
+  const absolutePost =
+    `POST http://attacker.invalid/v0/actions HTTP/1.1\r\n` +
+    `Host: ${host}\r\nContent-Type: application/json\r\n` +
+    `Content-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`;
+
+  for (const requestText of [absoluteGet, absolutePost]) {
+    const response = await rawSocketRequest(port, requestText);
+    assert.match(response, /^HTTP\/1\.1 400 /u);
+    assert.match(response, /"code":"REQUEST_INVALID"/u);
+  }
+  assert.equal(runtime.rail.actions.size, 0);
+
+  for (let count = 2; count < 600; count += 1) {
+    const response = await rawSocketRequest(port, absoluteGet);
+    assert.match(response, /^HTTP\/1\.1 400 /u);
+  }
+  const valid = await fetch(`http://${host}/.well-known/consequence-rail`);
+  assert.equal(valid.status, 200);
+  assert.equal(runtime.rail.actions.size, 0);
 });
 
 test("HTTP sidecar completes the synthetic action lifecycle", async (context) => {
@@ -1786,6 +1809,19 @@ async function postJson(url, body, expectedStatus = 200) {
   });
   assert.equal(response.status, expectedStatus);
   return response.json();
+}
+
+function rawSocketRequest(port, requestText) {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host: "127.0.0.1", port }, () => {
+      socket.end(requestText);
+    });
+    let response = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => { response += chunk; });
+    socket.on("end", () => resolve(response));
+    socket.on("error", reject);
+  });
 }
 
 function rawHttpRequest({ port, path, method, headers, body }) {
