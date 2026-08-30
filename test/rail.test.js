@@ -16,15 +16,51 @@ import {
 } from "../src/demo.js";
 import { MemoryEventStore, verifyEventChain } from "../src/event-store.js";
 import { createReferenceServer } from "../src/http-server.js";
+import { MockRefundConnector } from "../src/mock-refund-connector.js";
 import { evaluatePostcondition } from "../src/postconditions.js";
+import { ConsequenceRail } from "../src/rail.js";
 import {
   createDemoSigner,
   demoConnectorTrustedKeys,
+  demoRecoveryTrustedKeys,
   demoTrustedKeys,
   signArtifact,
   verifyArtifact,
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
+
+function createRuntimeWithEventStore(createEventStore, options = {}) {
+  const clock = new ManualClock();
+  const signer = createDemoSigner();
+  const connector = new MockRefundConnector(clock);
+  const eventStore = createEventStore(signer, clock);
+  const rail = new ConsequenceRail({
+    signer,
+    clock,
+    connector,
+    connectorTrustedKeys: connector.trustedKeys(),
+    recoveryTrustedKeys: demoRecoveryTrustedKeys(),
+    requireRecoveryPreflight: options.requireRecoveryPreflight ?? false,
+    eventStore,
+  });
+  return { clock, eventStore, rail };
+}
+
+function createFailingAtomicEventStore(signer, clock) {
+  const store = new MemoryEventStore(signer, clock);
+  return {
+    failureAtomicAppend: true,
+    append(...args) {
+      if (args[1] === "STATE_TRANSITION") {
+        throw new Error("event store unavailable");
+      }
+      return store.append(...args);
+    },
+    list(...args) {
+      return store.list(...args);
+    },
+  };
+}
 
 test("canonical action digest is independent of object key order", () => {
   const left = {
@@ -103,15 +139,41 @@ test("event store snapshots cannot be mutated through inputs or returned events"
   });
 });
 
-test("a failed transition append cannot advance the in-memory action state", () => {
-  const runtime = createDemoRuntime();
+test("MemoryEventStore append failures cannot advance the event revision", () => {
+  const clock = new ManualClock();
+  const store = new MemoryEventStore(createDemoSigner(), clock);
+  assert.equal(store.failureAtomicAppend, true);
+  assert.throws(
+    () => store.append("act_clone_failure", "TEST_RECORDED", "test", {
+      invalid: undefined,
+    }),
+    (error) => error.code === "CANONICALIZATION_FAILED",
+  );
+  assert.deepEqual(store.list("act_clone_failure"), []);
+
+  const signingFailureStore = new MemoryEventStore({ kid: "missing-private-key" }, clock);
+  assert.throws(
+    () => signingFailureStore.append(
+      "act_signing_failure",
+      "TEST_RECORDED",
+      "test",
+      { valid: true },
+    ),
+    (error) => error.code === "SIGNING_INVALID",
+  );
+  assert.deepEqual(signingFailureStore.list("act_signing_failure"), []);
+});
+
+test("a declared failure-atomic transition append preserves state and revision", () => {
+  const runtime = createRuntimeWithEventStore(createFailingAtomicEventStore);
   const proposed = runtime.rail.propose(buildRefundProposal(runtime.clock));
   const before = runtime.rail.inspect(proposed.action_id);
-  const append = runtime.rail.eventStore.append.bind(runtime.rail.eventStore);
-  runtime.rail.eventStore.append = (...args) => {
-    if (args[1] === "STATE_TRANSITION") throw new Error("event store unavailable");
-    return append(...args);
-  };
+  assert.equal(runtime.rail.eventStore.failureAtomicAppend, true);
+  assert.equal(Object.isFrozen(runtime.rail.eventStore), true);
+  assert.throws(
+    () => { runtime.rail.eventStore.append = () => {}; },
+    TypeError,
+  );
 
   assert.throws(
     () => runtime.rail.authorize(proposed.action_id, {
@@ -122,6 +184,59 @@ test("a failed transition append cannot advance the in-memory action state", () 
     /event store unavailable/,
   );
   assert.deepEqual(runtime.rail.inspect(proposed.action_id), before);
+});
+
+test("failed authorization append cannot retain recovery-preflight side effects", () => {
+  const runtime = createRuntimeWithEventStore(createFailingAtomicEventStore, {
+    requireRecoveryPreflight: true,
+  });
+  const proposed = runtime.rail.propose(buildRefundProposal(runtime.clock));
+  const before = runtime.rail.inspect(proposed.action_id);
+
+  assert.throws(
+    () => runtime.rail.authorize(proposed.action_id, {
+      allow: true,
+      policy_id: "demo-refund-policy/v1",
+      policy_digest: digest({ max_amount_minor: 25_000, currency: "USD" }),
+    }),
+    /event store unavailable/,
+  );
+  assert.deepEqual(runtime.rail.inspect(proposed.action_id), before);
+});
+
+test("ambiguous or incomplete event stores are rejected before append", () => {
+  for (const eventStore of [
+    {
+      appendCalls: 0,
+      append(...args) {
+        this.appendCalls += 1;
+        this.events.push(args);
+        throw new Error("post-write failure");
+      },
+      events: [],
+      list() { return deepClone(this.events); },
+    },
+    {
+      failureAtomicAppend: false,
+      appendCalls: 0,
+      append(...args) {
+        this.appendCalls += 1;
+        this.events.push(args);
+        throw new Error("post-write failure");
+      },
+      events: [],
+      list() { return deepClone(this.events); },
+    },
+    { failureAtomicAppend: true, append() {} },
+    { failureAtomicAppend: true, list() { return []; } },
+  ]) {
+    assert.throws(
+      () => createRuntimeWithEventStore(() => eventStore),
+      (error) => error.code === "CONFIG_INVALID",
+    );
+    assert.equal(eventStore.appendCalls ?? 0, 0);
+    assert.deepEqual(eventStore.events ?? [], []);
+  }
 });
 
 test("signature verification rejects non-canonical base64url encodings", () => {
