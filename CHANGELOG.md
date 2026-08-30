@@ -2,6 +2,7 @@
 
 ## Unreleased corrective candidate
 
+- The loopback sidecar now uses the host clock by default so current-time proposals are admissible, and accepts `--clock demo|system` plus `CONSEQUENCE_RAIL_PORT` / `CONSEQUENCE_RAIL_CLOCK` when flags are omitted.
 - ActionProposal and RecourseReservation parsers now reject unsafe, non-integral, and overflow-scale duration values so evidence freshness and remedy-window arithmetic stay exact.
 - HTTP sidecar failures now include a `request_id` (and the action id when the route named one). Unexpected exceptions are logged to stderr and returned as `INTERNAL_ERROR` instead of being swallowed as `REQUEST_INVALID`.
 - CLI usage now rejects missing flag values, unknown commands and flags, and empty or unreadable JSON files; `crctl --help` lists valid faults and modes, and `rail --help` prints usage instead of starting the sidecar.

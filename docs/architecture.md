@@ -113,7 +113,7 @@ check and the protected side effect.
 - no third-party runtime packages
 - in-memory action and event state
 - deterministic public demo rail and connector signing keys
-- loopback HTTP server
+- loopback HTTP server using the host clock by default
 - bounded JSON bodies, headers, request time, connection reuse, concurrency,
   and in-memory action count
 - same-origin loopback Host and Origin enforcement plus restrictive response

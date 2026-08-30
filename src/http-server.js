@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import { SystemClock } from "./clock.js";
 import { createDemoRuntime } from "./demo.js";
 import { RailError } from "./errors.js";
 import { demoConnectorTrustedKeys, demoTrustedKeys } from "./signing.js";
@@ -230,7 +231,9 @@ function assertQueryParameters(url, allowed = []) {
   }
 }
 
-export function createReferenceServer({ runtime = createDemoRuntime() } = {}) {
+export function createReferenceServer({
+  runtime = createDemoRuntime({ clock: new SystemClock() }),
+} = {}) {
   const { rail } = runtime;
   let activeRequests = 0;
   const rateByAddress = new Map();
