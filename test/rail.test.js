@@ -14,6 +14,7 @@ import {
   prepareRefund,
   runRefundDemo,
 } from "../src/demo.js";
+import { MemoryEventStore, verifyEventChain } from "../src/event-store.js";
 import { createReferenceServer } from "../src/http-server.js";
 import { evaluatePostcondition } from "../src/postconditions.js";
 import {
@@ -79,6 +80,27 @@ test("canonicalization rejects proxies without invoking their traps", () => {
     }
     assert.equal(trapCalls, 0);
   }
+});
+
+test("event store snapshots cannot be mutated through inputs or returned events", () => {
+  const signer = createDemoSigner();
+  const store = new MemoryEventStore(signer, new ManualClock());
+  const payload = { result: { status: "recorded" } };
+  const appended = store.append("act_snapshot_test", "TEST_RECORDED", "test", payload);
+
+  payload.result.status = "mutated-input";
+  assert.equal(payload.result.status, "mutated-input");
+  appended.payload.result.status = "mutated-return";
+  const listed = store.list("act_snapshot_test");
+  listed[0].payload.result.status = "mutated-list";
+
+  const reread = store.list("act_snapshot_test");
+  assert.equal(reread[0].payload.result.status, "recorded");
+  assert.deepEqual(verifyEventChain(reread, demoTrustedKeys()), {
+    valid: true,
+    event_count: 1,
+    chain_head: reread[0].event_hash,
+  });
 });
 
 test("signature verification rejects non-canonical base64url encodings", () => {
