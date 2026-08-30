@@ -1,4 +1,4 @@
-import { digest, without } from "./canonical.js";
+import { deepClone, deepFreeze, digest, without } from "./canonical.js";
 import { RailError } from "./errors.js";
 import { signArtifact, verifyArtifact } from "./signing.js";
 
@@ -20,20 +20,20 @@ export class MemoryEventStore {
       event_type: eventType,
       actor,
       recorded_at: this.clock.now(),
-      payload,
+      payload: deepClone(payload),
     };
     const signed = signArtifact(unsigned, this.signer);
-    const event = {
+    const event = deepFreeze({
       ...signed,
       event_hash: digest(signed),
-    };
+    });
     events.push(event);
     this.byAction.set(actionId, events);
-    return event;
+    return deepClone(event);
   }
 
   list(actionId) {
-    return [...(this.byAction.get(actionId) ?? [])];
+    return deepClone(this.byAction.get(actionId) ?? []);
   }
 }
 
