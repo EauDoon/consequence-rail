@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:settlement-receipt:v0.2",
+  "title": "SettlementReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposal_schema_version",
+    "receipt_id",
+    "action_id",
+    "action_digest",
+    "recourse_reservation_digest",
+    "connector_recourse_commitment_digest",
+    "recourse_final_status",
+    "action_permit_digest",
+    "assurance_mode",
+    "bypass_possible",
+    "gated",
+    "outcome",
+    "configured_postcondition_result",
+    "evidence_digests",
+    "event_chain_head",
+    "closed_at",
+    "technical_claim",
+    "limitations",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/settlement-receipt/v0.2"
+    },
+    "proposal_schema_version": {
+      "const": "consequence-rail/action-proposal/v0.2"
+    },
+    "receipt_id": {
+      "type": "string"
+    },
+    "action_id": {
+      "type": "string"
+    },
+    "action_digest": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "recourse_reservation_digest": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "connector_recourse_commitment_digest": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "recourse_final_status": {
+      "enum": [
+        "active",
+        "expired",
+        "released",
+        "consumed"
+      ]
+    },
+    "action_permit_digest": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "assurance_mode": {
+      "enum": [
+        "enforced",
+        "cooperative"
+      ]
+    },
+    "bypass_possible": {
+      "type": "boolean"
+    },
+    "gated": {
+      "const": true
+    },
+    "outcome": {
+      "enum": [
+        "settled",
+        "compensated",
+        "disputed"
+      ]
+    },
+    "configured_postcondition_result": {
+      "enum": [
+        "satisfied",
+        "unresolved"
+      ]
+    },
+    "evidence_digests": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{43}$"
+      }
+    },
+    "event_chain_head": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "technical_claim": {
+      "const": "The configured postcondition was evaluated against declared evidence sources."
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "const": "Signatures establish integrity and provenance, not truth or causality."
+        },
+        {
+          "const": "Settlement is a technical protocol status, not a legal or financial determination."
+        },
+        {
+          "const": "Recovery is not guaranteed."
+        }
+      ],
+      "items": false
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "type": "string", "minLength": 1 },
+        "value": { "type": "string", "pattern": "^[A-Za-z0-9_-]{86}$" }
+      }
+    }
+  }
+}

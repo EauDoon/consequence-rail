@@ -7,6 +7,18 @@ import { verifyRecoveryPreflight } from "./recovery-preflight.js";
 import { signArtifact, verifyArtifact } from "./signing.js";
 
 export const ASSURANCE_MODES = ["enforced", "cooperative", "observed"];
+const ACTION_PROPOSAL_VERSIONS = new Set([
+  "consequence-rail/action-proposal/v0.1",
+  "consequence-rail/action-proposal/v0.2",
+]);
+const BUNDLE_VERSION_BY_PROPOSAL = new Map([
+  ["consequence-rail/action-proposal/v0.1", "consequence-rail/settlement-bundle/v0.1"],
+  ["consequence-rail/action-proposal/v0.2", "consequence-rail/settlement-bundle/v0.2"],
+]);
+const RECEIPT_VERSION_BY_PROPOSAL = new Map([
+  ["consequence-rail/action-proposal/v0.1", "consequence-rail/settlement-receipt/v0.1"],
+  ["consequence-rail/action-proposal/v0.2", "consequence-rail/settlement-receipt/v0.2"],
+]);
 
 export const ALLOWED_TRANSITIONS = {
   PROPOSED: ["AUTHORIZED", "DENIED"],
@@ -960,7 +972,7 @@ export class ConsequenceRail {
       "Bundle profile must be receipt or audit.",
     );
     return deepClone({
-      schema_version: "consequence-rail/settlement-bundle/v0.1",
+      schema_version: BUNDLE_VERSION_BY_PROPOSAL.get(record.proposal.schema_version),
       profile: auditProfile ? "audit" : "receipt",
       action: {
         action_id: actionId,
@@ -1182,8 +1194,14 @@ export class ConsequenceRail {
       outcome,
     });
     const events = this.eventStore.list(record.action_id);
+    const receiptSchemaVersion = RECEIPT_VERSION_BY_PROPOSAL.get(
+      record.proposal.schema_version,
+    );
     const receiptBody = {
-      schema_version: "consequence-rail/settlement-receipt/v0.1",
+      schema_version: receiptSchemaVersion,
+      ...(receiptSchemaVersion === "consequence-rail/settlement-receipt/v0.2"
+        ? { proposal_schema_version: record.proposal.schema_version }
+        : {}),
       receipt_id: `receipt_${digest({
         action_id: record.action_id,
         event_chain_head: events.at(-1).event_hash,
@@ -1217,7 +1235,7 @@ export class ConsequenceRail {
   validateProposal(input) {
     assertExactFields(input, PROPOSAL_FIELDS, "ActionProposal");
     assert(
-      input.schema_version === "consequence-rail/action-proposal/v0.1",
+      ACTION_PROPOSAL_VERSIONS.has(input.schema_version),
       "SCHEMA_INVALID",
       "Unsupported ActionProposal schema version.",
     );

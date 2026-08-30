@@ -19,6 +19,19 @@ external action. It includes:
 - data-only postcondition
 - declared evidence source and freshness window
 
+Postconditions support strict `eq` and numeric `gte` and `lte` clauses. The
+published ActionProposal v0.1 schema remains immutable. ActionProposal v0.2
+formally requires each ordered threshold to be a finite JavaScript binary64
+number from `-1.7976931348623157e+308` to `1.7976931348623157e+308`, inclusive.
+The reference runtime applies that no-coercion rule to both proposal versions:
+non-numeric evidence does not satisfy an ordered clause, and a non-numeric
+ordered threshold is rejected. Existing v0.1 `eq` proposals retain their
+strict-equality behavior. A v0.2 proposal is carried by a v0.2 settlement
+bundle so the immutable v0.1 bundle schema continues to reference only the
+v0.1 proposal schema. Its v0.2 settlement receipt signs the exact v0.2
+proposal schema identifier, so receipt-profile bundles remain version-bound
+even though they omit the proposal.
+
 The `action_digest` is the SHA-256 digest, encoded as unpadded base64url
 (43 characters), of the proposal's canonical JSON bytes. Artifact fields
 named as digests, event hashes, and evidence manifests use that same
@@ -178,6 +191,7 @@ produce a settlement receipt.
 
 The receipt binds:
 
+- proposal schema version in SettlementReceipt v0.2
 - action digest
 - reservation digest
 - connector commitment digest and final reservation status
@@ -186,6 +200,11 @@ The receipt binds:
 - evidence digests
 - event-chain head
 - close time
+
+Published SettlementReceipt v0.1 bytes remain immutable. A v0.1 bundle MUST
+carry a v0.1 receipt. A v0.2 bundle MUST carry a v0.2 receipt whose signed
+`proposal_schema_version` is `consequence-rail/action-proposal/v0.2`. Verifiers
+reject bundle, receipt, and included audit-proposal version substitutions.
 
 `settlement` is a technical protocol term. It does not mean legal settlement,
 financial finality, insurance coverage, or guaranteed recovery.

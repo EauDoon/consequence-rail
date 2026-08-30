@@ -207,6 +207,11 @@ OpenAPI clients can send current timestamps. Pass `--clock demo` to freeze
 time at the conformance epoch `2035-01-01T00:00:00.000Z`. When flags are
 omitted, `CONSEQUENCE_RAIL_PORT` and `CONSEQUENCE_RAIL_CLOCK` supply the same
 defaults. Read [`api/openapi.json`](api/openapi.json) for the request surface.
+The sidecar accepts the immutable ActionProposal v0.1 format and the opt-in
+v0.2 format for schema-bounded numeric `gte` and `lte` clauses. A v0.2
+proposal exports a v0.2 settlement bundle and a signed v0.2 receipt that binds
+the proposal schema version even in the proposal-free receipt profile. Default
+v0.1 demo artifacts remain unchanged.
 The v0.1 sidecar stores bounded state in memory and exposes only the synthetic
 connector. It accepts only loopback clients and same-origin loopback Host and
 Origin values, caps JSON bodies at 65,536 bytes, restricts content types and

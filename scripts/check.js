@@ -14,12 +14,16 @@ const required = [
   "api/openapi.json",
   "spec/model.md",
   "spec/state-machine.md",
+  "spec/schemas/action-proposal-v0.2.schema.json",
   "spec/schemas/connector-recourse-commitment.schema.json",
   "spec/schemas/recovery-contract.schema.json",
   "spec/schemas/recovery-drill-attestation.schema.json",
   "spec/schemas/recovery-drill-bundle.schema.json",
+  "spec/schemas/settlement-bundle-v0.2.schema.json",
+  "spec/schemas/settlement-receipt-v0.2.schema.json",
   "docs/threat-model.md",
   "conformance/refund-action.json",
+  "conformance/refund-action-v0.2.json",
   "conformance/refund-recovery-contract.json",
 ];
 const textExtensions = new Set([".md", ".json", ".js", ".yaml", ".yml", ".txt"]);
