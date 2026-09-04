@@ -331,13 +331,16 @@ export class ConsequenceRail {
       evidence: [],
       receipt: null,
     };
-    this.actions.set(actionId, record);
+    // Append the event first; only commit the in-memory record if the
+    // append succeeds. This keeps the event log and the action map in
+    // sync when a failure-atomic event store throws on append.
     this.eventStore.append(actionId, "ACTION_PROPOSED", "rail", {
       state: "PROPOSED",
       action_digest: actionDigest,
       action_type: proposal.action_type,
       assurance_mode: proposal.assurance_mode,
     });
+    this.actions.set(actionId, record);
     return this.inspect(actionId);
   }
 
@@ -420,10 +423,10 @@ export class ConsequenceRail {
       "RECOVERY_COVERAGE_MISMATCH",
     );
 
-    record.recovery_preflight = deepFreeze(deepClone(bundle));
-    record.recovery_preflight_verification = deepFreeze(
-      deepClone(verification),
-    );
+    // Append the event first; only mutate the record after the event is
+    // durable. A failing event append would otherwise leave the record
+    // with recovery_preflight fields but no RECOVERY_PREFLIGHT_ACCEPTED
+    // event, breaking the audit profile.
     this.eventStore.append(
       actionId,
       "RECOVERY_PREFLIGHT_ACCEPTED",
@@ -434,6 +437,10 @@ export class ConsequenceRail {
         qualification: verification.qualification,
         expires_at: verification.expires_at,
       },
+    );
+    record.recovery_preflight = deepFreeze(deepClone(bundle));
+    record.recovery_preflight_verification = deepFreeze(
+      deepClone(verification),
     );
     return this.inspect(actionId);
   }
@@ -470,20 +477,26 @@ export class ConsequenceRail {
       idempotency_key_digest: digest(request.idempotency_key),
       connector_commitment: connectorCommitment,
     };
-    record.remedy_idempotency_key = request.idempotency_key;
-    record.reservation = signArtifact({
+    const signedReservation = signArtifact({
       ...reservation,
       schema_version: "consequence-rail/recourse-reservation/v0.1",
       reservation_id: `rr_${digest(reservation).slice(0, 20)}`,
       reserved_at: this.clock.now(),
     }, this.signer);
-    record.reservation_digest = digest(record.reservation);
+    const reservationDigest = digest(signedReservation);
+    // Commit the state transition (which appends the event) first; only
+    // mutate record.* after the event is durable. A failing event append
+    // would otherwise leave the record with reservation fields but no
+    // STATE_TRANSITION event, breaking the audit profile.
     this.transition(record, "RECOURSE_RESERVED", "RECOURSE_VERIFIED", {
-      reservation_digest: record.reservation_digest,
-      remedy_kind: record.reservation.kind,
-      capability: record.reservation.capability,
+      reservation_digest: reservationDigest,
+      remedy_kind: reservation.kind,
+      capability: reservation.capability,
       connector_commitment_digest: digest(connectorCommitment),
     });
+    record.remedy_idempotency_key = request.idempotency_key;
+    record.reservation = signedReservation;
+    record.reservation_digest = reservationDigest;
     return this.inspect(actionId);
   }
 
@@ -546,12 +559,16 @@ export class ConsequenceRail {
       expires_at: record.proposal.expires_at,
       max_uses: 1,
     };
-    record.permit = signArtifact(permitBody, this.signer);
-    record.permit_digest = digest(record.permit);
+    const signedPermit = signArtifact(permitBody, this.signer);
+    const permitDigest = digest(signedPermit);
+    // Commit the state transition (which appends the event) first; only
+    // mutate record.* after the event is durable. A failing event append
+    // would otherwise leave record.permit and record.permit_digest set
+    // without a STATE_TRANSITION event, breaking the audit profile.
     this.transition(record, "PERMITTED", "PERMIT_ISSUED", {
-      permit_digest: record.permit_digest,
-      assurance_mode: record.permit.assurance_mode,
-      bypass_possible: record.permit.bypass_possible,
+      permit_digest: permitDigest,
+      assurance_mode: record.proposal.assurance_mode,
+      bypass_possible: signedPermit.bypass_possible,
       ...(record.authorization.require_recovery_preflight
         ? {
             recovery_preflight_attestation_digest:
@@ -559,6 +576,8 @@ export class ConsequenceRail {
           }
         : {}),
     });
+    record.permit = signedPermit;
+    record.permit_digest = permitDigest;
     return this.inspect(actionId);
   }
 
