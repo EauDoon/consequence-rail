@@ -60,8 +60,11 @@ async function readJson(request, { required = false } = {}) {
     received += chunk.length;
     if (received > MAX_BODY_BYTES) {
       tooLarge = true;
-      chunks.length = 0;
-      continue;
+      // Destroy the request so the body stops streaming. Without this, the
+      // client keeps sending bytes and the loop continues until EOF, which
+      // is a cheap bandwidth-exhaustion DoS for any host the sidecar runs on.
+      request.destroy();
+      break;
     }
     if (!tooLarge) chunks.push(chunk);
   }
