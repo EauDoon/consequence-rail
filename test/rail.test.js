@@ -1912,3 +1912,73 @@ function resignEventChain(events, signer, actionId) {
     return rebuilt;
   });
 }
+
+function socketOutcome(port, requestText, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host: "127.0.0.1", port }, () => {
+      socket.write(requestText);
+    });
+    let response = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      response += chunk;
+    });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      resolve({ closed: false, response });
+    }, timeoutMs);
+    socket.on("close", () => {
+      clearTimeout(timer);
+      resolve({ closed: true, response });
+    });
+    socket.on("error", () => {
+      clearTimeout(timer);
+      resolve({ closed: true, response });
+    });
+  });
+}
+
+test("HTTP sidecar closes an over-cap request instead of waiting for the declared body", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const { port } = server.address();
+  const payload = JSON.stringify(buildRefundProposal(runtime.clock));
+  assert.ok(payload.length < 65_536);
+  const outcome = await socketOutcome(
+    port,
+    `POST /v0/actions HTTP/1.1\r\n` +
+      `Host: 127.0.0.1:${port}\r\n` +
+      `Content-Type: application/json\r\n` +
+      `Content-Length: 5000000\r\n` +
+      `\r\n` +
+      payload,
+    2_000,
+  );
+  assert.equal(outcome.closed, true, "server left a declared 5 MB request open after rejecting it");
+});
+
+test("HTTP sidecar still answers a valid proposal on the same route", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const { port } = server.address();
+  const body = JSON.stringify(buildRefundProposal(runtime.clock));
+  const response = await rawHttpRequest({
+    port,
+    path: "/v0/actions",
+    method: "POST",
+    headers: {
+      host: `127.0.0.1:${port}`,
+      "content-type": "application/json",
+      "content-length": String(Buffer.byteLength(body)),
+    },
+    body,
+  });
+  assert.equal(response.status, 201);
+  assert.match(response.body, /"action_id"/);
+});
