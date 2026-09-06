@@ -51,6 +51,13 @@ const RECEIPT_OUTCOME_BY_STATE = {
   REMEDY_FAILED: "disputed",
 };
 
+const RECEIPT_RECOURSE_STATUSES = new Set([
+  "active",
+  "expired",
+  "released",
+  "consumed",
+]);
+
 const PROPOSAL_FIELDS = new Set([
   "schema_version",
   "action_type",
@@ -1229,6 +1236,11 @@ export class ConsequenceRail {
       release: outcome !== "disputed",
       reason: `SETTLEMENT_${outcome.toUpperCase()}`,
     });
+    assert(
+      RECEIPT_RECOURSE_STATUSES.has(recourseFinalStatus.status),
+      "RECEIPT_UNSUPPORTED",
+      "A settlement receipt cannot represent an unknown final recourse status; the action stays review-required.",
+    );
     this.transition(record, "CLOSED", `SETTLEMENT_${outcome.toUpperCase()}`, {
       outcome,
     });

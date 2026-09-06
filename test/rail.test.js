@@ -771,6 +771,90 @@ test("timeout-like connector failures after a breach fail closed during remedy v
   );
 });
 
+test("unknown final recourse refuses receipt generation and preserves review-required state", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  assert.equal(runtime.rail.get(actionId).state, "REMEDY_DUE");
+  const expectedToken = runtime.rail.get(actionId).reservation.connector_commitment.reservation_token;
+  const evidenceCount = runtime.rail.get(actionId).evidence.length;
+  runtime.connector.recourseReservations.clear();
+  await assert.rejects(
+    () => runtime.rail.remediate(actionId),
+    (error) => error.code === "RECEIPT_UNSUPPORTED",
+  );
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.state, "REVIEW_REQUIRED");
+  assert.equal(record.receipt, null);
+  assert.equal(record.reservation.connector_commitment.reservation_token, expectedToken);
+  assert.equal(record.evidence.length, evidenceCount);
+  const finalized = runtime.rail.eventStore
+    .list(actionId)
+    .filter((event) => event.event_type === "RECOURSE_FINALIZED");
+  assert.equal(finalized.length, 1);
+  assert.equal(finalized[0].payload.status, "unknown");
+  assert.throws(
+    () => runtime.rail.exportBundle(actionId),
+    (error) => error.code === "RECEIPT_NOT_AVAILABLE",
+  );
+});
+
+test("a disputed receipt with determined recourse verifies under both bundle profiles", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  runtime.connector.observe = async () => Promise.reject(new Error("timeout"));
+  const result = await runtime.rail.remediate(actionId);
+  assert.equal(result.state, "CLOSED");
+  assert.equal(runtime.rail.get(actionId).receipt.outcome, "disputed");
+  assert.equal(runtime.rail.get(actionId).receipt.recourse_final_status, "consumed");
+  const receiptVerification = verifyBundle(runtime.rail.exportBundle(actionId, { profile: "receipt" }), {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+    requireSemantics: false,
+  });
+  assert.equal(receiptVerification.outcome, "disputed");
+  const auditVerification = verifyBundle(runtime.rail.exportBundle(actionId, { profile: "audit" }), {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+  });
+  assert.equal(auditVerification.outcome, "disputed");
+  const timeline = verifyBundleTimeline(runtime.rail.exportBundle(actionId, { profile: "audit" }), {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+  });
+  assert.equal(timeline.outcome, "disputed");
+});
+
+test("bundle verification rejects altered recourse status and false success outcomes", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  runtime.connector.observe = async () => Promise.reject(new Error("timeout"));
+  await runtime.rail.remediate(actionId);
+  const options = {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+  };
+  const unknownStatus = deepClone(runtime.rail.exportBundle(actionId, { profile: "audit" }));
+  unknownStatus.settlement_receipt.recourse_final_status = "unknown";
+  assert.throws(
+    () => verifyBundle(unknownStatus, options),
+    (error) => error.code === "BUNDLE_TAMPERED",
+  );
+  const falseSettled = deepClone(runtime.rail.exportBundle(actionId, { profile: "audit" }));
+  falseSettled.settlement_receipt.outcome = "settled";
+  assert.throws(() => verifyBundle(falseSettled, options));
+  const mismatchedHistory = deepClone(runtime.rail.exportBundle(actionId, { profile: "audit" }));
+  mismatchedHistory.events.find(
+    (event) => event.event_type === "RECOURSE_FINALIZED",
+  ).payload.status = "released";
+  assert.throws(() => verifyBundle(mismatchedHistory, options));
+});
+
 test("a failed bounded remedy closes as disputed without retry", async () => {
   const result = await runRefundDemo({ fault: "remedy-failure" });
   assert.equal(result.summary.outcome, "disputed");
