@@ -47,6 +47,26 @@ function createRuntimeWithEventStore(createEventStore, options = {}) {
   return { clock, eventStore, rail };
 }
 
+function createToggleEventStore(signer, clock) {
+  const store = new MemoryEventStore(signer, clock);
+  return {
+    failureAtomicAppend: true,
+    failOn: new Set(),
+    skipTransitions: 0,
+    append(...args) {
+      if (args[1] === "STATE_TRANSITION" && this.skipTransitions > 0) {
+        this.skipTransitions -= 1;
+      } else if (this.failOn.has(args[1])) {
+        throw new Error("event store unavailable");
+      }
+      return store.append(...args);
+    },
+    list(...args) {
+      return store.list(...args);
+    },
+  };
+}
+
 function createFailingAtomicEventStore(signer, clock) {
   const store = new MemoryEventStore(signer, clock);
   return {
@@ -189,6 +209,120 @@ test("a declared failure-atomic transition append preserves state and revision",
     /event store unavailable/,
   );
   assert.deepEqual(runtime.rail.inspect(proposed.action_id), before);
+});
+
+test("failed permit-consumed append cannot retain the use count", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  const before = runtime.rail.inspect(actionId);
+  runtime.eventStore.failOn.add("STATE_TRANSITION");
+  await assert.rejects(
+    () => runtime.rail.execute(actionId),
+    /event store unavailable/,
+  );
+  assert.deepEqual(runtime.rail.inspect(actionId), before);
+});
+
+test("failed execution-transition append cannot retain the connector result", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  runtime.eventStore.skipTransitions = 1;
+  runtime.eventStore.failOn.add("STATE_TRANSITION");
+  await assert.rejects(
+    () => runtime.rail.execute(actionId),
+    /event store unavailable/,
+  );
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.state, "EXECUTING");
+  assert.equal(record.permit_uses, 1);
+  assert.equal(record.execution, undefined);
+});
+
+test("failed ambiguous-execution append cannot retain the unknown result", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  runtime.rail.connector.execute = async () => { throw new Error("timeout"); };
+  runtime.eventStore.failOn.add("STATE_TRANSITION");
+  await assert.rejects(
+    () => runtime.rail.execute(actionId),
+    /event store unavailable/,
+  );
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.state, "PERMITTED");
+  assert.equal(record.execution, undefined);
+});
+
+test("failed evidence append cannot retain uncommitted evidence", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId);
+  runtime.eventStore.failOn.add("EVIDENCE_ACCEPTED");
+  await assert.rejects(
+    () => runtime.rail.verifyOutcome(actionId),
+    /event store unavailable/,
+  );
+  assert.equal(runtime.rail.get(actionId).evidence.length, 0);
+});
+
+test("failed remedy-started append cannot retain the attempt count", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  const before = runtime.rail.inspect(actionId);
+  runtime.eventStore.failOn.add("STATE_TRANSITION");
+  await assert.rejects(
+    () => runtime.rail.remediate(actionId),
+    /event store unavailable/,
+  );
+  assert.deepEqual(runtime.rail.inspect(actionId), before);
+});
+
+test("failed remedy-unknown append cannot retain the unknown result", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  runtime.rail.connector.remediate = async () => { throw new Error("timeout"); };
+  runtime.eventStore.skipTransitions = 1;
+  runtime.eventStore.failOn.add("STATE_TRANSITION");
+  await assert.rejects(
+    () => runtime.rail.remediate(actionId),
+    /event store unavailable/,
+  );
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.state, "REMEDIATING");
+  assert.equal(record.remedy_attempts, 1);
+  assert.equal(record.remedy_result, undefined);
+});
+
+test("failed remedy-evidence append cannot retain uncommitted evidence", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  const before = runtime.rail.get(actionId).evidence.length;
+  runtime.eventStore.failOn.add("REMEDY_EVIDENCE_ACCEPTED");
+  await assert.rejects(
+    () => runtime.rail.remediate(actionId),
+    /event store unavailable/,
+  );
+  assert.equal(runtime.rail.get(actionId).evidence.length, before);
+});
+
+test("failed reconciled-status append cannot retain the observed result", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  runtime.rail.connector.execute = async () => { throw new Error("timeout"); };
+  await runtime.rail.execute(actionId);
+  assert.equal(runtime.rail.get(actionId).state, "UNKNOWN");
+  const before = runtime.rail.inspect(actionId);
+  runtime.eventStore.failOn.add("STATE_TRANSITION");
+  await assert.rejects(
+    () => runtime.rail.reconcile(actionId),
+    /event store unavailable/,
+  );
+  assert.deepEqual(runtime.rail.inspect(actionId), before);
 });
 
 test("failed authorization append cannot retain recovery-preflight side effects", () => {

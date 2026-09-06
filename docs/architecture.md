@@ -115,6 +115,14 @@ process. A production connector needs an atomic remote lease, transaction, or
 equivalent primitive to prevent revocation or expiry between the final status
 check and the protected side effect.
 
+Every state-changing step commits its audit event before mutating the
+in-memory record: counters, connector observations, and evidence are computed
+into locals, the event (or state transition) is appended, and the record is
+updated only after the append succeeds. A failing failure-atomic event store
+therefore leaves the record exactly as the last committed event describes,
+and every lifecycle method preserves that property including execution,
+reconciliation, outcome verification, and remediation.
+
 ## Reference implementation boundaries
 
 - Node.js 20 or newer
