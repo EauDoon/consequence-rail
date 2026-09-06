@@ -215,7 +215,10 @@ export async function runInventoryDemo({ fault = "none", assuranceMode = "enforc
     bypass_possible: view.bypass_possible,
     execute_calls: runtime.connector.executeCalls,
     status_calls: runtime.connector.statusCalls,
+    recourse_reservation_calls: runtime.connector.reserveRecourseCalls,
+    recourse_status_calls: runtime.connector.recourseStatusCalls,
     remedy_calls: runtime.connector.remedyCalls,
+    remedy_status_calls: runtime.connector.remedyStatusCalls,
     active_allocations: runtime.connector.allocations.filter((item) => item.status === "active").length,
     allocated_quantity: runtime.connector.allocations
       .filter((item) => item.status === "active")

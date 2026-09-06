@@ -53,6 +53,7 @@ export class MockInventoryConnector {
     this.inventory = new Map([["sku_demo_1", onHand]]);
     this.onHandBaseline = onHand;
     this.executions = new Map();
+    this.executionAllocations = new Map();
     this.recourseReservations = new Map();
     this.remedyExecutions = new Map();
     this.executeCalls = 0;
@@ -85,6 +86,12 @@ export class MockInventoryConnector {
       request.connector !== "mock-inventory-service"
     ) {
       throw new RailError("RECOURSE_UNAVAILABLE", "The connector cannot reserve the requested remedy.");
+    }
+    if (proposal.action_type !== "demo.inventory.allocate/v1") {
+      throw new RailError("RECOURSE_UNAVAILABLE", "The connector only reserves allocation remedies for allocation actions.");
+    }
+    if (!Number.isSafeInteger(request.max_quantity) || !Number.isSafeInteger(proposal.parameters.quantity)) {
+      throw new RailError("RECOURSE_SCOPE_INSUFFICIENT", "The allocation remedy requires integer quantities.");
     }
     if (request.max_quantity < proposal.parameters.quantity) {
       throw new RailError("RECOURSE_SCOPE_INSUFFICIENT", "The requested remedy scope is insufficient.");
@@ -151,6 +158,12 @@ export class MockInventoryConnector {
     return allocation;
   }
 
+  recordAllocation(idempotencyKey, allocationId) {
+    const tracked = this.executionAllocations.get(idempotencyKey) ?? [];
+    tracked.push(allocationId);
+    this.executionAllocations.set(idempotencyKey, tracked);
+  }
+
   async execute(proposal, idempotencyKey, fault = "none") {
     this.executeCalls += 1;
     if (this.executions.has(idempotencyKey)) {
@@ -163,6 +176,7 @@ export class MockInventoryConnector {
       });
     }
     const allocation = this.createAllocation(proposal, `${idempotencyKey}:primary`);
+    this.recordAllocation(idempotencyKey, allocation.allocation_id);
     const result = {
       status: "executed",
       external_id: allocation.allocation_id,
@@ -173,7 +187,8 @@ export class MockInventoryConnector {
     // breaks the allocation invariant; the bounded remedy releases only the
     // allocation bound to this action.
     if (fault === "duplicate" || fault === "remedy-failure") {
-      this.createAllocation(proposal, `${idempotencyKey}:duplicate`);
+      const duplicate = this.createAllocation(proposal, `${idempotencyKey}:duplicate`);
+      this.recordAllocation(idempotencyKey, duplicate.allocation_id);
     }
     if (fault === "lost-response-after-commit") {
       throw new UnknownExecutionError("The connector response was lost after the external effect.", {
@@ -241,16 +256,21 @@ export class MockInventoryConnector {
       this.remedyExecutions.set(idempotencyKey, result);
       return result;
     }
-    // Release exactly one allocation: the one this action created, for this
-    // order. Anything else (another order's allocation, an already released
-    // allocation) is refused rather than silently skipped.
-    const primary = this.executions.get(proposal.idempotency_key);
-    const bound = this.allocations.find(
-      (allocation) =>
-        allocation.allocation_id === primary?.external_id &&
-        allocation.order_id === proposal.target.resource_id &&
-        allocation.status === "active",
-    );
+
+    // Choose the allocation to release: only allocations this action created,
+    // for this order, that are still active. With more than one (the duplicate
+    // fault) the extra allocation is released so the action's own allocation,
+    // which the receipt records, stays live.
+    const tracked = this.executionAllocations.get(proposal.idempotency_key) ?? [];
+    const candidates = tracked
+      .map((allocationId) => this.allocations.find((item) => item.allocation_id === allocationId))
+      .filter(
+        (allocation) =>
+          allocation !== undefined &&
+          allocation.status === "active" &&
+          allocation.order_id === proposal.target.resource_id,
+      );
+    const bound = candidates.length > 1 ? candidates[candidates.length - 1] : candidates[0];
     if (!bound) {
       const result = { status: "failed", idempotency_key: idempotencyKey };
       this.remedyExecutions.set(idempotencyKey, result);
@@ -264,6 +284,12 @@ export class MockInventoryConnector {
       idempotency_key: idempotencyKey,
     };
     this.remedyExecutions.set(idempotencyKey, result);
+    if (fault === "remedy-lost-response-after-commit") {
+      throw new UnknownRemedyError("The remedy response was lost after the external effect.", {
+        external_id: bound.allocation_id,
+        idempotency_key: idempotencyKey,
+      });
+    }
     return result;
   }
 

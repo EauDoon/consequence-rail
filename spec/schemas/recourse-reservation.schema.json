@@ -14,7 +14,6 @@
     "expires_at",
     "remedy_window_seconds",
     "max_attempts",
-    "max_amount_minor",
     "capability_reference_digest",
     "idempotency_key_digest",
     "reserved_at",
@@ -88,6 +87,10 @@
     },
     "signature": {
       "$ref": "#/$defs/signature"
+    },
+    "max_quantity": {
+      "type": "integer",
+      "minimum": 0
     }
   },
   "$defs": {
@@ -113,5 +116,27 @@
         }
       }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "max_amount_minor"
+      ],
+      "not": {
+        "required": [
+          "max_quantity"
+        ]
+      }
+    },
+    {
+      "required": [
+        "max_quantity"
+      ],
+      "not": {
+        "required": [
+          "max_amount_minor"
+        ]
+      }
+    }
+  ]
 }

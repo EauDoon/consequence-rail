@@ -281,13 +281,19 @@ function verifySemantics(bundle) {
 
   semanticAssert(reservation.action_digest === action.action_digest, "Reservation action binding is invalid.");
   semanticAssert(commitment.action_digest === action.action_digest, "Connector commitment action binding is invalid.");
+  const scopeField =
+    action.action_type === "demo.inventory.allocate/v1" ? "max_quantity" : "max_amount_minor";
+  semanticAssert(
+    Object.hasOwn(commitment, scopeField) && Object.hasOwn(reservation, scopeField),
+    `Reservation and commitment must both carry the ${scopeField} remedy scope.`,
+  );
   for (const field of [
     "connector",
     "capability",
     "kind",
     "expires_at",
     "max_attempts",
-    action.action_type === "demo.inventory.allocate/v1" ? "max_quantity" : "max_amount_minor",
+    scopeField,
   ]) {
     semanticAssert(
       commitment[field] === reservation[field],

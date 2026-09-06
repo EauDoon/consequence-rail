@@ -133,7 +133,13 @@ function printRefund(summary, asJson) {
     `execution_calls: ${summary.execute_calls}`,
     `status_calls: ${summary.status_calls}`,
     `remedy_calls: ${summary.remedy_calls}`,
-    `active_refunds: ${summary.active_refunds}`,
+    ...(summary.scenario === "synthetic-inventory-allocation"
+      ? [
+          `active_allocations: ${summary.active_allocations}`,
+          `allocated_quantity: ${summary.allocated_quantity}`,
+          `inventory_on_hand: ${summary.inventory_on_hand}`,
+        ]
+      : [`active_refunds: ${summary.active_refunds}`]),
     `bundle_verification: ${summary.bundle_verification}`,
   ];
   if (summary.expected_rejection) {
