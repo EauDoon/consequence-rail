@@ -83,6 +83,14 @@ explicit recovery trusted-key set.
 Integrity verification checks signatures, event order, hash linkage, artifact
 digests, assurance disclosure and the final receipt.
 
+A settlement receipt only represents a determined final recourse state
+(`active`, `expired`, `released`, or `consumed`). When the connector reports
+an `unknown` final recourse status, receipt generation is refused with
+`RECEIPT_UNSUPPORTED` and the action stays `REVIEW_REQUIRED` with its evidence
+preserved, instead of signing a value the receipt schema and verifiers cannot
+represent. A disputed record is therefore authentic without claiming that
+recovery succeeded.
+
 Full semantic verification requires an `audit` bundle. It also replays legal
 state transitions, validates connector commitment bindings, checks evidence
 source, resource and freshness, reevaluates postconditions and derives the
