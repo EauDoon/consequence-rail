@@ -72,7 +72,7 @@ const PROPOSAL_FIELDS = new Set([
   "evidence_plan",
 ]);
 
-const RECOURSE_INPUT_FIELDS = new Set([
+const RECOURSE_COMMON_INPUT_FIELDS = [
   "action_digest",
   "kind",
   "connector",
@@ -81,9 +81,10 @@ const RECOURSE_INPUT_FIELDS = new Set([
   "expires_at",
   "remedy_window_seconds",
   "max_attempts",
-  "max_amount_minor",
   "idempotency_key",
-]);
+];
+const RECOURSE_INPUT_FIELDS = new Set([...RECOURSE_COMMON_INPUT_FIELDS, "max_amount_minor"]);
+const INVENTORY_RECOURSE_INPUT_FIELDS = new Set([...RECOURSE_COMMON_INPUT_FIELDS, "max_quantity"]);
 const AUTHORIZATION_FIELDS = new Set([
   "allow",
   "policy_id",
@@ -94,6 +95,20 @@ const AUTHORIZATION_FIELDS = new Set([
 const SUBJECT_FIELDS = new Set(["type", "id"]);
 const TARGET_FIELDS = new Set(["connector", "resource_type", "resource_id"]);
 const REFUND_PARAMETER_FIELDS = new Set(["amount_minor", "currency"]);
+const INVENTORY_PARAMETER_FIELDS = new Set(["sku", "quantity"]);
+const DEMO_ACTION_TYPES = new Set([
+  "demo.refund.issue/v1",
+  "demo.email.send/v1",
+  "demo.inventory.allocate/v1",
+]);
+/**
+ * The remedy scope field is domain-specific: refunds scope by minor currency
+ * amount, inventory allocations by unit quantity. Each action type keeps its
+ * own field so no domain is disguised as another.
+ */
+export function recourseScopeField(actionType) {
+  return actionType === "demo.inventory.allocate/v1" ? "max_quantity" : "max_amount_minor";
+}
 const EMAIL_PARAMETER_FIELDS = new Set(["recipient_id", "subject"]);
 const EVIDENCE_PLAN_FIELDS = new Set(["source", "max_age_seconds"]);
 const EVIDENCE_FIELDS = new Set([
@@ -105,7 +120,7 @@ const EVIDENCE_FIELDS = new Set([
   "facts",
 ]);
 const EVIDENCE_RESOURCE_FIELDS = new Set(["type", "id"]);
-const CONNECTOR_COMMITMENT_FIELDS = new Set([
+const CONNECTOR_COMMITMENT_COMMON_FIELDS = [
   "schema_version",
   "reservation_token",
   "action_digest",
@@ -114,10 +129,17 @@ const CONNECTOR_COMMITMENT_FIELDS = new Set([
   "kind",
   "expires_at",
   "max_attempts",
-  "max_amount_minor",
   "reserved_at",
   "status",
   "signature",
+];
+const CONNECTOR_COMMITMENT_FIELDS = new Set([
+  ...CONNECTOR_COMMITMENT_COMMON_FIELDS,
+  "max_amount_minor",
+]);
+const INVENTORY_CONNECTOR_COMMITMENT_FIELDS = new Set([
+  ...CONNECTOR_COMMITMENT_COMMON_FIELDS,
+  "max_quantity",
 ]);
 const RECOURSE_STATUS_FIELDS = new Set(["reservation_token", "status"]);
 const CONNECTOR_CAPABILITY_FIELDS = new Set([
@@ -480,7 +502,9 @@ export class ConsequenceRail {
       expires_at: request.expires_at,
       remedy_window_seconds: request.remedy_window_seconds,
       max_attempts: request.max_attempts,
-      max_amount_minor: request.max_amount_minor,
+      ...(recourseScopeField(record.proposal.action_type) === "max_quantity"
+        ? { max_quantity: request.max_quantity }
+        : { max_amount_minor: request.max_amount_minor }),
       idempotency_key_digest: digest(request.idempotency_key),
       connector_commitment: connectorCommitment,
     };
@@ -1299,7 +1323,7 @@ export class ConsequenceRail {
       "Unsupported ActionProposal schema version.",
     );
     assert(
-      input.action_type === "demo.refund.issue/v1" || input.action_type === "demo.email.send/v1",
+      DEMO_ACTION_TYPES.has(input.action_type),
       "SCHEMA_INVALID",
       "Unsupported action type.",
     );
@@ -1350,7 +1374,18 @@ export class ConsequenceRail {
     );
     evaluatePostcondition(input.postcondition, { facts: {} });
 
-    if (input.action_type === "demo.refund.issue/v1") {
+    if (input.action_type === "demo.inventory.allocate/v1") {
+      assertExactFields(
+        input.parameters,
+        INVENTORY_PARAMETER_FIELDS,
+        "ActionProposal.parameters",
+      );
+      assertNonEmptyString(input.parameters.sku, "ActionProposal.parameters.sku");
+      assertSafeInteger(input.parameters.quantity, "ActionProposal.parameters.quantity", {
+        min: 1,
+        message: "Allocation quantity must be a positive integer.",
+      });
+    } else if (input.action_type === "demo.refund.issue/v1") {
       assertExactFields(
         input.parameters,
         REFUND_PARAMETER_FIELDS,
@@ -1391,9 +1426,10 @@ export class ConsequenceRail {
   }
 
   validateReservation(record, input) {
+    const scopeField = recourseScopeField(record.proposal.action_type);
     assertExactFields(
       input,
-      RECOURSE_INPUT_FIELDS,
+      scopeField === "max_quantity" ? INVENTORY_RECOURSE_INPUT_FIELDS : RECOURSE_INPUT_FIELDS,
       "RecourseReservation request",
       "RECOURSE_INVALID",
     );
@@ -1448,12 +1484,12 @@ export class ConsequenceRail {
       },
     );
     assertSafeInteger(
-      input.max_amount_minor,
-      "RecourseReservation.max_amount_minor",
+      input[scopeField],
+      `RecourseReservation.${scopeField}`,
       {
         min: 0,
         code: "RECOURSE_INVALID",
-        message: "Recourse max_amount_minor must be a non-negative integer.",
+        message: `Recourse ${scopeField} must be a non-negative integer.`,
       },
     );
     assert(
@@ -1475,7 +1511,13 @@ export class ConsequenceRail {
       "RECOURSE_WINDOW_TOO_SHORT",
       "Recourse validity must cover permit expiry and the remedy window.",
     );
-    if (record.proposal.parameters?.amount_minor !== undefined) {
+    if (record.proposal.parameters?.quantity !== undefined) {
+      assert(
+        input.max_quantity >= record.proposal.parameters.quantity,
+        "RECOURSE_INVALID",
+        "Recourse quantity does not cover the proposed allocation.",
+      );
+    } else if (record.proposal.parameters?.amount_minor !== undefined) {
       assert(
         input.max_amount_minor >= record.proposal.parameters.amount_minor,
         "RECOURSE_INVALID",
@@ -1486,9 +1528,12 @@ export class ConsequenceRail {
   }
 
   validateConnectorCommitment(record, request, commitment) {
+    const commitmentScopeField = recourseScopeField(record.proposal.action_type);
     assertExactFields(
       commitment,
-      CONNECTOR_COMMITMENT_FIELDS,
+      commitmentScopeField === "max_quantity"
+        ? INVENTORY_CONNECTOR_COMMITMENT_FIELDS
+        : CONNECTOR_COMMITMENT_FIELDS,
       "ConnectorRecourseCommitment",
       "RECOURSE_COMMITMENT_INVALID",
     );
@@ -1512,7 +1557,7 @@ export class ConsequenceRail {
       "kind",
       "expires_at",
       "max_attempts",
-      "max_amount_minor",
+      recourseScopeField(record.proposal.action_type),
     ]) {
       assert(
         commitment[field] === request[field],

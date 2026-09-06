@@ -21,6 +21,8 @@
 - Integrity verification now rejects settlement receipts whose technical claim or limitations overreach the protocol's bounded language, including receipt-profile bundles.
 - Added tests that a recovery-gated rail refuses expired, review-compensated, and HTTP-submitted failed drills before permit or execution.
 
+- New bounded synthetic inventory-allocation domain (`demo.inventory.allocate/v1`): a synthetic order allocation of a declared SKU quantity with a pre-reserved remedy that reverses only the allocation bound to the action. Inventory never goes negative, an allocation is never restored twice, another order's allocation is never released, and unknown outcomes reconcile instead of retrying. Available as `crctl demo inventory` and `runInventoryDemo`.
+- The remedy scope field is now domain-specific: `max_quantity` for inventory allocations, `max_amount_minor` for refunds and email. Bundle validation, semantic verification, and the published schemas require exactly the scope field matching the action type, so no domain can pass as another.
 ## Version 0.2.0 - 27 July 2026
 
 - Added Recovery Preflight contracts, trace-bound signed drill attestations

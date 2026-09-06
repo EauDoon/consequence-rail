@@ -24,7 +24,8 @@
     "action_type": {
       "enum": [
         "demo.refund.issue/v1",
-        "demo.email.send/v1"
+        "demo.email.send/v1",
+        "demo.inventory.allocate/v1"
       ]
     },
     "subject": {
@@ -129,6 +130,26 @@
             "properties": {
               "amount_minor": { "type": "integer", "minimum": 1 },
               "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action_type": { "const": "demo.inventory.allocate/v1" }
+        }
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sku", "quantity"],
+            "properties": {
+              "sku": { "type": "string", "minLength": 1 },
+              "quantity": { "type": "integer", "minimum": 1 }
             }
           }
         }
