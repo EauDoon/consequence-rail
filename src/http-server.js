@@ -429,7 +429,12 @@ export function createReferenceServer({
       if (error instanceof RailError) {
         send(response, errorStatus(error), failureBody(error, requestId, extra));
         if (oversizedRequests.has(request)) {
-          response.once("finish", () => request.destroy());
+          // Graceful FIN, not destroy (RST): destroy discards the queued 413
+          // on some platforms, while FIN delivers it and still frees the
+          // socket instead of waiting for bytes already refused.
+          response.once("finish", () => {
+            request.socket?.end();
+          });
         }
         return;
       }
