@@ -287,7 +287,7 @@ function verifySemantics(bundle) {
     "kind",
     "expires_at",
     "max_attempts",
-    "max_amount_minor",
+    action.action_type === "demo.inventory.allocate/v1" ? "max_quantity" : "max_amount_minor",
   ]) {
     semanticAssert(
       commitment[field] === reservation[field],

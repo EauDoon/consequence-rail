@@ -60,6 +60,7 @@ const PROPOSAL_FIELDS = new Set([
 const SUBJECT_FIELDS = new Set(["type", "id"]);
 const TARGET_FIELDS = new Set(["connector", "resource_type", "resource_id"]);
 const REFUND_PARAMETER_FIELDS = new Set(["amount_minor", "currency"]);
+const INVENTORY_PARAMETER_FIELDS = new Set(["sku", "quantity"]);
 const EMAIL_PARAMETER_FIELDS = new Set(["recipient_id", "subject"]);
 const POSTCONDITION_FIELDS = new Set(["op", "clauses"]);
 const POSTCONDITION_CLAUSE_FIELDS = new Set(["path", "op", "value"]);
@@ -75,6 +76,7 @@ const RESERVATION_FIELDS = new Set([
   "remedy_window_seconds",
   "max_attempts",
   "max_amount_minor",
+  "max_quantity",
   "capability_reference_digest",
   "idempotency_key_digest",
   "reserved_by",
@@ -84,7 +86,9 @@ const RESERVATION_FIELDS = new Set([
   "signature",
 ]);
 const RESERVATION_REQUIRED_FIELDS = new Set(
-  [...RESERVATION_FIELDS].filter((field) => !["reserved_by", "checked_at"].includes(field)),
+  [...RESERVATION_FIELDS].filter(
+    (field) => !["reserved_by", "checked_at", "max_amount_minor", "max_quantity"].includes(field),
+  ),
 );
 const COMMITMENT_FIELDS = new Set([
   "schema_version",
@@ -96,10 +100,16 @@ const COMMITMENT_FIELDS = new Set([
   "expires_at",
   "max_attempts",
   "max_amount_minor",
+  "max_quantity",
   "reserved_at",
   "status",
   "signature",
 ]);
+const COMMITMENT_REQUIRED_FIELDS = new Set(
+  [...COMMITMENT_FIELDS].filter(
+    (field) => !["max_amount_minor", "max_quantity"].includes(field),
+  ),
+);
 const PERMIT_FIELDS = new Set([
   "schema_version",
   "permit_id",
@@ -289,7 +299,7 @@ function proposal(value, expectedVersion) {
   if (expectedVersion && value.schema_version !== expectedVersion) {
     invalid("ActionProposal schema version does not match the settlement bundle.");
   }
-  if (!new Set(["demo.refund.issue/v1", "demo.email.send/v1"]).has(value.action_type)) {
+  if (!new Set(["demo.refund.issue/v1", "demo.email.send/v1", "demo.inventory.allocate/v1"]).has(value.action_type)) {
     invalid("ActionProposal action type is unsupported.");
   }
   exactObject(value.subject, SUBJECT_FIELDS, SUBJECT_FIELDS, "ActionProposal.subject");
@@ -299,7 +309,16 @@ function proposal(value, expectedVersion) {
   for (const field of TARGET_FIELDS) {
     string(value.target[field], `ActionProposal.target.${field}`, { nonempty: true });
   }
-  if (value.action_type === "demo.refund.issue/v1") {
+  if (value.action_type === "demo.inventory.allocate/v1") {
+    exactObject(
+      value.parameters,
+      INVENTORY_PARAMETER_FIELDS,
+      INVENTORY_PARAMETER_FIELDS,
+      "ActionProposal.parameters",
+    );
+    string(value.parameters.sku, "ActionProposal.parameters.sku", { nonempty: true });
+    integer(value.parameters.quantity, "ActionProposal.parameters.quantity", 1);
+  } else if (value.action_type === "demo.refund.issue/v1") {
     exactObject(
       value.parameters,
       REFUND_PARAMETER_FIELDS,
@@ -351,8 +370,22 @@ function action(value, expectedProposalVersion) {
   if (Object.hasOwn(value, "proposal")) proposal(value.proposal, expectedProposalVersion);
 }
 
-function commitment(value) {
-  exactObject(value, COMMITMENT_FIELDS, COMMITMENT_FIELDS, "ConnectorRecourseCommitment");
+/**
+ * The remedy scope field is domain-specific. Exactly one scope field must be
+ * present, and it must be the one the action type uses, so an inventory
+ * reservation cannot pass as a refund reservation or the reverse.
+ */
+function scopeInteger(value, scopeField, label) {
+  const present = ["max_amount_minor", "max_quantity"].filter((field) => Object.hasOwn(value, field));
+  if (present.length !== 1 || present[0] !== scopeField) {
+    invalid(`${label} must carry exactly one remedy scope field (${scopeField}).`);
+    return;
+  }
+  integer(value[scopeField], `${label}.${scopeField}`, 0);
+}
+
+function commitment(value, scopeField = "max_amount_minor") {
+  exactObject(value, COMMITMENT_FIELDS, COMMITMENT_REQUIRED_FIELDS, "ConnectorRecourseCommitment");
   if (value.schema_version !== "consequence-rail/connector-recourse-commitment/v0.1") {
     invalid("ConnectorRecourseCommitment schema version is unsupported.");
   }
@@ -365,13 +398,13 @@ function commitment(value) {
   }
   timestamp(value.expires_at, "ConnectorRecourseCommitment.expires_at");
   integer(value.max_attempts, "ConnectorRecourseCommitment.max_attempts", 1);
-  integer(value.max_amount_minor, "ConnectorRecourseCommitment.max_amount_minor");
+  scopeInteger(value, scopeField, "ConnectorRecourseCommitment");
   timestamp(value.reserved_at, "ConnectorRecourseCommitment.reserved_at");
   if (value.status !== "active") invalid("ConnectorRecourseCommitment must be active.");
   signature(value.signature, "ConnectorRecourseCommitment.signature");
 }
 
-function reservation(value) {
+function reservation(value, scopeField = "max_amount_minor") {
   exactObject(
     value,
     RESERVATION_FIELDS,
@@ -401,7 +434,7 @@ function reservation(value) {
     MAX_DURATION_SECONDS,
   );
   integer(value.max_attempts, "RecourseReservation.max_attempts", 1);
-  integer(value.max_amount_minor, "RecourseReservation.max_amount_minor");
+  scopeInteger(value, scopeField, "RecourseReservation");
   if (Object.hasOwn(value, "reserved_by")) {
     string(value.reserved_by, "RecourseReservation.reserved_by");
   }
@@ -409,7 +442,7 @@ function reservation(value) {
     timestamp(value.checked_at, "RecourseReservation.checked_at");
   }
   timestamp(value.reserved_at, "RecourseReservation.reserved_at");
-  commitment(value.connector_commitment);
+  commitment(value.connector_commitment, scopeField);
   signature(value.signature, "RecourseReservation.signature");
 }
 
@@ -568,7 +601,10 @@ export function validateSettlementBundle(bundle) {
     invalid("SettlementBundle profile is unsupported.");
   }
   action(bundle.action, versionBinding.proposal);
-  reservation(bundle.recourse_reservation);
+  const scopeField = bundle.action?.action_type === "demo.inventory.allocate/v1"
+    ? "max_quantity"
+    : "max_amount_minor";
+  reservation(bundle.recourse_reservation, scopeField);
   permit(bundle.action_permit);
   stringArray(bundle.evidence_manifest, "SettlementBundle.evidence_manifest", { digests: true });
   if (!Array.isArray(bundle.outcome_evidence)) {

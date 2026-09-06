@@ -3,6 +3,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DEMO_FAULTS, runIrreversibleDemo, runRefundDemo } from "../src/demo.js";
+import {
+  INVENTORY_DEMO_FAULTS,
+  runInventoryDemo,
+} from "../src/inventory-demo.js";
 import { ASSURANCE_MODES } from "../src/rail.js";
 import { RailError } from "../src/errors.js";
 import {
@@ -242,6 +246,31 @@ async function main() {
       printRefund(result.summary, Boolean(options.json));
       return;
     }
+    if (subcommand === "inventory") {
+      requireNoExtra(positional, 2, "demo inventory");
+      assertFlags(options, new Set(["fault", "assurance", "json", "out"]));
+      const fault = options.fault ?? "none";
+      const assuranceMode = options.assurance ?? "enforced";
+      if (!INVENTORY_DEMO_FAULTS.includes(fault)) {
+        throw usage(
+          `Unknown inventory demo fault '${fault}'. Expected one of: ${INVENTORY_DEMO_FAULTS.join(", ")}.`,
+        );
+      }
+      if (!ASSURANCE_MODES.includes(assuranceMode)) {
+        throw usage(
+          `Unknown assurance mode '${assuranceMode}'. Expected one of: ${ASSURANCE_MODES.join(", ")}.`,
+        );
+      }
+      const result = await runInventoryDemo({ fault, assuranceMode });
+      if (options.out) {
+        if (!result.bundle) {
+          throw new RailError("RECEIPT_NOT_AVAILABLE", "This scenario did not produce a settlement bundle.");
+        }
+        writeExclusiveJson(options.out, result.bundle);
+      }
+      printRefund(result.summary, Boolean(options.json));
+      return;
+    }
     if (subcommand === "irreversible") {
       requireNoExtra(positional, 2, "demo irreversible");
       assertFlags(options, new Set(["json"]));
@@ -277,7 +306,7 @@ async function main() {
       return;
     }
     throw usage(
-      `Unknown demo scenario '${subcommand}'. Expected refund, irreversible, or recovery-preflight.`,
+      `Unknown demo scenario '${subcommand}'. Expected refund, inventory, irreversible, or recovery-preflight.`,
     );
   }
 
