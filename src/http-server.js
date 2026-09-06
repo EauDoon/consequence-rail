@@ -22,7 +22,12 @@ function requestError(code, message, details = {}) {
   return new RailError(code, message, details);
 }
 
+const oversizedRequests = new WeakSet();
+
 async function readJson(request, { required = false } = {}) {
+  // Rejecting before the body is consumed leaves the client's upload in
+  // flight. Destroy the request so the socket is not held open waiting for
+  // bytes the sidecar has already decided to refuse.
   const contentEncoding = request.headers["content-encoding"];
   if (contentEncoding && contentEncoding.toLowerCase() !== "identity") {
     throw requestError(
@@ -37,6 +42,10 @@ async function readJson(request, { required = false } = {}) {
       throw requestError("REQUEST_INVALID", "Content-Length is invalid.");
     }
     if (Number(declaredLength) > MAX_BODY_BYTES) {
+      // The declared body is still in flight and will never be read. Mark the
+      // request so the response is delivered and the socket is then closed,
+      // instead of staying open for bytes the sidecar already refused.
+      oversizedRequests.add(request);
       throw requestError("REQUEST_TOO_LARGE", "Request body is too large.");
     }
   }
@@ -419,6 +428,14 @@ export function createReferenceServer({
         : {};
       if (error instanceof RailError) {
         send(response, errorStatus(error), failureBody(error, requestId, extra));
+        if (oversizedRequests.has(request)) {
+          // Graceful FIN, not destroy (RST): destroy discards the queued 413
+          // on some platforms, while FIN delivers it and still frees the
+          // socket instead of waiting for bytes already refused.
+          response.once("finish", () => {
+            request.socket?.end();
+          });
+        }
         return;
       }
       process.stderr.write(
