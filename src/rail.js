@@ -638,14 +638,15 @@ export class ConsequenceRail {
         },
       );
     }
-    record.permit_uses += 1;
+    const useNumber = record.permit_uses + 1;
     this.transition(record, "EXECUTING", "PERMIT_CONSUMED", {
       permit_digest: record.permit_digest,
-      use_number: record.permit_uses,
+      use_number: useNumber,
     });
+    record.permit_uses = useNumber;
 
     try {
-      record.execution = assertConnectorResult(
+      const execution = assertConnectorResult(
         await this.connector.execute(
           record.proposal,
           record.proposal.idempotency_key,
@@ -657,10 +658,11 @@ export class ConsequenceRail {
         "CONNECTOR_RESULT_INVALID",
       );
       this.transition(record, "EXECUTED", "CONNECTOR_EXECUTED", {
-        external_reference_digest: digest(record.execution.external_id ?? record.execution.idempotency_key),
+        external_reference_digest: digest(execution.external_id ?? execution.idempotency_key),
       });
+      record.execution = execution;
     } catch {
-      record.execution = {
+      const execution = {
         status: "unknown",
         idempotency_key: record.proposal.idempotency_key,
         external_id: null,
@@ -668,6 +670,7 @@ export class ConsequenceRail {
       this.transition(record, "UNKNOWN", "EXECUTION_AMBIGUOUS", {
         idempotency_key_digest: digest(record.proposal.idempotency_key),
       });
+      record.execution = execution;
     }
 
     return this.inspect(actionId);
@@ -683,12 +686,11 @@ export class ConsequenceRail {
       "Connector execution status",
       "RECONCILIATION_INVALID",
     );
-    record.execution = status;
-
     if (status.status === "executed") {
       this.transition(record, "EXECUTED", "STATUS_CONFIRMED_EXECUTED", {
         external_reference_digest: digest(status.external_id ?? status.idempotency_key),
       });
+      record.execution = status;
     } else if (status.status === "no_effect") {
       this.transition(record, "FAILED", "STATUS_CONFIRMED_NO_EFFECT", {
         idempotency_key_digest: digest(status.idempotency_key),
@@ -697,9 +699,11 @@ export class ConsequenceRail {
         release: true,
         reason: "STATUS_CONFIRMED_NO_EFFECT",
       });
+      record.execution = status;
     } else {
       this.transition(record, "REVIEW_REQUIRED", "STATUS_UNRESOLVED", {});
       this.close(record);
+      record.execution = status;
     }
     return this.inspect(actionId);
   }
@@ -752,12 +756,12 @@ export class ConsequenceRail {
       evaluation,
       captured_by: "consequence-rail",
     }, this.signer);
-    record.evidence.push(accepted);
     this.eventStore.append(actionId, "EVIDENCE_ACCEPTED", "rail", {
       evidence_digest: digest(accepted),
       source: accepted.source,
       satisfied: evaluation.satisfied,
     });
+    record.evidence.push(accepted);
 
     if (evaluation.satisfied) {
       this.transition(record, "SATISFIED", "POSTCONDITION_SATISFIED", {
@@ -822,13 +826,14 @@ export class ConsequenceRail {
       "Only a pre-authorized, bounded reversible remedy may run automatically.",
     );
 
-    record.remedy_attempts += 1;
+    const attempt = record.remedy_attempts + 1;
     this.transition(record, "REMEDIATING", "REMEDY_STARTED", {
-      attempt: record.remedy_attempts,
+      attempt,
       reservation_digest: record.reservation_digest,
     });
+    record.remedy_attempts = attempt;
     try {
-      record.remedy_result = assertConnectorResult(
+      const remedyResult = assertConnectorResult(
         await Reflect.apply(remediate, this.connector, [
           record.proposal,
           record.reservation,
@@ -840,8 +845,9 @@ export class ConsequenceRail {
         "Connector remedy result",
         "CONNECTOR_RESULT_INVALID",
       );
+      record.remedy_result = remedyResult;
     } catch {
-      record.remedy_result = {
+      const remedyResult = {
         status: "unknown",
         idempotency_key: record.remedy_idempotency_key,
         external_id: null,
@@ -849,6 +855,7 @@ export class ConsequenceRail {
       this.transition(record, "REMEDY_UNKNOWN", "REMEDY_EXECUTION_AMBIGUOUS", {
         idempotency_key_digest: record.reservation.idempotency_key_digest,
       });
+      record.remedy_result = remedyResult;
       return this.inspect(actionId);
     }
 
@@ -888,23 +895,24 @@ export class ConsequenceRail {
       "Connector remedy status",
       "RECONCILIATION_INVALID",
     );
-    record.remedy_result = status;
-
     if (status.status === "remediated") {
       this.transition(record, "REMEDY_VERIFYING", "REMEDY_STATUS_CONFIRMED", {
         result_digest: digest(status),
       });
+      record.remedy_result = status;
       await this.verifyRemedyOutcome(record, { fault: evidenceFault });
     } else if (status.status === "no_effect" || status.status === "failed") {
       this.transition(record, "REMEDY_FAILED", "REMEDY_STATUS_CONFIRMED_NO_EFFECT", {
         result: status.status,
       });
       this.close(record);
+      record.remedy_result = status;
     } else {
       this.transition(record, "REVIEW_REQUIRED", "REMEDY_STATUS_UNRESOLVED", {
         idempotency_key_digest: record.reservation.idempotency_key_digest,
       });
       this.close(record);
+      record.remedy_result = status;
     }
     return this.inspect(actionId);
   }
@@ -938,11 +946,11 @@ export class ConsequenceRail {
       captured_by: "consequence-rail",
       phase: "post-remedy",
     }, this.signer);
-    record.evidence.push(accepted);
     this.eventStore.append(record.action_id, "REMEDY_EVIDENCE_ACCEPTED", "rail", {
       evidence_digest: digest(accepted),
       satisfied: evaluation.satisfied,
     });
+    record.evidence.push(accepted);
 
     if (evaluation.satisfied) {
       this.transition(record, "REMEDIATED", "REMEDY_VERIFIED", {
