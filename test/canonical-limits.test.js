@@ -22,3 +22,22 @@ test("JSON traversal allows shared references but rejects hidden data without re
   assert.throws(() => canonicalJson(accessor), { code: "CANONICALIZATION_FAILED" });
   assert.equal(reads, 0);
 });
+import { createDemoSigner, demoTrustedKeys, signArtifact, verifyArtifact } from "../src/signing.js";
+
+test("signing snapshots nested input so later caller mutation cannot corrupt signed bytes", () => {
+  const body = { nested: { values: [1, 2] } };
+  const signed = signArtifact(body, createDemoSigner());
+  body.nested.values[0] = 99;
+  assert.equal(signed.nested.values[0], 1);
+  assert.equal(verifyArtifact(signed, demoTrustedKeys()).valid, true);
+  signed.nested.values[0] = 50;
+  assert.equal(body.nested.values[0], 99);
+  assert.throws(() => verifyArtifact(signed, demoTrustedKeys()), { code: "SIGNATURE_INVALID" });
+});
+
+test("verification rejects accessor-backed signatures before invoking them", () => {
+  let reads = 0;
+  const artifact = Object.defineProperty({}, "signature", { enumerable: true, get() { reads++; return {}; } });
+  assert.throws(() => verifyArtifact(artifact, demoTrustedKeys()), { code: "CANONICALIZATION_FAILED" });
+  assert.equal(reads, 0);
+});

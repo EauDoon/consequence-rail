@@ -5,7 +5,7 @@ import {
   sign as cryptoSign,
   verify as cryptoVerify,
 } from "node:crypto";
-import { canonicalJson, digest, without } from "./canonical.js";
+import { canonicalJson, deepClone, digest, without } from "./canonical.js";
 import { RailError } from "./errors.js";
 
 const ED25519_PKCS8_PREFIX = Buffer.concat([
@@ -69,7 +69,7 @@ export function signArtifact(body, signer) {
   if (!isPlainObject(body) || !signer?.privateKey || !signer?.kid) {
     throw new RailError("SIGNING_INVALID", "Artifact body and signer are required.");
   }
-  const unsigned = without(body, ["signature"]);
+  const unsigned = deepClone(without(body, ["signature"]));
   const value = cryptoSign(null, Buffer.from(canonicalJson(unsigned), "utf8"), signer.privateKey)
     .toString("base64url");
 
@@ -84,6 +84,7 @@ export function signArtifact(body, signer) {
 }
 
 export function verifyArtifact(artifact, trustedKeys) {
+  artifact = deepClone(artifact);
   if (!isPlainObject(artifact) || !Object.hasOwn(artifact, "signature")) {
     throw new RailError("SIGNATURE_INVALID", "Artifact is missing a supported signature.");
   }

@@ -186,3 +186,7 @@ Do not describe the reference as production-ready while any of these remain:
 - no independent evidence trust adapter
 - incomplete cross-language canonicalization vectors
 - no independent security review
+
+### Signed input ownership
+
+Signing copies the complete unsigned JSON body before signing and returning it. Later mutation of caller-owned nested objects cannot change the signed snapshot. Verification copies and validates data fields before accessing signature metadata. Returned artifacts remain editable for explicit tamper tests; any byte-changing edit invalidates their signature.
