@@ -8,8 +8,36 @@ import { fileURLToPath } from "node:url";
 import { runRefundDemo } from "../src/demo.js";
 import { runRecoveryPreflightDemo } from "../src/recovery-demo.js";
 import { digest } from "../src/canonical.js";
+import { MAX_ARTIFACT_BYTES } from "../src/artifact-files.js";
+import { receiptBundle } from "../src/review.js";
+import { demoTrustedKeys, demoConnectorTrustedKeys } from "../src/signing.js";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = args => spawnSync(process.execPath, [join(root, "cmd/crctl.js"), ...args], { cwd: root, encoding: "utf8", timeout: 10000 });
+
+test("receipt exports round-trip at the byte boundary and preserve destinations when serialization exceeds it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-export-bound-"));
+  const audit = (await runRefundDemo()).bundle;
+  const pad = artifact => {
+    artifact.trust_hint.warning = "";
+    artifact.trust_hint.warning = "x".repeat(MAX_ARTIFACT_BYTES - Buffer.byteLength(JSON.stringify(artifact)));
+    return JSON.stringify(artifact);
+  };
+  const input = join(dir, "audit.json"), output = join(dir, "receipt.json");
+  writeFileSync(input, pad(audit));
+  assert.equal(cli(["bundle", "receipt", input, "--out", output]).status, 0);
+  assert(readFileSync(output).byteLength <= MAX_ARTIFACT_BYTES);
+  assert.equal(cli(["bundle", "review", output]).status, 0);
+  const receipt = receiptBundle(audit, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() });
+  writeFileSync(input, pad(receipt));
+  const before = readFileSync(output);
+  const failed = cli(["bundle", "receipt", input, "--out", output]);
+  assert.equal(failed.status, 1); assert.equal(failed.stdout, "");
+  assert.equal(JSON.parse(failed.stderr).code, "ARTIFACT_TOO_LARGE");
+  assert.deepEqual(readFileSync(output), before);
+  const absent = join(dir, "not-created.json");
+  assert.equal(cli(["bundle", "receipt", input, "--out", absent]).status, 1);
+  assert.equal(existsSync(absent), false);
+});
 
 test("all offline report inputs support independent digest pins before report or export", async () => {
   const dir = mkdtempSync(join(tmpdir(), "rail-review-pin-"));

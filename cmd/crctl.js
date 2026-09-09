@@ -21,7 +21,7 @@ import {
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
-import { assertArtifactDigest, readArtifactFile } from "../src/artifact-files.js";
+import { assertArtifactDigest, readArtifactFile, serializeArtifact } from "../src/artifact-files.js";
 import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
 import { verifyArtifactFiles, verifyRecoveryFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
@@ -206,8 +206,9 @@ function printRecoveryPreflight(summary, asJson) {
 }
 
 function writeExclusiveJson(path, value) {
+  const text = serializeArtifact(value);
   try {
-    writeFileSync(resolve(path), `${JSON.stringify(value, null, 2)}\n`, {
+    writeFileSync(resolve(path), text, {
       encoding: "utf8",
       flag: "wx",
     });

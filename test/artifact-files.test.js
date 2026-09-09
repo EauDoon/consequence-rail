@@ -3,7 +3,16 @@ import test from "node:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_ARTIFACT_BYTES, readArtifactFile } from "../src/artifact-files.js";
+import { MAX_ARTIFACT_BYTES, readArtifactFile, serializeArtifact } from "../src/artifact-files.js";
+
+test("artifact serialization counts UTF-8 and final LF, using compact fallback within the read cap", () => {
+  const raw = { value: "é".repeat(Math.floor((MAX_ARTIFACT_BYTES - 13) / 2)) };
+  const text = serializeArtifact(raw);
+  assert(Buffer.byteLength(text) <= MAX_ARTIFACT_BYTES);
+  assert.deepEqual(JSON.parse(text), raw);
+  assert(text.endsWith("\n"));
+  assert.throws(() => serializeArtifact({ value: "x".repeat(MAX_ARTIFACT_BYTES) }), { code: "ARTIFACT_TOO_LARGE" });
+});
 
 test("artifact files accept UTF-8 JSON and reject oversized, invalid encoding and nonfiles", () => {
   const dir = mkdtempSync(join(tmpdir(), "rail-artifact-"));

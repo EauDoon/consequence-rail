@@ -12,6 +12,10 @@ remain unchanged. The output uses the existing receipt profile, whose review
 checks integrity only. This is data minimization, not anonymization: signed
 event metadata and connector commitments remain. Existing output files are
 never overwritten. Keep the original audit file for semantic replay.
+Serialized artifacts, including their final newline, must fit the same 1 MiB
+loader cap. Large exports use compact JSON when indentation would exceed it;
+if compact output is still too large, export fails before creating or changing
+the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
