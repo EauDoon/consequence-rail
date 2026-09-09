@@ -358,3 +358,7 @@ The public release status and maintenance boundaries are recorded in
 Licensed under the [Apache License 2.0](LICENSE).
 
 Public identity: EauDoon.
+
+## Offline artifact input limits
+
+CLI verification reads regular files only, caps each input at 1 MiB, requires valid UTF-8 JSON, and applies the canonical JSON structural limits before verification. Oversized files, invalid encodings, prototype-sensitive fields, and excessive nesting fail before signatures or lifecycle semantics are evaluated.

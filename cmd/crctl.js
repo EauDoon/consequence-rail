@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DEMO_FAULTS, runIrreversibleDemo, runRefundDemo } from "../src/demo.js";
 import {
@@ -20,6 +20,8 @@ import {
   demoTrustedKeys,
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
+
+import { readArtifactFile } from "../src/artifact-files.js";
 
 const VALUE_FLAGS = {
   "--fault": "fault",
@@ -173,26 +175,6 @@ function printRecoveryPreflight(summary, asJson) {
   );
 }
 
-function readJsonFile(path) {
-  let text;
-  try {
-    text = readFileSync(resolve(path), "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw usage(`File not found: ${path}.`);
-    }
-    throw usage(`Could not read file: ${path}.`);
-  }
-  if (text.trim() === "") {
-    throw usage(`File is empty: ${path}.`);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw usage(`File is not valid JSON: ${path}.`);
-  }
-}
-
 function writeExclusiveJson(path, value) {
   try {
     writeFileSync(resolve(path), `${JSON.stringify(value, null, 2)}\n`, {
@@ -325,7 +307,7 @@ async function main() {
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
     assertFlags(options, new Set(["json"]));
-    const bundle = readJsonFile(target);
+    const bundle = readArtifactFile(target);
     if (subcommand === "verify") {
       const result = verifyBundle(bundle, {
         trustedKeys: demoTrustedKeys(),
@@ -383,7 +365,7 @@ async function main() {
     }
     requireNoExtra(positional, 3, "recovery-preflight verify");
     assertFlags(options, new Set(["json"]));
-    const bundle = readJsonFile(target);
+    const bundle = readArtifactFile(target);
     const result = verifyRecoveryPreflight(bundle, {
       trustedKeys: demoRecoveryTrustedKeys(),
     });
