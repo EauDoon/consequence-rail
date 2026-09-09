@@ -27,6 +27,8 @@ import { compareBundles, reviewBundle } from "../src/review.js";
 
 import { verifyArtifactFiles } from "../src/batch.js";
 
+import { scenarioCatalog } from "../src/scenarios.js";
+
 const VALUE_FLAGS = {
   "--fault": "fault",
   "--assurance": "assurance",
@@ -91,6 +93,8 @@ function printHelp() {
   process.stdout.write(`Consequence Rail CLI
 
 Usage:
+  crctl demo list [--json]
+  crctl demo inventory [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo irreversible [--json]
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
@@ -213,6 +217,12 @@ async function main() {
   const [command, subcommand, target] = positional;
 
   if (command === "demo") {
+    if (subcommand === "list") {
+      requireNoExtra(positional, 2, "demo list");
+      assertFlags(options, new Set(["json"]));
+      process.stdout.write(`${JSON.stringify(scenarioCatalog(), null, 2)}\n`);
+      return;
+    }
     if (!subcommand) {
       throw usage("Missing demo scenario. Expected refund, irreversible, or recovery-preflight.");
     }

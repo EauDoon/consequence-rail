@@ -370,3 +370,7 @@ Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata,
 Compare two saved artifacts with `node ./cmd/crctl.js bundle compare left.json right.json --json`. Both must pass verification. The report distinguishes the same action, the same signed receipt, and the same canonical bundle, so an audit/receipt profile change is distinguishable from a different settlement. A comparison never selects an authoritative receipt.
 
 Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.json two.json --json`. Files are checked sequentially with independent results. Every file must pass full semantic verification; receipt-only profiles fail this strict command. Any failure produces a nonzero exit status after all files have been checked.
+
+## Discover synthetic exercises
+
+`node ./cmd/crctl.js demo list --json` lists refund, inventory, recovery-preflight and irreversible-action exercises, including every fault's purpose and expected enforced-mode outcome. Catalog reads do not execute an action. The inventory scenario is available with the same fault and artifact export flags as refund.
