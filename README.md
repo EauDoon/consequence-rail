@@ -376,3 +376,7 @@ Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.j
 `node ./cmd/crctl.js demo list --json` lists refund, inventory, recovery-preflight and irreversible-action exercises, including every fault's purpose and expected enforced-mode outcome. Catalog reads do not execute an action. The inventory scenario is available with the same fault and artifact export flags as refund.
 
 Run `node ./cmd/crctl.js demo matrix --json` to exercise all 31 catalog cases, or select one scenario after `matrix`. Each case uses a fresh synthetic runtime. The report checks declared outcomes, single execution, bounded remedies, tamper rejection and preflight isolation. Any failed check sets a nonzero exit status. Passing the matrix is local reference validation, not proof of production recovery.
+
+## Check recovery freshness explicitly
+
+Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2026-07-23T12:00:00.000Z --json` with your intended verification instant. The timestamp must be an ISO UTC timestamp supported by the protocol. Verification requires drill time at or before that instant and expiry strictly after it. Without `--at`, the result explicitly reports that freshness was not checked. No command changes a live qualification or issues a permit.

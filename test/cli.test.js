@@ -206,3 +206,23 @@ test("rail rejects invalid --clock values and CONSEQUENCE_RAIL_* defaults", () =
   });
   assert.equal(flagOverridesInvalidEnv.status, 0);
 });
+import { rmSync } from "node:fs";
+import { runRecoveryPreflightDemo } from "../src/recovery-demo.js";
+
+test("recovery CLI checks explicit time with exclusive expiry and future drill rejection", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-freshness-"));
+  try {
+    const { bundle } = await runRecoveryPreflightDemo();
+    const file = join(dir, "drill.json");
+    writeFileSync(file, JSON.stringify(bundle));
+    const run = (at) => runCli("crctl.js", ["recovery-preflight", "verify", file, "--json", ...(at ? ["--at", at] : [])]);
+    assert.equal(JSON.parse(run().stdout).freshness_checked, false);
+    const current = run(bundle.drill_attestation.drilled_at);
+    assert.equal(current.status, 0);
+    assert.equal(JSON.parse(current.stdout).current, true);
+    assert.equal(stderrJson(run(bundle.drill_attestation.expires_at)).code, "RECOVERY_ATTESTATION_EXPIRED");
+    assert.equal(stderrJson(run("2000-01-01T00:00:00.000Z")).code, "RECOVERY_ATTESTATION_EXPIRED");
+    assert.equal(run("yesterday").status, 1);
+    assert.equal(runCli("crctl.js", ["demo", "refund", "--at", bundle.drill_attestation.drilled_at]).status, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

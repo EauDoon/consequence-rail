@@ -35,6 +35,7 @@ const VALUE_FLAGS = {
   "--fault": "fault",
   "--assurance": "assurance",
   "--out": "out",
+  "--at": "at",
 };
 const BOOL_FLAGS = {
   "--json": "json",
@@ -106,7 +107,7 @@ Usage:
   crctl bundle timeline <file> [--json]
   crctl bundle review <file> [--json]
   crctl bundle compare <left> <right> [--json]
-  crctl recovery-preflight verify <file> [--json]
+  crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--json]
   crctl --help
 
 Refund demo faults:
@@ -123,6 +124,7 @@ Flags:
   --assurance <mode>    Refund demo assurance mode
   --json                Print machine-readable JSON
   --out <file>          Write the settlement or drill bundle (must not exist)
+  --at <ISO timestamp>  Require recovery qualification to be current at this instant
   -h, --help            Show this help
 
 Examples:
@@ -419,10 +421,12 @@ async function main() {
       throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
     }
     requireNoExtra(positional, 3, "recovery-preflight verify");
-    assertFlags(options, new Set(["json"]));
+    assertFlags(options, new Set(["json", "at"]));
     const bundle = readArtifactFile(target);
     const result = verifyRecoveryPreflight(bundle, {
       trustedKeys: demoRecoveryTrustedKeys(),
+      requireCurrent: options.at !== undefined,
+      now: options.at ?? null,
     });
     if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
