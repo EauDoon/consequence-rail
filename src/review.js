@@ -12,6 +12,26 @@ export function receiptBundle(input, options = {}) {
   return bundle;
 }
 
+/** Inventory bound evidence without disclosing facts, identifiers or raw evaluations. */
+export function evidenceInventory(input, options = {}) {
+  const bundle = deepClone(input), review = reviewBundle(bundle, options);
+  return {
+    valid: true, bundle_digest: review.bundle_digest, verification_scope: review.verification_scope,
+    evidence_count: review.evidence_count,
+    evidence: bundle.evidence_manifest.map((evidenceDigest, index) => {
+      const item = bundle.outcome_evidence[index];
+      if (!item) return { digest: evidenceDigest, metadata_available: false };
+      const accepted = bundle.events.find(event =>
+        ["EVIDENCE_ACCEPTED", "REMEDY_EVIDENCE_ACCEPTED"].includes(event.event_type) && event.payload.evidence_digest === evidenceDigest);
+      return { digest: evidenceDigest, metadata_available: true, phase: item.phase ?? "initial",
+        source: item.source, observed_at: item.observed_at, accepted_at: accepted.recorded_at,
+        age_at_acceptance_ms: Date.parse(accepted.recorded_at) - Date.parse(item.observed_at),
+        satisfied: item.evaluation.satisfied, signer_key_id: item.signature.key_id };
+    }),
+    limitations: review.limitations,
+  };
+}
+
 /** Verify first, then produce a metadata-only review with explicit assurance limits. */
 export function reviewBundle(input, options = {}) {
   const bundle = deepClone(input);
