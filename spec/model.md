@@ -231,3 +231,7 @@ derives the receipt outcome.
 
 Integrity verification alone MUST NOT be described as semantic settlement
 verification.
+
+### Reference resource limits
+
+Canonicalization and detached JSON copies reject cycles, depth above 64, more than 100,000 visited values, or more than 4,194,304 UTF-16 string/key units. Hidden object fields are rejected. Shared acyclic references are copied independently. These local admission limits do not alter canonical bytes for accepted artifacts.

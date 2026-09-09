@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DEMO_FAULTS, runIrreversibleDemo, runRefundDemo } from "../src/demo.js";
 import {
@@ -21,10 +21,19 @@ import {
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
+import { assertArtifactDigest, readArtifactFile } from "../src/artifact-files.js";
+import { compareBundles, reviewBundle } from "../src/review.js";
+import { verifyArtifactFiles } from "../src/batch.js";
+import { scenarioCatalog } from "../src/scenarios.js";
+import { runScenarioMatrix } from "../src/scenario-matrix.js";
+import { digest } from "../src/canonical.js";
+
 const VALUE_FLAGS = {
   "--fault": "fault",
   "--assurance": "assurance",
   "--out": "out",
+  "--at": "at",
+  "--expect-digest": "expect-digest",
 };
 const BOOL_FLAGS = {
   "--json": "json",
@@ -85,12 +94,18 @@ function printHelp() {
   process.stdout.write(`Consequence Rail CLI
 
 Usage:
+  crctl demo list [--json]
+  crctl demo matrix [all|refund|inventory|recovery-preflight|irreversible] [--json]
+  crctl demo inventory [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo irreversible [--json]
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
-  crctl bundle verify <file> [--json]
+  crctl bundle verify <file> [--expect-digest <digest>] [--json]
+  crctl bundle verify-many <file>... [--json]
   crctl bundle timeline <file> [--json]
-  crctl recovery-preflight verify <file> [--json]
+  crctl bundle review <file> [--json]
+  crctl bundle compare <left> <right> [--json]
+  crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
   crctl --help
 
 Refund demo faults:
@@ -107,6 +122,8 @@ Flags:
   --assurance <mode>    Refund demo assurance mode
   --json                Print machine-readable JSON
   --out <file>          Write the settlement or drill bundle (must not exist)
+  --at <ISO timestamp>  Require recovery qualification to be current at this instant
+  --expect-digest <digest> Require the recorded canonical artifact digest
   -h, --help            Show this help
 
 Examples:
@@ -173,26 +190,6 @@ function printRecoveryPreflight(summary, asJson) {
   );
 }
 
-function readJsonFile(path) {
-  let text;
-  try {
-    text = readFileSync(resolve(path), "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw usage(`File not found: ${path}.`);
-    }
-    throw usage(`Could not read file: ${path}.`);
-  }
-  if (text.trim() === "") {
-    throw usage(`File is empty: ${path}.`);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw usage(`File is not valid JSON: ${path}.`);
-  }
-}
-
 function writeExclusiveJson(path, value) {
   try {
     writeFileSync(resolve(path), `${JSON.stringify(value, null, 2)}\n`, {
@@ -224,8 +221,22 @@ async function main() {
   const [command, subcommand, target] = positional;
 
   if (command === "demo") {
+    if (subcommand === "matrix") {
+      requireNoExtra(positional, 3, "demo matrix");
+      assertFlags(options, new Set(["json"]));
+      const result = await runScenarioMatrix(target ?? "all");
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      if (!result.valid) process.exitCode = 1;
+      return;
+    }
+    if (subcommand === "list") {
+      requireNoExtra(positional, 2, "demo list");
+      assertFlags(options, new Set(["json"]));
+      process.stdout.write(`${JSON.stringify(scenarioCatalog(), null, 2)}\n`);
+      return;
+    }
     if (!subcommand) {
-      throw usage("Missing demo scenario. Expected refund, irreversible, or recovery-preflight.");
+      throw usage("Missing demo scenario. Expected refund, inventory, irreversible, recovery-preflight, list, or matrix.");
     }
     if (subcommand === "refund") {
       requireNoExtra(positional, 2, "demo refund");
@@ -317,21 +328,50 @@ async function main() {
   }
 
   if (command === "bundle") {
-    if (subcommand !== "verify" && subcommand !== "timeline") {
-      throw usage("Missing or unknown bundle command. Expected verify or timeline, plus a file.");
+    if (subcommand === "verify-many") {
+      assertFlags(options, new Set(["json"]));
+      const result = verifyArtifactFiles(positional.slice(2), {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      if (!result.valid) process.exitCode = 1;
+      return;
+    }
+    if (subcommand === "compare") {
+      requireNoExtra(positional, 4, "bundle compare");
+      assertFlags(options, new Set(["json"]));
+      if (!target || !positional[3]) throw usage("Bundle comparison requires two files.");
+      const result = compareBundles(readArtifactFile(target), readArtifactFile(positional[3]), {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      return;
+    }
+    if (!["verify", "timeline", "review"].includes(subcommand)) {
+      throw usage("Missing or unknown bundle command. Expected verify, verify-many, timeline, review, or compare.");
     }
     if (!target) {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
-    assertFlags(options, new Set(["json"]));
-    const bundle = readJsonFile(target);
+    assertFlags(options, new Set(subcommand === "verify" ? ["json", "expect-digest"] : ["json"]));
+    const bundle = readArtifactFile(target);
+    if (options["expect-digest"] !== undefined) assertArtifactDigest(bundle, options["expect-digest"]);
+    if (subcommand === "review") {
+      const result = reviewBundle(bundle, {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+      });
+      result.trust_profile = "public_demo_keys_only";
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
     if (subcommand === "verify") {
       const result = verifyBundle(bundle, {
         trustedKeys: demoTrustedKeys(),
         trustedConnectorKeys: demoConnectorTrustedKeys(),
         requireSemantics: true,
       });
+      result.bundle_digest = digest(bundle);
       if (options.json) {
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       } else {
@@ -382,11 +422,15 @@ async function main() {
       throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
     }
     requireNoExtra(positional, 3, "recovery-preflight verify");
-    assertFlags(options, new Set(["json"]));
-    const bundle = readJsonFile(target);
+    assertFlags(options, new Set(["json", "at", "expect-digest"]));
+    const bundle = readArtifactFile(target);
+    if (options["expect-digest"] !== undefined) assertArtifactDigest(bundle, options["expect-digest"]);
     const result = verifyRecoveryPreflight(bundle, {
       trustedKeys: demoRecoveryTrustedKeys(),
+      requireCurrent: options.at !== undefined,
+      now: options.at ?? null,
     });
+    result.bundle_digest = digest(bundle);
     if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {

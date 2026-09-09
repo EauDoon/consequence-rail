@@ -206,3 +206,80 @@ test("rail rejects invalid --clock values and CONSEQUENCE_RAIL_* defaults", () =
   });
   assert.equal(flagOverridesInvalidEnv.status, 0);
 });
+import { rmSync } from "node:fs";
+import { runRecoveryPreflightDemo } from "../src/recovery-demo.js";
+
+test("recovery CLI checks explicit time with exclusive expiry and future drill rejection", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-freshness-"));
+  try {
+    const { bundle } = await runRecoveryPreflightDemo();
+    const file = join(dir, "drill.json");
+    writeFileSync(file, JSON.stringify(bundle));
+    const run = (at) => runCli("crctl.js", ["recovery-preflight", "verify", file, "--json", ...(at ? ["--at", at] : [])]);
+    assert.equal(JSON.parse(run().stdout).freshness_checked, false);
+    const current = run(bundle.drill_attestation.drilled_at);
+    assert.equal(current.status, 0);
+    assert.equal(JSON.parse(current.stdout).current, true);
+    assert.equal(stderrJson(run(bundle.drill_attestation.expires_at)).code, "RECOVERY_ATTESTATION_EXPIRED");
+    assert.equal(stderrJson(run("2000-01-01T00:00:00.000Z")).code, "RECOVERY_ATTESTATION_EXPIRED");
+    assert.equal(run("yesterday").status, 1);
+    assert.equal(runCli("crctl.js", ["demo", "refund", "--at", bundle.drill_attestation.drilled_at]).status, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+import { runRefundDemo } from "../src/demo.js";
+import { digest } from "../src/canonical.js";
+
+test("CLI verifies pinned bytes and fails closed for another otherwise valid artifact", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-pin-"));
+  try {
+    const { bundle } = await runRefundDemo();
+    const file = join(dir, "audit.json");
+    writeFileSync(file, JSON.stringify(bundle));
+    const run = (pin) => runCli("crctl.js", ["bundle", "verify", file, "--expect-digest", pin, "--json"]);
+    assert.equal(JSON.parse(run(digest(bundle)).stdout).bundle_digest, digest(bundle));
+    assert.equal(stderrJson(run(digest({}))).code, "DIGEST_PIN_MISMATCH");
+    assert.equal(stderrJson(run("invalid")).code, "DIGEST_PIN_INVALID");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test("CLI and batch reject duplicate members before accepting an otherwise valid signature", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-duplicate-"));
+  try {
+    const { bundle } = await runRefundDemo();
+    const file = join(dir, "duplicate.json");
+    const original = JSON.stringify(bundle);
+    writeFileSync(file, '{"profile":"receipt",' + original.slice(1));
+    const single = runCli("crctl.js", ["bundle", "verify", file, "--json"]);
+    assert.equal(single.status, 1);
+    assert.equal(stderrJson(single).code, "JSON_DUPLICATE_KEY");
+    writeFileSync(file, '{"\\u0070rofile":"receipt",' + original.slice(1));
+    const batch = runCli("crctl.js", ["bundle", "verify-many", file, "--json"]);
+    assert.equal(batch.status, 1);
+    assert.equal(JSON.parse(batch.stdout).results[0].code, "JSON_DUPLICATE_KEY");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test("new CLI workflows exercise verified review, comparison, batch, catalog and matrix", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-workflows-"));
+  try {
+    const first = join(dir, "first.json"), second = join(dir, "second.json");
+    const { bundle } = await runRefundDemo();
+    writeFileSync(first, JSON.stringify(bundle));
+    writeFileSync(second, JSON.stringify((await runRefundDemo({ fault: "duplicate" })).bundle));
+    const review = runCli("crctl.js", ["bundle", "review", first, "--json"]);
+    assert.equal(review.status, 0);
+    assert.equal(JSON.parse(review.stdout).verification_scope, "integrity_and_lifecycle_semantics");
+    assert.equal(JSON.parse(review.stdout).trust_profile, "public_demo_keys_only");
+    const compare = runCli("crctl.js", ["bundle", "compare", first, second, "--json"]);
+    assert.equal(compare.status, 0);
+    assert.equal(JSON.parse(compare.stdout).same_receipt, false);
+    const batch = runCli("crctl.js", ["bundle", "verify-many", first, second, "--json"]);
+    assert.equal(batch.status, 0);
+    assert.equal(JSON.parse(batch.stdout).passed, 2);
+    assert.equal(JSON.parse(runCli("crctl.js", ["demo", "list", "--json"]).stdout).scenarios.length, 4);
+    const matrix = runCli("crctl.js", ["demo", "matrix", "--json"]);
+    assert.equal(matrix.status, 0);
+    assert.equal(JSON.parse(matrix.stdout).passed, 31);
+    for (const args of [["bundle", "compare", first], ["demo", "matrix", "bogus"], ["bundle", "review", first, "--fault", "duplicate"]]) {
+      assert.equal(runCli("crctl.js", args).status, 1);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

@@ -358,3 +358,31 @@ The public release status and maintenance boundaries are recorded in
 Licensed under the [Apache License 2.0](LICENSE).
 
 Public identity: EauDoon.
+
+## Offline artifact input limits
+
+CLI verification reads regular files only, caps each input at 1 MiB, requires valid UTF-8 JSON, and applies the canonical JSON structural limits before verification. Oversized files, invalid encodings, prototype-sensitive fields, and excessive nesting fail before signatures or lifecycle semantics are evaluated.
+
+## Review a saved settlement
+
+Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata, the state path, outcome, recourse status, evidence count and bound digests. Audit profiles replay lifecycle semantics. Receipt profiles report integrity only and disclose omitted evidence. Reports omit raw proposals and evidence. The CLI explicitly uses public demonstration keys; this is a synthetic integrity check, not a production trust claim.
+
+Compare two saved artifacts with `node ./cmd/crctl.js bundle compare left.json right.json --json`. Both must pass verification. The report distinguishes the same action, the same signed receipt, and the same canonical bundle, so an audit/receipt profile change is distinguishable from a different settlement. A comparison never selects an authoritative receipt.
+
+Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.json two.json --json`. Files are checked sequentially with independent results. Every file must pass full semantic verification; receipt-only profiles fail this strict command. Any failure produces a nonzero exit status after all files have been checked.
+
+## Discover synthetic exercises
+
+`node ./cmd/crctl.js demo list --json` lists refund, inventory, recovery-preflight and irreversible-action exercises, including every fault's purpose and expected enforced-mode outcome. Catalog reads do not execute an action. The inventory scenario is available with the same fault and artifact export flags as refund.
+
+Run `node ./cmd/crctl.js demo matrix --json` to exercise all 31 catalog cases, or select one scenario after `matrix`. Each case uses a fresh synthetic runtime. The report checks declared outcomes, single execution, bounded remedies, tamper rejection and preflight isolation. Any failed check sets a nonzero exit status. Passing the matrix is local reference validation, not proof of production recovery.
+
+## Check recovery freshness explicitly
+
+Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2026-07-23T12:00:00.000Z --json` with your intended verification instant. The timestamp must be an ISO UTC timestamp supported by the protocol. Verification requires drill time at or before that instant and expiry strictly after it. Without `--at`, the result explicitly reports that freshness was not checked. No command changes a live qualification or issues a permit.
+
+## Pin the artifact under review
+
+Settlement and recovery verification accept `--expect-digest` with an independently recorded SHA-256 base64url canonical bundle digest. A mismatch fails before signature acceptance. JSON verification output includes `bundle_digest` for reproducible recording. Object key order and insignificant whitespace do not change this digest; changed data does. A digest pin detects artifact substitution but does not establish signer trust.
+
+Offline artifact JSON also rejects repeated object members, including names written with equivalent Unicode escapes. This prevents different parsers from interpreting the same uploaded bytes differently. Batch output includes the local input filenames supplied by the caller; remove those filenames before sharing a report if they contain private directory information.
