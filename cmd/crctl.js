@@ -25,6 +25,8 @@ import { readArtifactFile } from "../src/artifact-files.js";
 
 import { compareBundles, reviewBundle } from "../src/review.js";
 
+import { verifyArtifactFiles } from "../src/batch.js";
+
 const VALUE_FLAGS = {
   "--fault": "fault",
   "--assurance": "assurance",
@@ -93,6 +95,7 @@ Usage:
   crctl demo irreversible [--json]
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
   crctl bundle verify <file> [--json]
+  crctl bundle verify-many <file>... [--json]
   crctl bundle timeline <file> [--json]
   crctl bundle review <file> [--json]
   crctl bundle compare <left> <right> [--json]
@@ -303,6 +306,15 @@ async function main() {
   }
 
   if (command === "bundle") {
+    if (subcommand === "verify-many") {
+      assertFlags(options, new Set(["json"]));
+      const result = verifyArtifactFiles(positional.slice(2), {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      if (!result.valid) process.exitCode = 1;
+      return;
+    }
     if (subcommand === "compare") {
       requireNoExtra(positional, 4, "bundle compare");
       assertFlags(options, new Set(["json"]));
