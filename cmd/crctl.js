@@ -27,7 +27,7 @@ import { verifyArtifactFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
 import { digest } from "../src/canonical.js";
-import { reviewRecovery, compareRecovery } from "../src/recovery-review.js";
+import { reviewRecovery, compareRecovery, linkRecovery } from "../src/recovery-review.js";
 
 const VALUE_FLAGS = {
   "--fault": "fault",
@@ -112,6 +112,7 @@ Usage:
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
   crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight compare <left> <right> [--at <ISO timestamp>] [--json]
+  crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
   crctl --help
 
 Refund demo faults:
@@ -433,6 +434,18 @@ async function main() {
   }
 
   if (command === "recovery-preflight") {
+    if (subcommand === "link") {
+      requireNoExtra(positional, 4, "recovery-preflight link");
+      assertFlags(options, new Set(["json", "at"]));
+      if (!target || !positional[3]) throw usage("Recovery link requires a settlement and drill file.");
+      const result = linkRecovery(readArtifactFile(target), readArtifactFile(positional[3]), {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+        trustedRecoveryKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      if (!result.bindings_match) process.exitCode = 1;
+      return;
+    }
     if (subcommand === "compare") {
       requireNoExtra(positional, 4, "recovery-preflight compare");
       assertFlags(options, new Set(["json", "at"]));

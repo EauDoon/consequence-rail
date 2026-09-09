@@ -1,9 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runRecoveryPreflightDemo, RECOVERY_DEMO_FAULTS } from "../src/recovery-demo.js";
-import { demoRecoveryTrustedKeys } from "../src/signing.js";
-import { reviewRecovery, compareRecovery } from "../src/recovery-review.js";
+import { demoRecoveryTrustedKeys, demoTrustedKeys, demoConnectorTrustedKeys } from "../src/signing.js";
+import { runRefundDemo } from "../src/demo.js";
+import { runInventoryDemo } from "../src/inventory-demo.js";
+import { reviewRecovery, compareRecovery, linkRecovery } from "../src/recovery-review.js";
 const trust = () => ({ trustedKeys: demoRecoveryTrustedKeys() });
+
+test("offline recovery link distinguishes binding agreement from recorded acceptance", async () => {
+  const settlement = (await runRefundDemo()).bundle, drill = (await runRecoveryPreflightDemo()).bundle;
+  const keys = { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(), trustedRecoveryKeys: demoRecoveryTrustedKeys() };
+  const before = JSON.stringify([settlement, drill]);
+  const report = linkRecovery(settlement, drill, keys);
+  assert.equal(report.bindings_match, true); assert.equal(report.acceptance_event_recorded, false);
+  assert.equal(JSON.stringify([settlement, drill]), before);
+  const other = (await runInventoryDemo()).bundle;
+  assert.equal(linkRecovery(other, drill, keys).bindings_match, false);
+  assert.throws(() => linkRecovery(settlement, drill, { ...keys, trustedRecoveryKeys: new Map() }));
+});
 
 test("recovery comparison isolates failed recovery from coverage changes", async () => {
   const good = (await runRecoveryPreflightDemo()).bundle;

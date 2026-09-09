@@ -47,3 +47,13 @@ scope, recourse, fault, procedure, oracle, qualification and validity window.
 Structured coverage contents are represented by digests to keep fixture data
 out of reports. `--at` requires both drills to be current at the same instant.
 A difference never selects the authoritative drill or accepts its recovery.
+
+## Match a drill to a settlement
+
+`crctl recovery-preflight link settlement.json drill.json` independently
+verifies both artifacts and compares exact action, reservation, capability
+reference and connector commitment bindings. It separately reports whether
+the settlement recorded acceptance of this exact attestation and coverage.
+Binding mismatch returns a nonzero CLI status. Matching does not reproduce
+live reservation status, implementation measurement or permit admission.
+Use `--at` to require drill freshness at an explicit instant.

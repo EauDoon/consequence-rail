@@ -1,5 +1,6 @@
 import { deepClone, digest } from "./canonical.js";
 import { verifyRecoveryPreflight } from "./recovery-preflight.js";
+import { reviewBundle } from "./review.js";
 
 /** Diagnose a verified drill using only bound metadata, never raw fixture states. */
 export function reviewRecovery(input, options = {}) {
@@ -47,4 +48,31 @@ export function compareRecovery(leftInput, rightInput, options = {}) {
       .map(field => ({ field, left: before[field], right: after[field] })),
     limitations: ["Different drill outcomes do not establish which artifact is authoritative.",
       "Matching coverage is not a permit or proof of current production recovery."] };
+}
+
+/** Offline artifact bindings only: this cannot reproduce live admission checks. */
+export function linkRecovery(settlementInput, recoveryInput, options = {}) {
+  const settlement = deepClone(settlementInput), recovery = deepClone(recoveryInput);
+  const review = reviewBundle(settlement, options);
+  const drill = reviewRecovery(recovery, { trustedKeys: options.trustedRecoveryKeys,
+    requireCurrent: options.requireCurrent, now: options.now });
+  const contract = recovery.recovery_contract, reservation = settlement.recourse_reservation;
+  const bindings = {
+    action: contract.action_digest === settlement.action.action_digest,
+    action_class: contract.action_class === settlement.action.action_type,
+    reservation: contract.recourse.reservation_digest === digest(reservation),
+    capability_reference: contract.recourse.capability_reference_digest === reservation.capability_reference_digest,
+    connector_commitment: contract.recourse.connector_commitment_digest === digest(reservation.connector_commitment),
+    remedy_kind: contract.recourse.kind === reservation.kind,
+    capability: contract.recourse.capability === reservation.capability,
+  };
+  const accepted = settlement.events.filter(event => event.event_type === "RECOVERY_PREFLIGHT_ACCEPTED")
+    .some(event => event.payload.attestation_digest === drill.attestation_digest && event.payload.coverage_digest === drill.coverage_digest);
+  return { valid: true, settlement_bundle_digest: review.bundle_digest, recovery_bundle_digest: drill.bundle_digest,
+    settlement_verification_scope: review.verification_scope, qualification: drill.qualification,
+    freshness_checked: drill.freshness_checked, bindings, bindings_match: Object.values(bindings).every(Boolean),
+    acceptance_event_recorded: accepted,
+    limitations: ["Matching artifact bindings do not reproduce live connector status or implementation measurement.",
+      "A recorded acceptance event is signed history, not current admission or execution authority.",
+      "This report does not establish production recovery or evidence truth."] };
 }
