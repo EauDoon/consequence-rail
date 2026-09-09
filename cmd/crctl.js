@@ -23,7 +23,7 @@ import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
 import { assertArtifactDigest, readArtifactFile } from "../src/artifact-files.js";
 import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
-import { verifyArtifactFiles } from "../src/batch.js";
+import { verifyArtifactFiles, verifyRecoveryFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
 import { digest } from "../src/canonical.js";
@@ -113,6 +113,7 @@ Usage:
   crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight compare <left> <right> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
+  crctl recovery-preflight verify-many <file>... [--at <ISO timestamp>] [--json]
   crctl --help
 
 Refund demo faults:
@@ -434,6 +435,15 @@ async function main() {
   }
 
   if (command === "recovery-preflight") {
+    if (subcommand === "verify-many") {
+      assertFlags(options, new Set(["json", "at"]));
+      const result = verifyRecoveryFiles(positional.slice(2), {
+        trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      if (!result.valid) process.exitCode = 1;
+      return;
+    }
     if (subcommand === "link") {
       requireNoExtra(positional, 4, "recovery-preflight link");
       assertFlags(options, new Set(["json", "at"]));

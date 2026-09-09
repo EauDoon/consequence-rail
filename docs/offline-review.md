@@ -57,3 +57,12 @@ the settlement recorded acceptance of this exact attestation and coverage.
 Binding mismatch returns a nonzero CLI status. Matching does not reproduce
 live reservation status, implementation measurement or permit admission.
 Use `--at` to require drill freshness at an explicit instant.
+
+## Verify a collection of drills
+
+`crctl recovery-preflight verify-many one.json two.json --at 2035-01-01T00:00:00.000Z`
+checks up to 64 bounded local files independently. It reports every failure
+and returns a nonzero status if any input fails. A valid `NOT_QUALIFIED` drill
+is still a valid replay artifact, not acceptable recovery. Without `--at`,
+each result explicitly leaves freshness unchecked. Supplied filenames appear
+in batch reports and may need removal before sharing.
