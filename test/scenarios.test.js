@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { scenarioCatalog } from "../src/scenarios.js";
+import { runRefundDemo } from "../src/demo.js";
+import { runInventoryDemo } from "../src/inventory-demo.js";
+
+test("every advertised execution assurance mode completes its synthetic demo", async () => {
+  for (const scenario of scenarioCatalog().scenarios.filter((item) => ["refund", "inventory"].includes(item.name))) {
+    const run = scenario.name === "refund" ? runRefundDemo : runInventoryDemo;
+    for (const assurance of scenario.assurance_modes) {
+      const { summary } = await run({ assuranceMode: assurance });
+      assert.equal(summary.state, "CLOSED");
+      assert.equal(summary.assurance_mode, assurance);
+    }
+    await assert.rejects(() => run({ assuranceMode: "observed" }), { code: "MODE_NOT_EXECUTABLE" });
+  }
+});
 
 test("catalog documents every runnable synthetic fault with detached expectations", () => {
   const catalog = scenarioCatalog();

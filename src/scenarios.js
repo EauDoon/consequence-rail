@@ -27,7 +27,7 @@ const PURPOSES = {
 };
 const scenarios = deepFreeze([
   ...[["refund", DEMO_FAULTS], ["inventory", INVENTORY_DEMO_FAULTS]].map(([name, faults]) => ({
-    name, assurance_modes: ["enforced", "cooperative", "observed"], expected_assurance: "enforced",
+    name, assurance_modes: ["enforced", "cooperative"], expected_assurance: "enforced",
     faults: faults.map((name) => ({ name, purpose: PURPOSES[name], expected: {
       state: name === "action-mutation" ? "PERMITTED" : name === "lost-response-before-commit" ? "FAILED" : "CLOSED",
       outcome: OUTCOMES[name],

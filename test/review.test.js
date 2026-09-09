@@ -11,6 +11,10 @@ test("review verifies audit semantics and omits raw proposal and evidence", asyn
   const report = reviewBundle(bundle, trust());
   assert.equal(report.outcome, "compensated");
   assert.equal(report.verification_scope, "integrity_and_lifecycle_semantics");
+  assert.equal(report.state_path[0], "PROPOSED");
+  assert.deepEqual(report.state_path, ["PROPOSED", ...bundle.events
+    .filter((event) => event.event_type === "STATE_TRANSITION")
+    .map((event) => event.payload.to_state)]);
   assert.equal(report.state_path.at(-1), "CLOSED");
   assert.equal(report.evidence_count, 2);
   assert.equal(JSON.stringify(bundle), before);

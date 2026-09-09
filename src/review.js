@@ -24,7 +24,10 @@ export function reviewBundle(input, options = {}) {
     closed_at: bundle.settlement_receipt.closed_at,
     event_count: verification.event_count,
     evidence_count: bundle.evidence_manifest.length,
-    state_path: transitions.map((event) => event.payload.to_state),
+    state_path: transitions.length === 0 ? [] : [
+      transitions[0].payload.from_state,
+      ...transitions.map((event) => event.payload.to_state),
+    ],
     event_chain_head: verification.event_chain_head,
     trusted_key_ids: [verification.trusted_key_id, verification.trusted_connector_key_id],
     limitations: [
