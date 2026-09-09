@@ -19,6 +19,19 @@ test("offline recovery link distinguishes binding agreement from recorded accept
   assert.throws(() => linkRecovery(settlement, drill, { ...keys, trustedRecoveryKeys: new Map() }));
 });
 
+test("linked accepted drill is identified without additional connector calls", async () => {
+  const { runtime, bundle: drill } = await runRecoveryPreflightDemo();
+  const actionId = [...runtime.rail.actions.keys()][0];
+  await runtime.rail.execute(actionId); await runtime.rail.verifyOutcome(actionId);
+  const settlement = runtime.rail.exportBundle(actionId, { profile: "audit" });
+  const calls = [runtime.connector.executeCalls, runtime.connector.remedyCalls];
+  const report = linkRecovery(settlement, drill, {
+    trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(), trustedRecoveryKeys: demoRecoveryTrustedKeys(),
+  });
+  assert.equal(report.bindings_match, true); assert.equal(report.acceptance_event_recorded, true);
+  assert.deepEqual([runtime.connector.executeCalls, runtime.connector.remedyCalls], calls);
+});
+
 test("recovery comparison isolates failed recovery from coverage changes", async () => {
   const good = (await runRecoveryPreflightDemo()).bundle;
   const failed = (await runRecoveryPreflightDemo({ fault: "remedy-failure" })).bundle;

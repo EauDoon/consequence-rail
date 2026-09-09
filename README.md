@@ -365,6 +365,12 @@ CLI verification reads regular files only, caps each input at 1 MiB, requires va
 
 ## Review a saved settlement
 
+The [offline review guide](docs/offline-review.md) covers verified receipt-profile
+export, evidence provenance, recorded lifecycle timing, recovery diagnosis and
+coverage comparison, settlement/drill linking, collection checks and Markdown
+reports. All operate on saved artifacts; none issues a permit or invokes a live
+connector. Every single-artifact inspection accepts an independent digest pin.
+
 Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata, the state path, outcome, recourse status, evidence count and bound digests. Audit profiles replay lifecycle semantics. Receipt profiles report integrity only and disclose omitted evidence. Reports omit raw proposals and evidence. The CLI explicitly uses public demonstration keys; this is a synthetic integrity check, not a production trust claim.
 
 Compare two saved artifacts with `node ./cmd/crctl.js bundle compare left.json right.json --json`. Both must pass verification. The report distinguishes the same action, the same signed receipt, and the same canonical bundle, so an audit/receipt profile change is distinguishable from a different settlement. A comparison never selects an authoritative receipt.

@@ -132,6 +132,7 @@ Flags:
   --fault <name>        Synthetic fault to inject
   --assurance <mode>    Refund demo assurance mode
   --json                Print machine-readable JSON
+  --markdown            Print a readable settlement or recovery review
   --out <file>          Write the settlement or drill bundle (must not exist)
   --at <ISO timestamp>  Require recovery qualification to be current at this instant
   --expect-digest <digest> Require the recorded canonical artifact digest
@@ -380,7 +381,7 @@ async function main() {
       return;
     }
     if (!["verify", "timeline", "review", "evidence", "timing"].includes(subcommand)) {
-      throw usage("Missing or unknown bundle command. Expected verify, verify-many, timeline, review, or compare.");
+      throw usage("Missing or unknown bundle command. Expected verify, verify-many, timeline, review, receipt, evidence, timing, or compare.");
     }
     if (!target) {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
@@ -483,7 +484,7 @@ async function main() {
       return;
     }
     if (!["verify", "review"].includes(subcommand)) {
-      throw usage("Missing or unknown recovery-preflight command. Expected verify, plus a file.");
+      throw usage("Missing or unknown recovery-preflight command. Expected verify, verify-many, review, compare, or link.");
     }
     if (!target) {
       throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
