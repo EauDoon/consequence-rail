@@ -22,7 +22,7 @@ import {
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
 import { assertArtifactDigest, readArtifactFile } from "../src/artifact-files.js";
-import { compareBundles, reviewBundle } from "../src/review.js";
+import { compareBundles, reviewBundle, receiptBundle } from "../src/review.js";
 import { verifyArtifactFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
@@ -104,6 +104,7 @@ Usage:
   crctl bundle verify-many <file>... [--json]
   crctl bundle timeline <file> [--json]
   crctl bundle review <file> [--json]
+  crctl bundle receipt <file> --out <new-file> [--json]
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
   crctl --help
@@ -328,6 +329,17 @@ async function main() {
   }
 
   if (command === "bundle") {
+    if (subcommand === "receipt") {
+      requireNoExtra(positional, 3, "bundle receipt");
+      assertFlags(options, new Set(["json", "out"]));
+      if (!target || !options.out) throw usage("Receipt export requires input and --out.");
+      const bundle = receiptBundle(readArtifactFile(target), {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+      });
+      writeExclusiveJson(options.out, bundle);
+      process.stdout.write(`${JSON.stringify({ valid: true, profile: "receipt", bundle_digest: digest(bundle), trust_profile: "public_demo_keys_only", semantics: "not_checked_in_exported_profile" }, null, 2)}\n`);
+      return;
+    }
     if (subcommand === "verify-many") {
       assertFlags(options, new Set(["json"]));
       const result = verifyArtifactFiles(positional.slice(2), {

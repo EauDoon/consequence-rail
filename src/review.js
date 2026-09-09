@@ -1,6 +1,17 @@
 import { deepClone, digest } from "./canonical.js";
 import { verifyBundle } from "./verify.js";
 
+/** Produce the existing receipt profile, preserving signed artifacts unchanged. */
+export function receiptBundle(input, options = {}) {
+  const bundle = deepClone(input);
+  reviewBundle(bundle, options);
+  bundle.profile = "receipt";
+  delete bundle.action.proposal;
+  bundle.outcome_evidence = [];
+  reviewBundle(bundle, options);
+  return bundle;
+}
+
 /** Verify first, then produce a metadata-only review with explicit assurance limits. */
 export function reviewBundle(input, options = {}) {
   const bundle = deepClone(input);
