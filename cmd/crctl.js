@@ -353,7 +353,7 @@ async function main() {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
       process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
-      if (!result.valid) process.exitCode = 1;
+      if (!result.valid || result.review_required) process.exitCode = 1;
       return;
     }
     if (subcommand === "compare") {

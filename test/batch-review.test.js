@@ -4,8 +4,26 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runRecoveryPreflightDemo } from "../src/recovery-demo.js";
-import { demoRecoveryTrustedKeys } from "../src/signing.js";
-import { verifyRecoveryFiles } from "../src/batch.js";
+import { demoRecoveryTrustedKeys, demoTrustedKeys, demoConnectorTrustedKeys } from "../src/signing.js";
+import { runRefundDemo } from "../src/demo.js";
+import { verifyRecoveryFiles, verifyArtifactFiles } from "../src/batch.js";
+
+test("settlement collections distinguish duplicate files from different signed receipts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-settlement-batch-"));
+  const good = join(dir, "settled.json"), other = join(dir, "compensated.json"), invalid = join(dir, "invalid.json");
+  writeFileSync(good, JSON.stringify((await runRefundDemo()).bundle));
+  writeFileSync(other, JSON.stringify((await runRefundDemo({ fault: "duplicate" })).bundle));
+  writeFileSync(invalid, "{}");
+  const options = { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() };
+  const duplicate = verifyArtifactFiles([good, good], options);
+  assert.equal(duplicate.duplicates.length, 1); assert.equal(duplicate.review_required, false);
+  const different = verifyArtifactFiles([good, other], options);
+  assert.equal(different.valid, true); assert.equal(different.review_required, true);
+  assert.equal(different.differing_receipts.length, 1);
+  assert.equal(different.differing_receipts[0].receipt_digests.length, 2);
+  const bad = verifyArtifactFiles([good, invalid], options);
+  assert.equal(bad.valid, false); assert.deepEqual(bad.differing_receipts, []);
+});
 
 test("recovery batch continues after invalid files and requires current evidence when requested", async () => {
   const dir = mkdtempSync(join(tmpdir(), "rail-recovery-batch-"));

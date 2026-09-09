@@ -66,3 +66,12 @@ and returns a nonzero status if any input fails. A valid `NOT_QUALIFIED` drill
 is still a valid replay artifact, not acceptable recovery. Without `--at`,
 each result explicitly leaves freshness unchecked. Supplied filenames appear
 in batch reports and may need removal before sharing.
+
+## Detect duplicate and competing settlement records
+
+`crctl bundle verify-many one.json two.json` now includes canonical bundle,
+action and receipt digests for each valid input. Identical artifacts are
+grouped as duplicates. Different signed receipts for one exact action set
+`review_required` and a nonzero CLI exit status, even when both artifacts pass
+integrity and semantic checks. Invalid files are excluded from comparison.
+The report does not infer fraud or choose an authoritative receipt.
