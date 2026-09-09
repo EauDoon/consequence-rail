@@ -39,3 +39,15 @@ export function readArtifactFile(path) {
   catch { throw new RailError("USAGE_INVALID", `File is not valid JSON: ${path}. Run with --help.`); }
   return deepClone(value);
 }
+import { digest } from "./canonical.js";
+
+/** Check an independently recorded canonical digest before accepting an artifact. */
+export function assertArtifactDigest(value, expected) {
+  if (typeof expected !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(expected) ||
+      Buffer.from(expected, "base64url").toString("base64url") !== expected) {
+    throw new RailError("DIGEST_PIN_INVALID", "Expected an unpadded canonical SHA-256 base64url digest.");
+  }
+  const actual = digest(value);
+  if (actual !== expected) throw new RailError("DIGEST_PIN_MISMATCH", "Artifact does not match the expected canonical digest.");
+  return actual;
+}

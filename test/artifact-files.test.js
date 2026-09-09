@@ -41,3 +41,14 @@ test("batch verification isolates failures and requires full audit semantics", a
     for (const paths of [[], Array(65).fill(good), [null]]) assert.throws(() => verifyArtifactFiles(paths), { code: "BATCH_INVALID" });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+import { digest } from "../src/canonical.js";
+import { assertArtifactDigest } from "../src/artifact-files.js";
+
+test("digest pins match canonical bytes but reject substitutions and malformed encodings", () => {
+  const value = { b: 2, a: 1 }, pin = digest(value);
+  assert.equal(assertArtifactDigest({ a: 1, b: 2 }, pin), pin);
+  assert.throws(() => assertArtifactDigest({ a: 2, b: 2 }, pin), { code: "DIGEST_PIN_MISMATCH" });
+  for (const invalid of ["", "a".repeat(42), "_".repeat(43), null]) {
+    assert.throws(() => assertArtifactDigest(value, invalid), { code: "DIGEST_PIN_INVALID" });
+  }
+});

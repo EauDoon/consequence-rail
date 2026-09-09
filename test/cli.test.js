@@ -226,3 +226,18 @@ test("recovery CLI checks explicit time with exclusive expiry and future drill r
     assert.equal(runCli("crctl.js", ["demo", "refund", "--at", bundle.drill_attestation.drilled_at]).status, 1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+import { runRefundDemo } from "../src/demo.js";
+import { digest } from "../src/canonical.js";
+
+test("CLI verifies pinned bytes and fails closed for another otherwise valid artifact", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-pin-"));
+  try {
+    const { bundle } = await runRefundDemo();
+    const file = join(dir, "audit.json");
+    writeFileSync(file, JSON.stringify(bundle));
+    const run = (pin) => runCli("crctl.js", ["bundle", "verify", file, "--expect-digest", pin, "--json"]);
+    assert.equal(JSON.parse(run(digest(bundle)).stdout).bundle_digest, digest(bundle));
+    assert.equal(stderrJson(run(digest({}))).code, "DIGEST_PIN_MISMATCH");
+    assert.equal(stderrJson(run("invalid")).code, "DIGEST_PIN_INVALID");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
