@@ -34,3 +34,21 @@ export function reviewBundle(input, options = {}) {
     ],
   };
 }
+/** Compare two independently verified artifacts without exposing their payloads. */
+export function compareBundles(leftInput, rightInput, options = {}) {
+  const left = reviewBundle(leftInput, options);
+  const right = reviewBundle(rightInput, options);
+  const fields = ["profile", "verification_scope", "action_digest", "outcome", "assurance_mode",
+    "bypass_possible", "recourse_final_status", "closed_at", "event_count", "evidence_count", "event_chain_head"];
+  const sameReceipt = digest(leftInput.settlement_receipt) === digest(rightInput.settlement_receipt);
+  return {
+    valid: true,
+    same_bundle: left.bundle_digest === right.bundle_digest,
+    same_action: left.action_digest === right.action_digest,
+    same_receipt: sameReceipt,
+    left_bundle_digest: left.bundle_digest,
+    right_bundle_digest: right.bundle_digest,
+    changes: fields.filter((field) => left[field] !== right[field]).map((field) => ({ field, left: left[field], right: right[field] })),
+    interpretation: sameReceipt ? "Both artifacts bind the same signed settlement receipt." : "The artifacts contain different signed receipts; comparison does not establish which is authoritative.",
+  };
+}

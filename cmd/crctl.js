@@ -23,7 +23,7 @@ import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
 import { readArtifactFile } from "../src/artifact-files.js";
 
-import { reviewBundle } from "../src/review.js";
+import { compareBundles, reviewBundle } from "../src/review.js";
 
 const VALUE_FLAGS = {
   "--fault": "fault",
@@ -95,6 +95,7 @@ Usage:
   crctl bundle verify <file> [--json]
   crctl bundle timeline <file> [--json]
   crctl bundle review <file> [--json]
+  crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--json]
   crctl --help
 
@@ -302,6 +303,16 @@ async function main() {
   }
 
   if (command === "bundle") {
+    if (subcommand === "compare") {
+      requireNoExtra(positional, 4, "bundle compare");
+      assertFlags(options, new Set(["json"]));
+      if (!target || !positional[3]) throw usage("Bundle comparison requires two files.");
+      const result = compareBundles(readArtifactFile(target), readArtifactFile(positional[3]), {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      return;
+    }
     if (!["verify", "timeline", "review"].includes(subcommand)) {
       throw usage("Missing or unknown bundle command. Expected verify or timeline, plus a file.");
     }
