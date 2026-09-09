@@ -29,6 +29,8 @@ import { verifyArtifactFiles } from "../src/batch.js";
 
 import { scenarioCatalog } from "../src/scenarios.js";
 
+import { runScenarioMatrix } from "../src/scenario-matrix.js";
+
 const VALUE_FLAGS = {
   "--fault": "fault",
   "--assurance": "assurance",
@@ -94,6 +96,7 @@ function printHelp() {
 
 Usage:
   crctl demo list [--json]
+  crctl demo matrix [all|refund|inventory|recovery-preflight|irreversible] [--json]
   crctl demo inventory [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo irreversible [--json]
@@ -217,6 +220,14 @@ async function main() {
   const [command, subcommand, target] = positional;
 
   if (command === "demo") {
+    if (subcommand === "matrix") {
+      requireNoExtra(positional, 3, "demo matrix");
+      assertFlags(options, new Set(["json"]));
+      const result = await runScenarioMatrix(target ?? "all");
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      if (!result.valid) process.exitCode = 1;
+      return;
+    }
     if (subcommand === "list") {
       requireNoExtra(positional, 2, "demo list");
       assertFlags(options, new Set(["json"]));
