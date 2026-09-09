@@ -28,6 +28,7 @@ import { scenarioCatalog } from "../src/scenarios.js";
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
 import { digest } from "../src/canonical.js";
 import { reviewRecovery, compareRecovery, linkRecovery } from "../src/recovery-review.js";
+import { settlementMarkdown, recoveryMarkdown } from "../src/review-markdown.js";
 
 const VALUE_FLAGS = {
   "--fault": "fault",
@@ -38,6 +39,7 @@ const VALUE_FLAGS = {
 };
 const BOOL_FLAGS = {
   "--json": "json",
+  "--markdown": "markdown",
 };
 
 function usage(message) {
@@ -104,13 +106,13 @@ Usage:
   crctl bundle verify <file> [--expect-digest <digest>] [--json]
   crctl bundle verify-many <file>... [--json]
   crctl bundle timeline <file> [--json]
-  crctl bundle review <file> [--json]
+  crctl bundle review <file> [--json|--markdown]
   crctl bundle receipt <file> --out <new-file> [--json]
   crctl bundle evidence <file> [--json]
   crctl bundle timing <audit-file> [--json]
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
-  crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json]
+  crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json|--markdown]
   crctl recovery-preflight compare <left> <right> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight verify-many <file>... [--at <ISO timestamp>] [--json]
@@ -226,6 +228,7 @@ async function main() {
   }
 
   const { positional, options } = parseCliArgs(args);
+  if (options.json && options.markdown) throw usage("Choose --json or --markdown, not both.");
   const [command, subcommand, target] = positional;
 
   if (command === "demo") {
@@ -373,9 +376,13 @@ async function main() {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
-    assertFlags(options, new Set(subcommand === "verify" ? ["json", "expect-digest"] : ["json"]));
+    assertFlags(options, new Set(subcommand === "verify" ? ["json", "expect-digest"] : subcommand === "review" ? ["json", "markdown"] : ["json"]));
     const bundle = readArtifactFile(target);
     if (options["expect-digest"] !== undefined) assertArtifactDigest(bundle, options["expect-digest"]);
+    if (subcommand === "review" && options.markdown) {
+      process.stdout.write(settlementMarkdown(bundle, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() }));
+      return;
+    }
     if (["review", "evidence", "timing"].includes(subcommand)) {
       const report = { review: reviewBundle, evidence: evidenceInventory, timing: lifecycleTiming }[subcommand];
       const result = report(bundle, {
@@ -473,9 +480,13 @@ async function main() {
       throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
     }
     requireNoExtra(positional, 3, "recovery-preflight verify");
-    assertFlags(options, new Set(["json", "at", "expect-digest"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown"] : ["json", "at", "expect-digest"]));
     const bundle = readArtifactFile(target);
     if (options["expect-digest"] !== undefined) assertArtifactDigest(bundle, options["expect-digest"]);
+    if (subcommand === "review" && options.markdown) {
+      process.stdout.write(recoveryMarkdown(bundle, { trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null }));
+      return;
+    }
     const result = (subcommand === "review" ? reviewRecovery : verifyRecoveryPreflight)(bundle, {
       trustedKeys: demoRecoveryTrustedKeys(),
       requireCurrent: options.at !== undefined,

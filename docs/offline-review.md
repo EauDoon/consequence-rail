@@ -75,3 +75,12 @@ grouped as duplicates. Different signed receipts for one exact action set
 `review_required` and a nonzero CLI exit status, even when both artifacts pass
 integrity and semantic checks. Invalid files are excluded from comparison.
 The report does not infer fraud or choose an authoritative receipt.
+
+## Export a readable review
+
+Add `--markdown` to `bundle review` or `recovery-preflight review` to print a
+shareable report with explicit verification scope and limits. Redirect stdout
+to a new local `.md` file as needed. Metadata punctuation and control characters
+are encoded so signed strings cannot inject links, HTML, table rows or terminal
+escapes. Raw evidence is omitted. `--json` and `--markdown` are mutually exclusive.
+The Markdown report is derived output, not a signed protocol artifact.
