@@ -2,8 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runRefundDemo } from "../src/demo.js";
 import { demoTrustedKeys, demoConnectorTrustedKeys } from "../src/signing.js";
-import { receiptBundle, reviewBundle, evidenceInventory } from "../src/review.js";
+import { receiptBundle, reviewBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
 const trust = () => ({ trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() });
+
+test("lifecycle timing exposes ambiguity and requires verified audit chronology", async () => {
+  const { bundle } = await runRefundDemo({ fault: "lost-response-after-commit" });
+  const result = lifecycleTiming(bundle, trust());
+  assert.equal(result.ambiguity_observed, true);
+  assert(result.intervals.some(item => item.state === "UNKNOWN"));
+  assert.equal(result.total_recorded_ms, result.intervals.reduce((sum, item) => sum + item.duration_ms, 0));
+  assert(result.intervals.every(item => item.duration_ms >= 0));
+  assert.throws(() => lifecycleTiming(receiptBundle(bundle, trust()), trust()));
+  bundle.events[0].recorded_at = "not-a-time";
+  assert.throws(() => lifecycleTiming(bundle, trust()));
+});
 
 test("receipt projection preserves signed artifacts and omits audit facts without mutation", async () => {
   const { bundle, runtime, summary } = await runRefundDemo({ fault: "duplicate" });

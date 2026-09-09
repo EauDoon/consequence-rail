@@ -22,7 +22,7 @@ import {
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
 import { assertArtifactDigest, readArtifactFile } from "../src/artifact-files.js";
-import { compareBundles, reviewBundle, receiptBundle, evidenceInventory } from "../src/review.js";
+import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
 import { verifyArtifactFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
@@ -106,6 +106,7 @@ Usage:
   crctl bundle review <file> [--json]
   crctl bundle receipt <file> --out <new-file> [--json]
   crctl bundle evidence <file> [--json]
+  crctl bundle timing <audit-file> [--json]
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
   crctl --help
@@ -360,7 +361,7 @@ async function main() {
       process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
       return;
     }
-    if (!["verify", "timeline", "review", "evidence"].includes(subcommand)) {
+    if (!["verify", "timeline", "review", "evidence", "timing"].includes(subcommand)) {
       throw usage("Missing or unknown bundle command. Expected verify, verify-many, timeline, review, or compare.");
     }
     if (!target) {
@@ -370,8 +371,9 @@ async function main() {
     assertFlags(options, new Set(subcommand === "verify" ? ["json", "expect-digest"] : ["json"]));
     const bundle = readArtifactFile(target);
     if (options["expect-digest"] !== undefined) assertArtifactDigest(bundle, options["expect-digest"]);
-    if (["review", "evidence"].includes(subcommand)) {
-      const result = (subcommand === "evidence" ? evidenceInventory : reviewBundle)(bundle, {
+    if (["review", "evidence", "timing"].includes(subcommand)) {
+      const report = { review: reviewBundle, evidence: evidenceInventory, timing: lifecycleTiming }[subcommand];
+      const result = report(bundle, {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
       result.trust_profile = "public_demo_keys_only";

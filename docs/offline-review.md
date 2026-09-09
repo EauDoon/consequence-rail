@@ -20,3 +20,12 @@ observation/acceptance times, age at acceptance, signer and derived satisfaction
 It omits raw facts, resource IDs and detailed evaluations. Receipt-only inputs
 list manifest digests with `metadata_available: false`. Historical freshness
 does not mean that the evidence remains current or is truthful.
+
+## Examine recorded delays
+
+`crctl bundle timing audit.json` requires audit semantic replay, then computes
+each recorded state interval and the total through closure. It calls out
+ambiguous execution/remedy states without recommending a retry. Values come
+from signed event times, not an independent performance measurement; fixed
+synthetic clocks can legitimately produce zero durations. Receipt profiles
+are refused because their chronology has not received full semantic replay.

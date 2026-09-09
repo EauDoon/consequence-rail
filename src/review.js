@@ -32,6 +32,25 @@ export function evidenceInventory(input, options = {}) {
   };
 }
 
+/** Recorded state dwell times, not connector latency or a performance guarantee. */
+export function lifecycleTiming(input, options = {}) {
+  const bundle = deepClone(input);
+  verifyBundle(bundle, { ...options, requireSemantics: true });
+  const transitions = bundle.events.filter(event => event.event_type === "STATE_TRANSITION");
+  let enteredAt = bundle.events[0].recorded_at;
+  const intervals = transitions.map(event => {
+    const interval = { state: event.payload.from_state, entered_at: enteredAt,
+      left_at: event.recorded_at, duration_ms: Date.parse(event.recorded_at) - Date.parse(enteredAt) };
+    enteredAt = event.recorded_at;
+    return interval;
+  });
+  return { valid: true, bundle_digest: digest(bundle), verification_scope: "integrity_and_lifecycle_semantics",
+    total_recorded_ms: intervals.reduce((sum, item) => sum + item.duration_ms, 0), intervals,
+    ambiguity_observed: intervals.some(item => ["UNKNOWN", "REMEDY_UNKNOWN", "REVIEW_REQUIRED"].includes(item.state)),
+    limitations: ["Signed recorded timestamps are not independent clock measurements or connector latency.",
+      "Zero-duration intervals may reflect a fixed synthetic clock. No permission or retry is granted."] };
+}
+
 /** Verify first, then produce a metadata-only review with explicit assurance limits. */
 export function reviewBundle(input, options = {}) {
   const bundle = deepClone(input);
