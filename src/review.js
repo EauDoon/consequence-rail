@@ -36,11 +36,13 @@ export function reviewBundle(input, options = {}) {
 }
 /** Compare two independently verified artifacts without exposing their payloads. */
 export function compareBundles(leftInput, rightInput, options = {}) {
-  const left = reviewBundle(leftInput, options);
-  const right = reviewBundle(rightInput, options);
+  const leftBundle = deepClone(leftInput);
+  const rightBundle = deepClone(rightInput);
+  const left = reviewBundle(leftBundle, options);
+  const right = reviewBundle(rightBundle, options);
   const fields = ["profile", "verification_scope", "action_digest", "outcome", "assurance_mode",
     "bypass_possible", "recourse_final_status", "closed_at", "event_count", "evidence_count", "event_chain_head"];
-  const sameReceipt = digest(leftInput.settlement_receipt) === digest(rightInput.settlement_receipt);
+  const sameReceipt = digest(leftBundle.settlement_receipt) === digest(rightBundle.settlement_receipt);
   return {
     valid: true,
     same_bundle: left.bundle_digest === right.bundle_digest,

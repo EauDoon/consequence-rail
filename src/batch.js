@@ -1,11 +1,13 @@
 import { readArtifactFile } from "./artifact-files.js";
 import { verifyBundle } from "./verify.js";
 import { RailError } from "./errors.js";
+import { deepClone } from "./canonical.js";
 
 export const MAX_BATCH_FILES = 64;
 
 /** Independent strict audit verification. A bad file cannot hide other results. */
 export function verifyArtifactFiles(paths, options = {}) {
+  paths = deepClone(paths);
   if (!Array.isArray(paths) || paths.length === 0 || paths.length > MAX_BATCH_FILES ||
       paths.some((path) => typeof path !== "string" || path.length === 0 || path.length > 4096)) {
     throw new RailError("BATCH_INVALID", "Supply 1 to 64 artifact file paths, each at most 4096 characters.");

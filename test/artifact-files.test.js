@@ -52,3 +52,12 @@ test("digest pins match canonical bytes but reject substitutions and malformed e
     assert.throws(() => assertArtifactDigest(value, invalid), { code: "DIGEST_PIN_INVALID" });
   }
 });
+import { parseUniqueJson } from "../src/json-input.js";
+
+test("strict JSON rejects duplicate members, including escaped equivalents at any depth", () => {
+  for (const text of ['{"profile":"audit","profile":"receipt"}', '{"a":1,"\\u0061":2}', '{"x":[{"outcome":1,"outcome":2}]}']) {
+    assert.throws(() => parseUniqueJson(text), { code: "JSON_DUPLICATE_KEY" });
+  }
+  assert.deepEqual(parseUniqueJson('{"x":{"a":1},"y":{"a":2},"text":"{}[]:\\""}'), { x: { a: 1 }, y: { a: 2 }, text: '{}[]:"' });
+  assert.deepEqual(parseUniqueJson('["a","a",{"a":1}]'), ["a", "a", { a: 1 }]);
+});

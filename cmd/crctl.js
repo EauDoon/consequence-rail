@@ -22,15 +22,10 @@ import {
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
 import { assertArtifactDigest, readArtifactFile } from "../src/artifact-files.js";
-
 import { compareBundles, reviewBundle } from "../src/review.js";
-
 import { verifyArtifactFiles } from "../src/batch.js";
-
 import { scenarioCatalog } from "../src/scenarios.js";
-
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
-
 import { digest } from "../src/canonical.js";
 
 const VALUE_FLAGS = {
@@ -241,7 +236,7 @@ async function main() {
       return;
     }
     if (!subcommand) {
-      throw usage("Missing demo scenario. Expected refund, irreversible, or recovery-preflight.");
+      throw usage("Missing demo scenario. Expected refund, inventory, irreversible, recovery-preflight, list, or matrix.");
     }
     if (subcommand === "refund") {
       requireNoExtra(positional, 2, "demo refund");
@@ -353,7 +348,7 @@ async function main() {
       return;
     }
     if (!["verify", "timeline", "review"].includes(subcommand)) {
-      throw usage("Missing or unknown bundle command. Expected verify or timeline, plus a file.");
+      throw usage("Missing or unknown bundle command. Expected verify, verify-many, timeline, review, or compare.");
     }
     if (!target) {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);

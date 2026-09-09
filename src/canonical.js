@@ -21,7 +21,9 @@ function objectEntries(value) {
   if (Object.getOwnPropertySymbols(value).length > 0) {
     canonicalizationError("Symbol object fields are not supported.");
   }
-  return Object.getOwnPropertyNames(value).map((key) => {
+  const names = Object.getOwnPropertyNames(value);
+  if (names.length > JSON_LIMITS.maxNodes) canonicalizationError("Object exceeds the JSON node limit.");
+  return names.map((key) => {
     if (RESERVED_KEYS.has(key)) {
       canonicalizationError("Reserved object fields are not supported.", {
         field: key,

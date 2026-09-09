@@ -1,7 +1,8 @@
 import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import { resolve } from "node:path";
-import { deepClone } from "./canonical.js";
+import { deepClone, digest } from "./canonical.js";
 import { RailError } from "./errors.js";
+import { parseUniqueJson } from "./json-input.js";
 
 export const MAX_ARTIFACT_BYTES = 1_048_576;
 
@@ -35,11 +36,13 @@ export function readArtifactFile(path) {
   catch { throw new RailError("ARTIFACT_ENCODING_INVALID", "Artifact must be valid UTF-8."); }
   if (text.trim() === "") throw new RailError("USAGE_INVALID", `File is empty: ${path}. Run with --help.`);
   let value;
-  try { value = JSON.parse(text); }
-  catch { throw new RailError("USAGE_INVALID", `File is not valid JSON: ${path}. Run with --help.`); }
+  try { value = parseUniqueJson(text); }
+  catch (error) {
+    if (error instanceof RailError) throw error;
+    throw new RailError("USAGE_INVALID", `File is not valid JSON: ${path}. Run with --help.`);
+  }
   return deepClone(value);
 }
-import { digest } from "./canonical.js";
 
 /** Check an independently recorded canonical digest before accepting an artifact. */
 export function assertArtifactDigest(value, expected) {

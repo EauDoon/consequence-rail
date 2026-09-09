@@ -35,7 +35,7 @@ const scenarios = deepFreeze([
     } })),
   })),
   { name: "recovery-preflight", assurance_modes: [], faults: RECOVERY_DEMO_FAULTS.map((name) => ({
-    name, purpose: PURPOSES[name], expected: { qualification: name === "none" ? "QUALIFIED_EXACT" :
+    name, purpose: name === "remedy-failure" ? "Reject a drill whose remedy fails." : PURPOSES[name], expected: { qualification: name === "none" ? "QUALIFIED_EXACT" :
       ["not-testable-local", "out-of-scope"].includes(name) ? "NOT_TESTABLE_LOCAL" : "NOT_QUALIFIED" },
   })) },
   { name: "irreversible", assurance_modes: [], faults: [], expected: { admitted: false } },

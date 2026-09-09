@@ -2,6 +2,15 @@
 
 ## Unreleased corrective candidate
 
+- Added verified metadata review, independently verified bundle comparison, bounded
+  batch audit verification, and canonical digest pins for offline artifact review.
+- Added a synthetic scenario catalog and a deterministic 31-case fault matrix with
+  explicit no-replay, tamper detection, recovery-gate and isolation checks.
+- Added explicit recovery freshness verification at a caller-selected timestamp.
+- Bounded canonical traversal and artifact file reads, rejected cycles, hidden
+  fields, invalid UTF-8 and duplicate JSON members, and detached signed inputs
+  from caller-owned objects. Existing accepted artifact bytes remain compatible.
+
 - Added opt-in ActionProposal, SettlementReceipt, and SettlementBundle v0.2 schemas that bound
   ordered `gte` and `lte` thresholds to finite JavaScript binary64 numbers.
   The v0.2 receipt signs its proposal schema version, and verification rejects
