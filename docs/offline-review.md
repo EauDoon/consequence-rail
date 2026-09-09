@@ -46,8 +46,13 @@ These checks explain the existing qualification, not a new admission decision.
 ## Compare recovery coverage
 
 `crctl recovery-preflight compare old.json new.json` independently verifies
-both drills and distinguishes action/coverage identity from changed fixture,
-scope, recourse, fault, procedure, oracle, qualification and validity window.
+both drills and distinguishes action/coverage identity from changed action or
+recovery class, fixture, scope, recourse, fault, procedure, oracle, qualification
+and validity window. Contract issuance, expiry and maximum attestation age are
+listed separately from the drill's timestamps, even when the drill expiry is
+unchanged. `same_coverage` compares the existing protocol coverage digest; it
+does not mean all recovery-contract fields match. Protocol digest definitions
+are unchanged.
 Structured coverage contents are represented by digests to keep fixture data
 out of reports. `--at` requires both drills to be current at the same instant.
 A difference never selects the authoritative drill or accepts its recovery.

@@ -34,9 +34,12 @@ export function compareRecovery(leftInput, rightInput, options = {}) {
   const leftReview = reviewRecovery(left, options), rightReview = reviewRecovery(right, options);
   const metadata = bundle => {
     const contract = bundle.recovery_contract, attestation = bundle.drill_attestation;
-    return { action_digest: contract.action_digest, scope_digest: digest(contract.scope),
+    return { action_digest: contract.action_digest, action_class: contract.action_class,
+      recovery_class: contract.recovery_class, scope_digest: digest(contract.scope),
       recourse_digest: digest(contract.recourse), fixture_digest: digest(contract.fixture),
       fault_digest: digest(contract.fault), procedure_digest: digest(contract.procedure), oracle_digest: digest(contract.oracle),
+      contract_issued_at: contract.issued_at, contract_expires_at: contract.expires_at,
+      max_attestation_age_seconds: contract.max_attestation_age_seconds,
       qualification: attestation.qualification, drilled_at: attestation.drilled_at, expires_at: attestation.expires_at };
   };
   const before = metadata(left), after = metadata(right);
@@ -47,6 +50,7 @@ export function compareRecovery(leftInput, rightInput, options = {}) {
     changes: Object.keys(before).filter(field => before[field] !== after[field])
       .map(field => ({ field, left: before[field], right: after[field] })),
     limitations: ["Different drill outcomes do not establish which artifact is authoritative.",
+      "same_coverage compares the protocol coverage digest, not every recovery contract field.",
       "Matching coverage is not a permit or proof of current production recovery."] };
 }
 
