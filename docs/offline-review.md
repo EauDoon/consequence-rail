@@ -38,3 +38,12 @@ attempt, oracle result and exact state restoration. Raw fixture states are
 omitted. An explicit instant requires current evidence and reports remaining
 validity; expired evidence fails. Without it, freshness is explicitly unchecked.
 These checks explain the existing qualification, not a new admission decision.
+
+## Compare recovery coverage
+
+`crctl recovery-preflight compare old.json new.json` independently verifies
+both drills and distinguishes action/coverage identity from changed fixture,
+scope, recourse, fault, procedure, oracle, qualification and validity window.
+Structured coverage contents are represented by digests to keep fixture data
+out of reports. `--at` requires both drills to be current at the same instant.
+A difference never selects the authoritative drill or accepts its recovery.

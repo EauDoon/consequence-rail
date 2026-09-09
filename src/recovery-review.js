@@ -26,3 +26,25 @@ export function reviewRecovery(input, options = {}) {
       "No permit, live qualification update, or execution authority is granted.",
       ...(result.freshness_checked ? [] : ["Freshness was not checked; supply an explicit verification instant."])] };
 }
+
+/** Compare independently verified coverage without selecting an authoritative drill. */
+export function compareRecovery(leftInput, rightInput, options = {}) {
+  const left = deepClone(leftInput), right = deepClone(rightInput);
+  const leftReview = reviewRecovery(left, options), rightReview = reviewRecovery(right, options);
+  const metadata = bundle => {
+    const contract = bundle.recovery_contract, attestation = bundle.drill_attestation;
+    return { action_digest: contract.action_digest, scope_digest: digest(contract.scope),
+      recourse_digest: digest(contract.recourse), fixture_digest: digest(contract.fixture),
+      fault_digest: digest(contract.fault), procedure_digest: digest(contract.procedure), oracle_digest: digest(contract.oracle),
+      qualification: attestation.qualification, drilled_at: attestation.drilled_at, expires_at: attestation.expires_at };
+  };
+  const before = metadata(left), after = metadata(right);
+  return { valid: true, same_bundle: leftReview.bundle_digest === rightReview.bundle_digest,
+    same_action: before.action_digest === after.action_digest,
+    same_coverage: leftReview.coverage_digest === rightReview.coverage_digest,
+    left_bundle_digest: leftReview.bundle_digest, right_bundle_digest: rightReview.bundle_digest,
+    changes: Object.keys(before).filter(field => before[field] !== after[field])
+      .map(field => ({ field, left: before[field], right: after[field] })),
+    limitations: ["Different drill outcomes do not establish which artifact is authoritative.",
+      "Matching coverage is not a permit or proof of current production recovery."] };
+}

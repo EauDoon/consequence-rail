@@ -27,7 +27,7 @@ import { verifyArtifactFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
 import { digest } from "../src/canonical.js";
-import { reviewRecovery } from "../src/recovery-review.js";
+import { reviewRecovery, compareRecovery } from "../src/recovery-review.js";
 
 const VALUE_FLAGS = {
   "--fault": "fault",
@@ -111,6 +111,7 @@ Usage:
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
   crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json]
+  crctl recovery-preflight compare <left> <right> [--at <ISO timestamp>] [--json]
   crctl --help
 
 Refund demo faults:
@@ -432,6 +433,16 @@ async function main() {
   }
 
   if (command === "recovery-preflight") {
+    if (subcommand === "compare") {
+      requireNoExtra(positional, 4, "recovery-preflight compare");
+      assertFlags(options, new Set(["json", "at"]));
+      if (!target || !positional[3]) throw usage("Recovery comparison requires two files.");
+      const result = compareRecovery(readArtifactFile(target), readArtifactFile(positional[3]), {
+        trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      return;
+    }
     if (!["verify", "review"].includes(subcommand)) {
       throw usage("Missing or unknown recovery-preflight command. Expected verify, plus a file.");
     }
