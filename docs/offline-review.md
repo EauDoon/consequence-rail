@@ -84,3 +84,12 @@ to a new local `.md` file as needed. Metadata punctuation and control characters
 are encoded so signed strings cannot inject links, HTML, table rows or terminal
 escapes. Raw evidence is omitted. `--json` and `--markdown` are mutually exclusive.
 The Markdown report is derived output, not a signed protocol artifact.
+
+## Pin every artifact under review
+
+All single-artifact inspection and receipt-export commands accept
+`--expect-digest` with an independently recorded canonical bundle digest.
+For either comparison or recovery linking, that flag pins the first input;
+`--expect-other-digest` pins the second. A mismatch emits no report and creates
+no receipt output. Both files still receive their normal signature/replay
+verification. Digest pins prevent substitution, not untrusted signer acceptance.
