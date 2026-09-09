@@ -27,6 +27,7 @@ import { verifyArtifactFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
 import { digest } from "../src/canonical.js";
+import { reviewRecovery } from "../src/recovery-review.js";
 
 const VALUE_FLAGS = {
   "--fault": "fault",
@@ -109,6 +110,7 @@ Usage:
   crctl bundle timing <audit-file> [--json]
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
+  crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json]
   crctl --help
 
 Refund demo faults:
@@ -430,7 +432,7 @@ async function main() {
   }
 
   if (command === "recovery-preflight") {
-    if (subcommand !== "verify") {
+    if (!["verify", "review"].includes(subcommand)) {
       throw usage("Missing or unknown recovery-preflight command. Expected verify, plus a file.");
     }
     if (!target) {
@@ -440,13 +442,13 @@ async function main() {
     assertFlags(options, new Set(["json", "at", "expect-digest"]));
     const bundle = readArtifactFile(target);
     if (options["expect-digest"] !== undefined) assertArtifactDigest(bundle, options["expect-digest"]);
-    const result = verifyRecoveryPreflight(bundle, {
+    const result = (subcommand === "review" ? reviewRecovery : verifyRecoveryPreflight)(bundle, {
       trustedKeys: demoRecoveryTrustedKeys(),
       requireCurrent: options.at !== undefined,
       now: options.at ?? null,
     });
     result.bundle_digest = digest(bundle);
-    if (options.json) {
+    if (options.json || subcommand === "review") {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
       process.stdout.write(

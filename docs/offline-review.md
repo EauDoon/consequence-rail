@@ -29,3 +29,12 @@ ambiguous execution/remedy states without recommending a retry. Values come
 from signed event times, not an independent performance measurement; fixed
 synthetic clocks can legitimately produce zero durations. Receipt profiles
 are refused because their chronology has not received full semantic replay.
+
+## Diagnose a recovery drill
+
+`crctl recovery-preflight review drill.json --at 2035-01-01T00:00:00.000Z`
+verifies replay and reports checkpoint integrity, fault observation, recovery
+attempt, oracle result and exact state restoration. Raw fixture states are
+omitted. An explicit instant requires current evidence and reports remaining
+validity; expired evidence fails. Without it, freshness is explicitly unchecked.
+These checks explain the existing qualification, not a new admission decision.
