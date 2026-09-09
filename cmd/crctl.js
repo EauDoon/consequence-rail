@@ -23,6 +23,8 @@ import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
 import { readArtifactFile } from "../src/artifact-files.js";
 
+import { reviewBundle } from "../src/review.js";
+
 const VALUE_FLAGS = {
   "--fault": "fault",
   "--assurance": "assurance",
@@ -92,6 +94,7 @@ Usage:
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
   crctl bundle verify <file> [--json]
   crctl bundle timeline <file> [--json]
+  crctl bundle review <file> [--json]
   crctl recovery-preflight verify <file> [--json]
   crctl --help
 
@@ -299,7 +302,7 @@ async function main() {
   }
 
   if (command === "bundle") {
-    if (subcommand !== "verify" && subcommand !== "timeline") {
+    if (!["verify", "timeline", "review"].includes(subcommand)) {
       throw usage("Missing or unknown bundle command. Expected verify or timeline, plus a file.");
     }
     if (!target) {
@@ -308,6 +311,14 @@ async function main() {
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
     assertFlags(options, new Set(["json"]));
     const bundle = readArtifactFile(target);
+    if (subcommand === "review") {
+      const result = reviewBundle(bundle, {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+      });
+      result.trust_profile = "public_demo_keys_only";
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
     if (subcommand === "verify") {
       const result = verifyBundle(bundle, {
         trustedKeys: demoTrustedKeys(),

@@ -362,3 +362,7 @@ Public identity: EauDoon.
 ## Offline artifact input limits
 
 CLI verification reads regular files only, caps each input at 1 MiB, requires valid UTF-8 JSON, and applies the canonical JSON structural limits before verification. Oversized files, invalid encodings, prototype-sensitive fields, and excessive nesting fail before signatures or lifecycle semantics are evaluated.
+
+## Review a saved settlement
+
+Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata, the state path, outcome, recourse status, evidence count and bound digests. Audit profiles replay lifecycle semantics. Receipt profiles report integrity only and disclose omitted evidence. Reports omit raw proposals and evidence. The CLI explicitly uses public demonstration keys; this is a synthetic integrity check, not a production trust claim.
