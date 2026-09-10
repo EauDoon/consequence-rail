@@ -21,12 +21,14 @@ import {
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
-import { assertArtifactDigest, readArtifactFile } from "../src/artifact-files.js";
-import { compareBundles, reviewBundle } from "../src/review.js";
-import { verifyArtifactFiles } from "../src/batch.js";
+import { assertArtifactDigest, readArtifactFile, serializeArtifact } from "../src/artifact-files.js";
+import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
+import { verifyArtifactFiles, verifyRecoveryFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
 import { runScenarioMatrix } from "../src/scenario-matrix.js";
 import { digest } from "../src/canonical.js";
+import { reviewRecovery, compareRecovery, linkRecovery } from "../src/recovery-review.js";
+import { settlementMarkdown, recoveryMarkdown } from "../src/review-markdown.js";
 
 const VALUE_FLAGS = {
   "--fault": "fault",
@@ -34,9 +36,11 @@ const VALUE_FLAGS = {
   "--out": "out",
   "--at": "at",
   "--expect-digest": "expect-digest",
+  "--expect-other-digest": "expect-other-digest",
 };
 const BOOL_FLAGS = {
   "--json": "json",
+  "--markdown": "markdown",
 };
 
 function usage(message) {
@@ -103,9 +107,16 @@ Usage:
   crctl bundle verify <file> [--expect-digest <digest>] [--json]
   crctl bundle verify-many <file>... [--json]
   crctl bundle timeline <file> [--json]
-  crctl bundle review <file> [--json]
+  crctl bundle review <file> [--json|--markdown]
+  crctl bundle receipt <file> --out <new-file> [--json]
+  crctl bundle evidence <file> [--json]
+  crctl bundle timing <audit-file> [--json]
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
+  crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json|--markdown]
+  crctl recovery-preflight compare <left> <right> [--at <ISO timestamp>] [--json]
+  crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
+  crctl recovery-preflight verify-many <file>... [--at <ISO timestamp>] [--json]
   crctl --help
 
 Refund demo faults:
@@ -121,12 +132,16 @@ Flags:
   --fault <name>        Synthetic fault to inject
   --assurance <mode>    Refund demo assurance mode
   --json                Print machine-readable JSON
+  --markdown            Print a readable settlement or recovery review
   --out <file>          Write the settlement or drill bundle (must not exist)
   --at <ISO timestamp>  Require recovery qualification to be current at this instant
   --expect-digest <digest> Require the recorded canonical artifact digest
+  --expect-other-digest <digest> Pin the second input of compare or link
   -h, --help            Show this help
 
 Examples:
+  All single-artifact review, evidence, timing, timeline and receipt commands
+  accept --expect-digest. Compare and link accept both digest pin flags.
   node ./cmd/crctl.js demo refund
   node ./cmd/crctl.js demo refund --fault duplicate
   node ./cmd/crctl.js demo refund --fault lost-response-after-commit
@@ -191,8 +206,9 @@ function printRecoveryPreflight(summary, asJson) {
 }
 
 function writeExclusiveJson(path, value) {
+  const text = serializeArtifact(value);
   try {
-    writeFileSync(resolve(path), `${JSON.stringify(value, null, 2)}\n`, {
+    writeFileSync(resolve(path), text, {
       encoding: "utf8",
       flag: "wx",
     });
@@ -202,6 +218,12 @@ function writeExclusiveJson(path, value) {
     }
     throw usage(`Could not write file: ${path}.`);
   }
+}
+
+function readPinnedArtifact(path, expected) {
+  const bundle = readArtifactFile(path);
+  if (expected !== undefined) assertArtifactDigest(bundle, expected);
+  return bundle;
 }
 
 function requireNoExtra(positional, count, command) {
@@ -218,6 +240,7 @@ async function main() {
   }
 
   const { positional, options } = parseCliArgs(args);
+  if (options.json && options.markdown) throw usage("Choose --json or --markdown, not both.");
   const [command, subcommand, target] = positional;
 
   if (command === "demo") {
@@ -328,37 +351,52 @@ async function main() {
   }
 
   if (command === "bundle") {
+    if (subcommand === "receipt") {
+      requireNoExtra(positional, 3, "bundle receipt");
+      assertFlags(options, new Set(["json", "out", "expect-digest"]));
+      if (!target || !options.out) throw usage("Receipt export requires input and --out.");
+      const bundle = receiptBundle(readPinnedArtifact(target, options["expect-digest"]), {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+      });
+      writeExclusiveJson(options.out, bundle);
+      process.stdout.write(`${JSON.stringify({ valid: true, profile: "receipt", bundle_digest: digest(bundle), trust_profile: "public_demo_keys_only", semantics: "not_checked_in_exported_profile" }, null, 2)}\n`);
+      return;
+    }
     if (subcommand === "verify-many") {
       assertFlags(options, new Set(["json"]));
       const result = verifyArtifactFiles(positional.slice(2), {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
       process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
-      if (!result.valid) process.exitCode = 1;
+      if (!result.valid || result.review_required) process.exitCode = 1;
       return;
     }
     if (subcommand === "compare") {
       requireNoExtra(positional, 4, "bundle compare");
-      assertFlags(options, new Set(["json"]));
+      assertFlags(options, new Set(["json", "expect-digest", "expect-other-digest"]));
       if (!target || !positional[3]) throw usage("Bundle comparison requires two files.");
-      const result = compareBundles(readArtifactFile(target), readArtifactFile(positional[3]), {
+      const result = compareBundles(readPinnedArtifact(target, options["expect-digest"]), readPinnedArtifact(positional[3], options["expect-other-digest"]), {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
       process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
       return;
     }
-    if (!["verify", "timeline", "review"].includes(subcommand)) {
-      throw usage("Missing or unknown bundle command. Expected verify, verify-many, timeline, review, or compare.");
+    if (!["verify", "timeline", "review", "evidence", "timing"].includes(subcommand)) {
+      throw usage("Missing or unknown bundle command. Expected verify, verify-many, timeline, review, receipt, evidence, timing, or compare.");
     }
     if (!target) {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
-    assertFlags(options, new Set(subcommand === "verify" ? ["json", "expect-digest"] : ["json"]));
-    const bundle = readArtifactFile(target);
-    if (options["expect-digest"] !== undefined) assertArtifactDigest(bundle, options["expect-digest"]);
-    if (subcommand === "review") {
-      const result = reviewBundle(bundle, {
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest"] : ["json", "expect-digest"]));
+    const bundle = readPinnedArtifact(target, options["expect-digest"]);
+    if (subcommand === "review" && options.markdown) {
+      process.stdout.write(settlementMarkdown(bundle, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() }));
+      return;
+    }
+    if (["review", "evidence", "timing"].includes(subcommand)) {
+      const report = { review: reviewBundle, evidence: evidenceInventory, timing: lifecycleTiming }[subcommand];
+      const result = report(bundle, {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
       result.trust_profile = "public_demo_keys_only";
@@ -415,23 +453,57 @@ async function main() {
   }
 
   if (command === "recovery-preflight") {
-    if (subcommand !== "verify") {
-      throw usage("Missing or unknown recovery-preflight command. Expected verify, plus a file.");
+    if (subcommand === "verify-many") {
+      assertFlags(options, new Set(["json", "at"]));
+      const result = verifyRecoveryFiles(positional.slice(2), {
+        trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      if (!result.valid) process.exitCode = 1;
+      return;
+    }
+    if (subcommand === "link") {
+      requireNoExtra(positional, 4, "recovery-preflight link");
+      assertFlags(options, new Set(["json", "at", "expect-digest", "expect-other-digest"]));
+      if (!target || !positional[3]) throw usage("Recovery link requires a settlement and drill file.");
+      const result = linkRecovery(readPinnedArtifact(target, options["expect-digest"]), readPinnedArtifact(positional[3], options["expect-other-digest"]), {
+        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
+        trustedRecoveryKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      if (!result.bindings_match) process.exitCode = 1;
+      return;
+    }
+    if (subcommand === "compare") {
+      requireNoExtra(positional, 4, "recovery-preflight compare");
+      assertFlags(options, new Set(["json", "at", "expect-digest", "expect-other-digest"]));
+      if (!target || !positional[3]) throw usage("Recovery comparison requires two files.");
+      const result = compareRecovery(readPinnedArtifact(target, options["expect-digest"]), readPinnedArtifact(positional[3], options["expect-other-digest"]), {
+        trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+      });
+      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      return;
+    }
+    if (!["verify", "review"].includes(subcommand)) {
+      throw usage("Missing or unknown recovery-preflight command. Expected verify, verify-many, review, compare, or link.");
     }
     if (!target) {
       throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
     }
     requireNoExtra(positional, 3, "recovery-preflight verify");
-    assertFlags(options, new Set(["json", "at", "expect-digest"]));
-    const bundle = readArtifactFile(target);
-    if (options["expect-digest"] !== undefined) assertArtifactDigest(bundle, options["expect-digest"]);
-    const result = verifyRecoveryPreflight(bundle, {
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown"] : ["json", "at", "expect-digest"]));
+    const bundle = readPinnedArtifact(target, options["expect-digest"]);
+    if (subcommand === "review" && options.markdown) {
+      process.stdout.write(recoveryMarkdown(bundle, { trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null }));
+      return;
+    }
+    const result = (subcommand === "review" ? reviewRecovery : verifyRecoveryPreflight)(bundle, {
       trustedKeys: demoRecoveryTrustedKeys(),
       requireCurrent: options.at !== undefined,
       now: options.at ?? null,
     });
     result.bundle_digest = digest(bundle);
-    if (options.json) {
+    if (options.json || subcommand === "review") {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
       process.stdout.write(

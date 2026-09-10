@@ -272,8 +272,9 @@ test("new CLI workflows exercise verified review, comparison, batch, catalog and
     assert.equal(compare.status, 0);
     assert.equal(JSON.parse(compare.stdout).same_receipt, false);
     const batch = runCli("crctl.js", ["bundle", "verify-many", first, second, "--json"]);
-    assert.equal(batch.status, 0);
+    assert.equal(batch.status, 1);
     assert.equal(JSON.parse(batch.stdout).passed, 2);
+    assert.equal(JSON.parse(batch.stdout).review_required, true);
     assert.equal(JSON.parse(runCli("crctl.js", ["demo", "list", "--json"]).stdout).scenarios.length, 4);
     const matrix = runCli("crctl.js", ["demo", "matrix", "--json"]);
     assert.equal(matrix.status, 0);

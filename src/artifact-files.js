@@ -6,6 +6,17 @@ import { parseUniqueJson } from "./json-input.js";
 
 export const MAX_ARTIFACT_BYTES = 1_048_576;
 
+/** Keep exported JSON readable by the bounded loader, including the final LF. */
+export function serializeArtifact(value) {
+  const snapshot = deepClone(value);
+  let text = `${JSON.stringify(snapshot, null, 2)}\n`;
+  if (Buffer.byteLength(text, "utf8") > MAX_ARTIFACT_BYTES) text = `${JSON.stringify(snapshot)}\n`;
+  if (Buffer.byteLength(text, "utf8") > MAX_ARTIFACT_BYTES) {
+    throw new RailError("ARTIFACT_TOO_LARGE", "Serialized artifact exceeds the 1 MiB output limit.");
+  }
+  return text;
+}
+
 /** Read one bounded, regular UTF-8 JSON file. Never read directories or streams. */
 export function readArtifactFile(path) {
   let descriptor;

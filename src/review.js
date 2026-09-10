@@ -1,6 +1,56 @@
 import { deepClone, digest } from "./canonical.js";
 import { verifyBundle } from "./verify.js";
 
+/** Produce the existing receipt profile, preserving signed artifacts unchanged. */
+export function receiptBundle(input, options = {}) {
+  const bundle = deepClone(input);
+  reviewBundle(bundle, options);
+  bundle.profile = "receipt";
+  delete bundle.action.proposal;
+  bundle.outcome_evidence = [];
+  reviewBundle(bundle, options);
+  return bundle;
+}
+
+/** Inventory bound evidence without disclosing facts, identifiers or raw evaluations. */
+export function evidenceInventory(input, options = {}) {
+  const bundle = deepClone(input), review = reviewBundle(bundle, options);
+  return {
+    valid: true, bundle_digest: review.bundle_digest, verification_scope: review.verification_scope,
+    evidence_count: review.evidence_count,
+    evidence: bundle.evidence_manifest.map((evidenceDigest, index) => {
+      const item = bundle.outcome_evidence[index];
+      if (!item) return { digest: evidenceDigest, metadata_available: false };
+      const accepted = bundle.events.find(event =>
+        ["EVIDENCE_ACCEPTED", "REMEDY_EVIDENCE_ACCEPTED"].includes(event.event_type) && event.payload.evidence_digest === evidenceDigest);
+      return { digest: evidenceDigest, metadata_available: true, phase: item.phase ?? "initial",
+        source: item.source, observed_at: item.observed_at, accepted_at: accepted.recorded_at,
+        age_at_acceptance_ms: Date.parse(accepted.recorded_at) - Date.parse(item.observed_at),
+        satisfied: item.evaluation.satisfied, signer_key_id: item.signature.key_id };
+    }),
+    limitations: review.limitations,
+  };
+}
+
+/** Recorded state dwell times, not connector latency or a performance guarantee. */
+export function lifecycleTiming(input, options = {}) {
+  const bundle = deepClone(input);
+  verifyBundle(bundle, { ...options, requireSemantics: true });
+  const transitions = bundle.events.filter(event => event.event_type === "STATE_TRANSITION");
+  let enteredAt = bundle.events[0].recorded_at;
+  const intervals = transitions.map(event => {
+    const interval = { state: event.payload.from_state, entered_at: enteredAt,
+      left_at: event.recorded_at, duration_ms: Date.parse(event.recorded_at) - Date.parse(enteredAt) };
+    enteredAt = event.recorded_at;
+    return interval;
+  });
+  return { valid: true, bundle_digest: digest(bundle), verification_scope: "integrity_and_lifecycle_semantics",
+    total_recorded_ms: intervals.reduce((sum, item) => sum + item.duration_ms, 0), intervals,
+    ambiguity_observed: intervals.some(item => ["UNKNOWN", "REMEDY_UNKNOWN", "REVIEW_REQUIRED"].includes(item.state)),
+    limitations: ["Signed recorded timestamps are not independent clock measurements or connector latency.",
+      "Zero-duration intervals may reflect a fixed synthetic clock. No permission or retry is granted."] };
+}
+
 /** Verify first, then produce a metadata-only review with explicit assurance limits. */
 export function reviewBundle(input, options = {}) {
   const bundle = deepClone(input);

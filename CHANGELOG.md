@@ -1,5 +1,18 @@
 # Changelog
 
+## Offline review workflow candidate (10-09-2026)
+
+- Project verified audit bundles into the existing receipt profile without raw
+  proposal/evidence disclosure or changes to signed artifacts.
+- Inspect evidence provenance and recorded lifecycle durations; retain explicit
+  receipt-profile, clock, evidence-truth and no-execution limitations.
+- Diagnose recovery drills, compare coverage, link exact settlement bindings and
+  verify bounded drill collections with optional explicit freshness.
+- Flag duplicate bundles and differing receipts for one action in batch review.
+- Render safe Markdown reviews and pin every inspected or exported artifact.
+- Preserve protocol versions, runtime gates, zero dependencies and synthetic-only
+  examples. No production trust, admission or recovery guarantee is added.
+
 ## Unreleased corrective candidate
 
 - Added verified metadata review, independently verified bundle comparison, bounded
