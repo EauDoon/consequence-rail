@@ -22,7 +22,9 @@ export function recoveryMarkdown(bundle, options = {}) {
   return markdown("Recovery drill review", report,
     ["bundle_digest", "action_digest", "qualification", "recovery_class", "fixture_fidelity",
       "drilled_at", "expires_at", "checked_at", "freshness_checked", "remaining_validity_ms"],
-    Object.entries(report.checks).map(([name, passed]) => name + ": " + (passed ? "pass" : "not satisfied")));
+    ["Expiry constraints: " + report.validity_window.limiting_constraints.join(", "),
+      "Effective validity (ms): " + report.validity_window.valid_for_ms,
+      ...Object.entries(report.checks).map(([name, passed]) => name + ": " + (passed ? "pass" : "not satisfied"))]);
 }
 
 function markdown(title, report, fields, details) {

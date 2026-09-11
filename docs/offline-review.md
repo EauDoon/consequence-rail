@@ -19,6 +19,12 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+Recovery review includes a `validity_window` showing contract bounds, maximum
+attestation age, effective lifetime and the constraint(s) that limit expiry.
+`age_at_check_ms` stays null without `--at`. With `--at`, the instant must fall
+within the signed window; expiry is exclusive. These are historical artifact
+bounds, not a live qualification refresh or a production recovery guarantee.
+
 `bundle compare` reports added/removed evidence digests, exact ordered manifest
 equality, action-class equality and verification-context equality (scope and
 verified signer IDs). A receipt projection preserves evidence membership while

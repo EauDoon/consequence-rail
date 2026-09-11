@@ -22,6 +22,16 @@ export function reviewRecovery(input, options = {}) {
     drilled_at: attestation.drilled_at,
     checked_at: options.requireCurrent ? options.now : null,
     remaining_validity_ms: options.requireCurrent ? Date.parse(result.expires_at) - Date.parse(options.now) : null,
+    validity_window: {
+      contract_issued_at: contract.issued_at, contract_expires_at: contract.expires_at,
+      max_attestation_age_seconds: contract.max_attestation_age_seconds,
+      valid_for_ms: Date.parse(result.expires_at) - Date.parse(attestation.drilled_at),
+      age_at_check_ms: options.requireCurrent ? Date.parse(options.now) - Date.parse(attestation.drilled_at) : null,
+      limiting_constraints: [
+        ...(Date.parse(result.expires_at) === Date.parse(contract.expires_at) ? ["contract_expiry"] : []),
+        ...(Date.parse(result.expires_at) - Date.parse(attestation.drilled_at) === contract.max_attestation_age_seconds * 1000 ? ["attestation_age"] : []),
+      ],
+    },
     checks, failed_checks: Object.keys(checks).filter(key => !checks[key]),
     limitations: ["Diagnostics replay the signed declared evidence surface, not production recovery.",
       "No permit, live qualification update, or execution authority is granted.",
