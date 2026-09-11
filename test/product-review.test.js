@@ -5,6 +5,20 @@ import { demoTrustedKeys, demoConnectorTrustedKeys } from "../src/signing.js";
 import { reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming, compareBundles } from "../src/review.js";
 const trust = () => ({ trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() });
 
+test("timing groups recorded dwell by state and leaves terminal duration unknown", async () => {
+  const { bundle } = await runRefundDemo({ fault: "remedy-lost-response-after-commit" });
+  const report = lifecycleTiming(bundle, trust());
+  assert.equal(report.final_state.state, "CLOSED");
+  assert.equal(report.final_state.entered_at, report.intervals.at(-1).left_at);
+  assert.equal(report.final_state.duration_ms, null);
+  assert.equal(report.recorded_from, bundle.events[0].recorded_at);
+  assert.equal(report.recorded_until, bundle.events.at(-1).recorded_at);
+  assert(report.state_totals.some(row => row.state === "REMEDY_UNKNOWN"));
+  assert.equal(report.state_totals.reduce((sum, row) => sum + row.visits, 0), report.intervals.length);
+  assert.equal(report.state_totals.reduce((sum, row) => sum + row.duration_ms, 0), report.total_recorded_ms);
+  assert(!report.state_totals.some(row => row.state === "CLOSED"));
+});
+
 test("evidence diagnostics locate failed clauses without exposing values or paths", async () => {
   const { bundle } = await runRefundDemo({ fault: "duplicate" });
   const result = evidenceInventory(bundle, trust());

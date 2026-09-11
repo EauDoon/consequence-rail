@@ -47,7 +47,17 @@ export function lifecycleTiming(input, options = {}) {
     enteredAt = event.recorded_at;
     return interval;
   });
+  const totals = new Map();
+  for (const interval of intervals) {
+    const row = totals.get(interval.state) ?? { state: interval.state, visits: 0, duration_ms: 0 };
+    row.visits += 1;
+    row.duration_ms += interval.duration_ms;
+    totals.set(interval.state, row);
+  }
   return { valid: true, bundle_digest: digest(bundle), verification_scope: "integrity_and_lifecycle_semantics",
+    recorded_from: bundle.events[0].recorded_at, recorded_until: bundle.events.at(-1).recorded_at,
+    state_totals: [...totals.values()],
+    final_state: { state: transitions.at(-1).payload.to_state, entered_at: enteredAt, duration_ms: null },
     total_recorded_ms: intervals.reduce((sum, item) => sum + item.duration_ms, 0), intervals,
     ambiguity_observed: intervals.some(item => ["UNKNOWN", "REMEDY_UNKNOWN", "REVIEW_REQUIRED"].includes(item.state)),
     limitations: ["Signed recorded timestamps are not independent clock measurements or connector latency.",

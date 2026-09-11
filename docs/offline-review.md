@@ -19,6 +19,11 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+`bundle timing` includes `state_totals` (visits and total recorded milliseconds),
+the first and last event timestamps, and `final_state`. Its terminal duration is
+`null`: the artifact does not measure time after entering that state. Totals
+cover completed intervals only, including any repeated states and ambiguity.
+
 Audit evidence rows include `clause_count` and `failed_clauses` with zero-based
 clause indices and operators. Match an index to your retained proposal to locate
 the failed check. The report omits clause paths and actual/expected values;
