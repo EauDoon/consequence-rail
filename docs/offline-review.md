@@ -19,6 +19,12 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+Settlement collections summarize outcomes, assurance modes, unique bundles and
+attention counts. Counts include each successfully verified file, including
+duplicates; invalid files contribute only to failure counts. `attention_required`
+describes recorded histories, while `review_required` identifies differing
+receipts. Attention alone does not change verification exit status.
+
 Recovery `verify-many` detects identical bundle copies and differing signed drill
 attestations for the same action. Results retain action class, recovery class and
 coverage digest so differing scope is visible. Differing drills set

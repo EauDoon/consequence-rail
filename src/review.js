@@ -70,7 +70,7 @@ export function reviewBundle(input, options = {}) {
   const verification = verifyBundle(bundle, {
     trustedKeys: options.trustedKeys,
     trustedConnectorKeys: options.trustedConnectorKeys,
-    requireSemantics: bundle.profile === "audit",
+    requireSemantics: options.requireSemantics === true || bundle.profile === "audit",
   });
   const transitions = bundle.events.filter((event) => event.event_type === "STATE_TRANSITION");
   const attentionReasons = [
@@ -96,6 +96,7 @@ export function reviewBundle(input, options = {}) {
     recourse_final_status: bundle.settlement_receipt.recourse_final_status,
     closed_at: bundle.settlement_receipt.closed_at,
     event_count: verification.event_count,
+    semantics: verification.semantics,
     evidence_count: bundle.evidence_manifest.length,
     state_path: transitions.length === 0 ? [] : [
       transitions[0].payload.from_state,
