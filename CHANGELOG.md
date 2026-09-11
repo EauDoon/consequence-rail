@@ -1,5 +1,21 @@
 # Changelog
 
+## Offline review triage candidate (11-09-2026)
+
+- Distinguish verified artifact integrity from settlement attention reasons.
+- Locate failed evidence clauses by index without disclosing paths or values.
+- Aggregate recorded state dwell and mark terminal duration as unknown.
+- Compare evidence membership, action class and verification context.
+- Explain effective recovery validity and its limiting signed constraints.
+- Detect duplicate bundles and differing signed drills in recovery collections.
+- Summarize settlement collection outcomes, assurance modes and attention.
+- Add explicit expected-outcome and exact-qualified-drill CLI gates while keeping
+  validity, freshness and execution authority separate.
+- Export verified JSON and Markdown reviews through bounded exclusive file creation.
+- Preserve protocol schemas, signed artifacts, reference runtime admission and
+  demonstration-key trust boundaries. Recovery batch CLI now returns exit 1 for
+  differing signed attestations for the same action, even when both verify.
+
 ## Offline review workflow candidate (10-09-2026)
 
 - Project verified audit bundles into the existing receipt profile without raw

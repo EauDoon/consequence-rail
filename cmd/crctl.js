@@ -21,7 +21,7 @@ import {
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
-import { assertArtifactDigest, readArtifactFile, serializeArtifact } from "../src/artifact-files.js";
+import { assertArtifactDigest, readArtifactFile, serializeArtifact, MAX_ARTIFACT_BYTES } from "../src/artifact-files.js";
 import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
 import { verifyArtifactFiles, verifyRecoveryFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
@@ -37,10 +37,12 @@ const VALUE_FLAGS = {
   "--at": "at",
   "--expect-digest": "expect-digest",
   "--expect-other-digest": "expect-other-digest",
+  "--require-outcome": "require-outcome",
 };
 const BOOL_FLAGS = {
   "--json": "json",
   "--markdown": "markdown",
+  "--require-qualified": "require-qualified",
 };
 
 function usage(message) {
@@ -107,13 +109,13 @@ Usage:
   crctl bundle verify <file> [--expect-digest <digest>] [--json]
   crctl bundle verify-many <file>... [--json]
   crctl bundle timeline <file> [--json]
-  crctl bundle review <file> [--json|--markdown]
+  crctl bundle review <file> [--json|--markdown] [--out <new-report>]
   crctl bundle receipt <file> --out <new-file> [--json]
   crctl bundle evidence <file> [--json]
   crctl bundle timing <audit-file> [--json]
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
-  crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json|--markdown]
+  crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json|--markdown] [--out <new-report>]
   crctl recovery-preflight compare <left> <right> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight verify-many <file>... [--at <ISO timestamp>] [--json]
@@ -133,10 +135,12 @@ Flags:
   --assurance <mode>    Refund demo assurance mode
   --json                Print machine-readable JSON
   --markdown            Print a readable settlement or recovery review
-  --out <file>          Write the settlement or drill bundle (must not exist)
+  --out <file>          Write a demo bundle, receipt projection or review report (must not exist)
   --at <ISO timestamp>  Require recovery qualification to be current at this instant
   --expect-digest <digest> Require the recorded canonical artifact digest
   --expect-other-digest <digest> Pin the second input of compare or link
+  --require-outcome <outcome> Require settled, compensated or disputed (bundle verify/verify-many)
+  --require-qualified   Require QUALIFIED_EXACT (recovery verify/verify-many; add --at for freshness)
   -h, --help            Show this help
 
 Examples:
@@ -206,7 +210,13 @@ function printRecoveryPreflight(summary, asJson) {
 }
 
 function writeExclusiveJson(path, value) {
-  const text = serializeArtifact(value);
+  writeExclusiveText(path, serializeArtifact(value));
+}
+
+function writeExclusiveText(path, text) {
+  if (Buffer.byteLength(text, "utf8") > MAX_ARTIFACT_BYTES) {
+    throw new RailError("ARTIFACT_TOO_LARGE", "Serialized output exceeds the 1 MiB output limit.");
+  }
   try {
     writeFileSync(resolve(path), text, {
       encoding: "utf8",
@@ -218,6 +228,11 @@ function writeExclusiveJson(path, value) {
     }
     throw usage(`Could not write file: ${path}.`);
   }
+}
+
+function printReport(text, path) {
+  if (path !== undefined) writeExclusiveText(path, text);
+  process.stdout.write(text);
 }
 
 function readPinnedArtifact(path, expected) {
@@ -232,6 +247,20 @@ function requireNoExtra(positional, count, command) {
   }
 }
 
+function applyOutcomeExpectation(result, expected) {
+  if (expected === undefined) return;
+  result.expected_outcome = expected;
+  result.outcome_expectation_met = (result.results ?? [result]).every(row => row.valid && row.outcome === expected);
+  if (!result.outcome_expectation_met) process.exitCode = 1;
+}
+
+function applyQualificationExpectation(result, required) {
+  if (!required) return;
+  result.expected_qualification = "QUALIFIED_EXACT";
+  result.qualification_expectation_met = (result.results ?? [result]).every(row => row.valid && row.qualification === "QUALIFIED_EXACT");
+  if (!result.qualification_expectation_met) process.exitCode = 1;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
@@ -240,6 +269,9 @@ async function main() {
   }
 
   const { positional, options } = parseCliArgs(args);
+  if (options["require-outcome"] !== undefined && !["settled", "compensated", "disputed"].includes(options["require-outcome"])) {
+    throw usage("Expected outcome must be settled, compensated or disputed.");
+  }
   if (options.json && options.markdown) throw usage("Choose --json or --markdown, not both.");
   const [command, subcommand, target] = positional;
 
@@ -363,10 +395,11 @@ async function main() {
       return;
     }
     if (subcommand === "verify-many") {
-      assertFlags(options, new Set(["json"]));
+      assertFlags(options, new Set(["json", "require-outcome"]));
       const result = verifyArtifactFiles(positional.slice(2), {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
+      applyOutcomeExpectation(result, options["require-outcome"]);
       process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
       if (!result.valid || result.review_required) process.exitCode = 1;
       return;
@@ -388,10 +421,11 @@ async function main() {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest"] : ["json", "expect-digest"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest", "out"] :
+      subcommand === "verify" ? ["json", "expect-digest", "require-outcome"] : ["json", "expect-digest"]));
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
-      process.stdout.write(settlementMarkdown(bundle, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() }));
+      printReport(settlementMarkdown(bundle, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() }), options.out);
       return;
     }
     if (["review", "evidence", "timing"].includes(subcommand)) {
@@ -400,7 +434,7 @@ async function main() {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
       result.trust_profile = "public_demo_keys_only";
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      printReport(serializeArtifact(result), options.out);
       return;
     }
     if (subcommand === "verify") {
@@ -410,6 +444,7 @@ async function main() {
         requireSemantics: true,
       });
       result.bundle_digest = digest(bundle);
+      applyOutcomeExpectation(result, options["require-outcome"]);
       if (options.json) {
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       } else {
@@ -422,6 +457,7 @@ async function main() {
             `events: ${result.event_count}`,
             `semantics: ${result.semantics.status}`,
             `trusted_key: ${result.trusted_key_id}`,
+            ...(options["require-outcome"] ? [`outcome_expectation_met: ${result.outcome_expectation_met}`] : []),
           ].join("\n") + "\n",
         );
       }
@@ -454,12 +490,13 @@ async function main() {
 
   if (command === "recovery-preflight") {
     if (subcommand === "verify-many") {
-      assertFlags(options, new Set(["json", "at"]));
+      assertFlags(options, new Set(["json", "at", "require-qualified"]));
       const result = verifyRecoveryFiles(positional.slice(2), {
         trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
       });
+      applyQualificationExpectation(result, options["require-qualified"]);
       process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
-      if (!result.valid) process.exitCode = 1;
+      if (!result.valid || result.review_required) process.exitCode = 1;
       return;
     }
     if (subcommand === "link") {
@@ -491,10 +528,10 @@ async function main() {
       throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
     }
     requireNoExtra(positional, 3, "recovery-preflight verify");
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown"] : ["json", "at", "expect-digest"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown", "out"] : ["json", "at", "expect-digest", "require-qualified"]));
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
-      process.stdout.write(recoveryMarkdown(bundle, { trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null }));
+      printReport(recoveryMarkdown(bundle, { trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null }), options.out);
       return;
     }
     const result = (subcommand === "review" ? reviewRecovery : verifyRecoveryPreflight)(bundle, {
@@ -503,8 +540,9 @@ async function main() {
       now: options.at ?? null,
     });
     result.bundle_digest = digest(bundle);
+    applyQualificationExpectation(result, options["require-qualified"]);
     if (options.json || subcommand === "review") {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      printReport(serializeArtifact(result), options.out);
     } else {
       process.stdout.write(
         [
@@ -513,6 +551,7 @@ async function main() {
           `freshness: ${result.freshness_checked ? "current" : "not_checked"}`,
           `attestation: ${result.attestation_digest}`,
           `trusted_key: ${result.trusted_key_id}`,
+          ...(options["require-qualified"] ? [`qualification_expectation_met: ${result.qualification_expectation_met}`] : []),
         ].join("\n") + "\n",
       );
     }

@@ -17,11 +17,21 @@ export function reviewRecovery(input, options = {}) {
     oracle_satisfied: trace.oracle_satisfied,
     exact_state_restored: trace.baseline_state !== null && trace.recovered_state !== null && digest(trace.baseline_state) === digest(trace.recovered_state),
   };
-  return { ...result, bundle_digest: digest(bundle), action_digest: contract.action_digest,
+  return { ...result, bundle_digest: digest(bundle), action_digest: contract.action_digest, action_class: contract.action_class,
     recovery_class: contract.recovery_class, fixture_fidelity: contract.fixture.fidelity,
     drilled_at: attestation.drilled_at,
     checked_at: options.requireCurrent ? options.now : null,
     remaining_validity_ms: options.requireCurrent ? Date.parse(result.expires_at) - Date.parse(options.now) : null,
+    validity_window: {
+      contract_issued_at: contract.issued_at, contract_expires_at: contract.expires_at,
+      max_attestation_age_seconds: contract.max_attestation_age_seconds,
+      valid_for_ms: Date.parse(result.expires_at) - Date.parse(attestation.drilled_at),
+      age_at_check_ms: options.requireCurrent ? Date.parse(options.now) - Date.parse(attestation.drilled_at) : null,
+      limiting_constraints: [
+        ...(Date.parse(result.expires_at) === Date.parse(contract.expires_at) ? ["contract_expiry"] : []),
+        ...(Date.parse(result.expires_at) - Date.parse(attestation.drilled_at) === contract.max_attestation_age_seconds * 1000 ? ["attestation_age"] : []),
+      ],
+    },
     checks, failed_checks: Object.keys(checks).filter(key => !checks[key]),
     limitations: ["Diagnostics replay the signed declared evidence surface, not production recovery.",
       "No permit, live qualification update, or execution authority is granted.",

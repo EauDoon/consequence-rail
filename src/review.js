@@ -26,7 +26,10 @@ export function evidenceInventory(input, options = {}) {
       return { digest: evidenceDigest, metadata_available: true, phase: item.phase ?? "initial",
         source: item.source, observed_at: item.observed_at, accepted_at: accepted.recorded_at,
         age_at_acceptance_ms: Date.parse(accepted.recorded_at) - Date.parse(item.observed_at),
-        satisfied: item.evaluation.satisfied, signer_key_id: item.signature.key_id };
+        satisfied: item.evaluation.satisfied, signer_key_id: item.signature.key_id,
+        clause_count: item.evaluation.evaluations.length,
+        failed_clauses: item.evaluation.evaluations.flatMap((clause, index) => clause.satisfied ? [] :
+          [{ clause_index: index, operator: clause.operator }]) };
     }),
     limitations: review.limitations,
   };
@@ -44,7 +47,17 @@ export function lifecycleTiming(input, options = {}) {
     enteredAt = event.recorded_at;
     return interval;
   });
+  const totals = new Map();
+  for (const interval of intervals) {
+    const row = totals.get(interval.state) ?? { state: interval.state, visits: 0, duration_ms: 0 };
+    row.visits += 1;
+    row.duration_ms += interval.duration_ms;
+    totals.set(interval.state, row);
+  }
   return { valid: true, bundle_digest: digest(bundle), verification_scope: "integrity_and_lifecycle_semantics",
+    recorded_from: bundle.events[0].recorded_at, recorded_until: bundle.events.at(-1).recorded_at,
+    state_totals: [...totals.values()],
+    final_state: { state: transitions.at(-1).payload.to_state, entered_at: enteredAt, duration_ms: null },
     total_recorded_ms: intervals.reduce((sum, item) => sum + item.duration_ms, 0), intervals,
     ambiguity_observed: intervals.some(item => ["UNKNOWN", "REMEDY_UNKNOWN", "REVIEW_REQUIRED"].includes(item.state)),
     limitations: ["Signed recorded timestamps are not independent clock measurements or connector latency.",
@@ -57,22 +70,33 @@ export function reviewBundle(input, options = {}) {
   const verification = verifyBundle(bundle, {
     trustedKeys: options.trustedKeys,
     trustedConnectorKeys: options.trustedConnectorKeys,
-    requireSemantics: bundle.profile === "audit",
+    requireSemantics: options.requireSemantics === true || bundle.profile === "audit",
   });
   const transitions = bundle.events.filter((event) => event.event_type === "STATE_TRANSITION");
+  const attentionReasons = [
+    ...(verification.outcome === "disputed" ? ["disputed_outcome"] : []),
+    ...(verification.outcome === "compensated" ? ["compensation_recorded"] : []),
+    ...(verification.bypass_possible ? ["bypass_possible"] : []),
+    ...(transitions.some(event => ["UNKNOWN", "REMEDY_UNKNOWN", "REVIEW_REQUIRED"].includes(event.payload.to_state)) ? ["ambiguous_history"] : []),
+    ...(bundle.profile === "receipt" ? ["semantics_not_checked"] : []),
+  ];
   return {
     valid: true,
+    attention_required: attentionReasons.length > 0,
+    attention_reasons: attentionReasons,
     bundle_digest: digest(bundle),
     profile: bundle.profile,
     verification_scope: bundle.profile === "audit" ? "integrity_and_lifecycle_semantics" : "integrity_only",
     action_id: verification.action_id,
     action_digest: bundle.action.action_digest,
+    action_class: bundle.action.action_type,
     outcome: verification.outcome,
     assurance_mode: verification.assurance_mode,
     bypass_possible: verification.bypass_possible,
     recourse_final_status: bundle.settlement_receipt.recourse_final_status,
     closed_at: bundle.settlement_receipt.closed_at,
     event_count: verification.event_count,
+    semantics: verification.semantics,
     evidence_count: bundle.evidence_manifest.length,
     state_path: transitions.length === 0 ? [] : [
       transitions[0].payload.from_state,
@@ -93,7 +117,7 @@ export function compareBundles(leftInput, rightInput, options = {}) {
   const rightBundle = deepClone(rightInput);
   const left = reviewBundle(leftBundle, options);
   const right = reviewBundle(rightBundle, options);
-  const fields = ["profile", "verification_scope", "action_digest", "outcome", "assurance_mode",
+  const fields = ["profile", "verification_scope", "action_digest", "action_class", "outcome", "assurance_mode",
     "bypass_possible", "recourse_final_status", "closed_at", "event_count", "evidence_count", "event_chain_head"];
   const sameReceipt = digest(leftBundle.settlement_receipt) === digest(rightBundle.settlement_receipt);
   return {
@@ -101,6 +125,14 @@ export function compareBundles(leftInput, rightInput, options = {}) {
     same_bundle: left.bundle_digest === right.bundle_digest,
     same_action: left.action_digest === right.action_digest,
     same_receipt: sameReceipt,
+    same_action_class: left.action_class === right.action_class,
+    same_verification_context: left.verification_scope === right.verification_scope &&
+      digest(left.trusted_key_ids) === digest(right.trusted_key_ids),
+    same_evidence_manifest: digest(leftBundle.evidence_manifest) === digest(rightBundle.evidence_manifest),
+    evidence_changes: {
+      added: rightBundle.evidence_manifest.filter(item => !leftBundle.evidence_manifest.includes(item)),
+      removed: leftBundle.evidence_manifest.filter(item => !rightBundle.evidence_manifest.includes(item)),
+    },
     left_bundle_digest: left.bundle_digest,
     right_bundle_digest: right.bundle_digest,
     changes: fields.filter((field) => left[field] !== right[field]).map((field) => ({ field, left: left[field], right: right[field] })),
