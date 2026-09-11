@@ -19,6 +19,12 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+Recovery `verify-many` detects identical bundle copies and differing signed drill
+attestations for the same action. Results retain action class, recovery class and
+coverage digest so differing scope is visible. Differing drills set
+`review_required` and CLI exit 1 even when both artifacts verify. They can be
+legitimate historical drills; this report cannot choose an authoritative one.
+
 Recovery review includes a `validity_window` showing contract bounds, maximum
 attestation age, effective lifetime and the constraint(s) that limit expiry.
 `age_at_check_ms` stays null without `--at`. With `--at`, the instant must fall

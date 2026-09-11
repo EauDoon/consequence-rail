@@ -55,10 +55,26 @@ export function verifyRecoveryFiles(paths, options = {}) {
     try {
       const result = reviewRecovery(readArtifactFile(file), options);
       return { file, valid: true, bundle_digest: result.bundle_digest, qualification: result.qualification,
+        action_digest: result.action_digest, action_class: result.action_class, recovery_class: result.recovery_class,
+        coverage_digest: result.coverage_digest, attestation_digest: result.attestation_digest,
         freshness_checked: result.freshness_checked, current: result.current, expires_at: result.expires_at };
     } catch (error) {
       return { file, valid: false, code: error instanceof RailError ? error.code : "VERIFICATION_FAILED" };
     }
   });
-  return { ...batchResult(results), qualification_is_not_admission: true };
+  const byAction = new Map(), byBundle = new Map();
+  for (const result of results.filter(item => item.valid)) {
+    for (const [groups, key] of [[byAction, result.action_digest], [byBundle, result.bundle_digest]]) {
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(result);
+    }
+  }
+  const differing_drills = [...byAction].filter(([, rows]) => new Set(rows.map(row => row.attestation_digest)).size > 1)
+    .map(([action_digest, rows]) => ({ action_digest, files: rows.map(row => row.file),
+      attestation_digests: [...new Set(rows.map(row => row.attestation_digest))] }));
+  const duplicates = [...byBundle].filter(([, rows]) => rows.length > 1)
+    .map(([bundle_digest, rows]) => ({ bundle_digest, files: rows.map(row => row.file) }));
+  return { ...batchResult(results), qualification_is_not_admission: true, duplicates, differing_drills,
+    review_required: differing_drills.length > 0,
+    collection_limitation: "Different signed drills for one action require review; no drill is selected as current or authoritative." };
 }

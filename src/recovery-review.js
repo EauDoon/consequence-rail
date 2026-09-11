@@ -17,7 +17,7 @@ export function reviewRecovery(input, options = {}) {
     oracle_satisfied: trace.oracle_satisfied,
     exact_state_restored: trace.baseline_state !== null && trace.recovered_state !== null && digest(trace.baseline_state) === digest(trace.recovered_state),
   };
-  return { ...result, bundle_digest: digest(bundle), action_digest: contract.action_digest,
+  return { ...result, bundle_digest: digest(bundle), action_digest: contract.action_digest, action_class: contract.action_class,
     recovery_class: contract.recovery_class, fixture_fidelity: contract.fixture.fidelity,
     drilled_at: attestation.drilled_at,
     checked_at: options.requireCurrent ? options.now : null,
