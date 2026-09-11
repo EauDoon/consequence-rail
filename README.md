@@ -365,6 +365,11 @@ CLI verification reads regular files only, caps each input at 1 MiB, requires va
 
 ## Review a saved settlement
 
+Offline reviewers can diagnose failed evidence clauses, inspect recorded state
+timing, compare evidence membership, triage settlement and drill collections,
+and export verified JSON or Markdown reports. Automation can explicitly require
+a settlement outcome or exact recovery qualification.
+
 The [offline review guide](docs/offline-review.md) covers verified receipt-profile
 export, evidence provenance, recorded lifecycle timing, recovery diagnosis and
 coverage comparison, settlement/drill linking, collection checks and Markdown

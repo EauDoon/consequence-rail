@@ -11,6 +11,30 @@ import { digest } from "../src/canonical.js";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = args => spawnSync(process.execPath, [join(root, "cmd/crctl.js"), ...args], { cwd: root, encoding: "utf8", timeout: 10000 });
 
+test("review exports verified JSON and Markdown without overwriting or creating failed reports", async t => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-report-export-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  for (const [group, bundle] of [["bundle", (await runRefundDemo()).bundle], ["recovery-preflight", (await runRecoveryPreflightDemo()).bundle]]) {
+    const input = join(dir, `${group}.json`);
+    writeFileSync(input, JSON.stringify(bundle));
+    for (const format of ["json", "markdown"]) {
+      const output = join(dir, `${group}-report.${format}`);
+      const args = [group, "review", input, `--${format}`, "--out", output, "--expect-digest", digest(bundle)];
+      const result = cli(args);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(output, "utf8"), result.stdout);
+      assert.equal(cli(args).status, 1);
+      assert.equal(readFileSync(output, "utf8"), result.stdout);
+      const absent = join(dir, `${group}-${format}-failed`);
+      const failed = cli([group, "review", input, `--${format}`, "--out", absent, "--expect-digest", digest({})]);
+      assert.equal(failed.status, 1);
+      assert.equal(failed.stdout, "");
+      assert.equal(existsSync(absent), false);
+    }
+    assert.equal(cli([group, "verify", input, "--out", join(dir, "unexpected")]).status, 1);
+  }
+});
+
 test("qualified-drill gates separate authentic failed drills from acceptance and freshness", async t => {
   const dir = mkdtempSync(join(tmpdir(), "rail-qualified-gate-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

@@ -21,7 +21,7 @@ import {
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
-import { assertArtifactDigest, readArtifactFile, serializeArtifact } from "../src/artifact-files.js";
+import { assertArtifactDigest, readArtifactFile, serializeArtifact, MAX_ARTIFACT_BYTES } from "../src/artifact-files.js";
 import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
 import { verifyArtifactFiles, verifyRecoveryFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
@@ -109,13 +109,13 @@ Usage:
   crctl bundle verify <file> [--expect-digest <digest>] [--json]
   crctl bundle verify-many <file>... [--json]
   crctl bundle timeline <file> [--json]
-  crctl bundle review <file> [--json|--markdown]
+  crctl bundle review <file> [--json|--markdown] [--out <new-report>]
   crctl bundle receipt <file> --out <new-file> [--json]
   crctl bundle evidence <file> [--json]
   crctl bundle timing <audit-file> [--json]
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
-  crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json|--markdown]
+  crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json|--markdown] [--out <new-report>]
   crctl recovery-preflight compare <left> <right> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight verify-many <file>... [--at <ISO timestamp>] [--json]
@@ -135,7 +135,7 @@ Flags:
   --assurance <mode>    Refund demo assurance mode
   --json                Print machine-readable JSON
   --markdown            Print a readable settlement or recovery review
-  --out <file>          Write the settlement or drill bundle (must not exist)
+  --out <file>          Write a demo bundle, receipt projection or review report (must not exist)
   --at <ISO timestamp>  Require recovery qualification to be current at this instant
   --expect-digest <digest> Require the recorded canonical artifact digest
   --expect-other-digest <digest> Pin the second input of compare or link
@@ -210,7 +210,13 @@ function printRecoveryPreflight(summary, asJson) {
 }
 
 function writeExclusiveJson(path, value) {
-  const text = serializeArtifact(value);
+  writeExclusiveText(path, serializeArtifact(value));
+}
+
+function writeExclusiveText(path, text) {
+  if (Buffer.byteLength(text, "utf8") > MAX_ARTIFACT_BYTES) {
+    throw new RailError("ARTIFACT_TOO_LARGE", "Serialized output exceeds the 1 MiB output limit.");
+  }
   try {
     writeFileSync(resolve(path), text, {
       encoding: "utf8",
@@ -222,6 +228,11 @@ function writeExclusiveJson(path, value) {
     }
     throw usage(`Could not write file: ${path}.`);
   }
+}
+
+function printReport(text, path) {
+  if (path !== undefined) writeExclusiveText(path, text);
+  process.stdout.write(text);
 }
 
 function readPinnedArtifact(path, expected) {
@@ -410,11 +421,11 @@ async function main() {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest"] :
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest", "out"] :
       subcommand === "verify" ? ["json", "expect-digest", "require-outcome"] : ["json", "expect-digest"]));
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
-      process.stdout.write(settlementMarkdown(bundle, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() }));
+      printReport(settlementMarkdown(bundle, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() }), options.out);
       return;
     }
     if (["review", "evidence", "timing"].includes(subcommand)) {
@@ -423,7 +434,7 @@ async function main() {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
       result.trust_profile = "public_demo_keys_only";
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      printReport(serializeArtifact(result), options.out);
       return;
     }
     if (subcommand === "verify") {
@@ -517,10 +528,10 @@ async function main() {
       throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
     }
     requireNoExtra(positional, 3, "recovery-preflight verify");
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown"] : ["json", "at", "expect-digest", "require-qualified"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown", "out"] : ["json", "at", "expect-digest", "require-qualified"]));
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
-      process.stdout.write(recoveryMarkdown(bundle, { trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null }));
+      printReport(recoveryMarkdown(bundle, { trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null }), options.out);
       return;
     }
     const result = (subcommand === "review" ? reviewRecovery : verifyRecoveryPreflight)(bundle, {
@@ -531,7 +542,7 @@ async function main() {
     result.bundle_digest = digest(bundle);
     applyQualificationExpectation(result, options["require-qualified"]);
     if (options.json || subcommand === "review") {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      printReport(serializeArtifact(result), options.out);
     } else {
       process.stdout.write(
         [
