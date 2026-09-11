@@ -26,7 +26,10 @@ export function evidenceInventory(input, options = {}) {
       return { digest: evidenceDigest, metadata_available: true, phase: item.phase ?? "initial",
         source: item.source, observed_at: item.observed_at, accepted_at: accepted.recorded_at,
         age_at_acceptance_ms: Date.parse(accepted.recorded_at) - Date.parse(item.observed_at),
-        satisfied: item.evaluation.satisfied, signer_key_id: item.signature.key_id };
+        satisfied: item.evaluation.satisfied, signer_key_id: item.signature.key_id,
+        clause_count: item.evaluation.evaluations.length,
+        failed_clauses: item.evaluation.evaluations.flatMap((clause, index) => clause.satisfied ? [] :
+          [{ clause_index: index, operator: clause.operator }]) };
     }),
     limitations: review.limitations,
   };

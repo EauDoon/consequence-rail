@@ -19,6 +19,11 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+Audit evidence rows include `clause_count` and `failed_clauses` with zero-based
+clause indices and operators. Match an index to your retained proposal to locate
+the failed check. The report omits clause paths and actual/expected values;
+receipt-only rows cannot diagnose clauses because their raw evidence is omitted.
+
 Settlement review JSON and Markdown distinguish artifact validity from attention:
 `attention_reasons` identifies disputed outcomes, compensation, bypass exposure,
 ambiguous history and omitted semantic replay. These are recorded review cues,
