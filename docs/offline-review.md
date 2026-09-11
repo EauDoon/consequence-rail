@@ -19,6 +19,12 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+`bundle compare` reports added/removed evidence digests, exact ordered manifest
+equality, action-class equality and verification-context equality (scope and
+verified signer IDs). A receipt projection preserves evidence membership while
+reducing semantic verification. Matching signer IDs do not prove evidence truth
+or equal external trust policies. Neither input is selected as authoritative.
+
 `bundle timing` includes `state_totals` (visits and total recorded milliseconds),
 the first and last event timestamps, and `final_state`. Its terminal duration is
 `null`: the artifact does not measure time after entering that state. Totals

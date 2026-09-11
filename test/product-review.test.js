@@ -5,6 +5,23 @@ import { demoTrustedKeys, demoConnectorTrustedKeys } from "../src/signing.js";
 import { reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming, compareBundles } from "../src/review.js";
 const trust = () => ({ trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() });
 
+test("comparison explains evidence changes separately from receipt projection", async () => {
+  const normal = (await runRefundDemo()).bundle;
+  const repaired = (await runRefundDemo({ fault: "duplicate" })).bundle;
+  const report = compareBundles(normal, repaired, trust());
+  assert.equal(report.same_evidence_manifest, false);
+  assert.deepEqual(report.evidence_changes.added, repaired.evidence_manifest.filter(item => !normal.evidence_manifest.includes(item)));
+  assert.deepEqual(report.evidence_changes.removed, normal.evidence_manifest.filter(item => !repaired.evidence_manifest.includes(item)));
+  const projected = compareBundles(normal, receiptBundle(normal, trust()), trust());
+  assert.equal(projected.same_evidence_manifest, true);
+  assert.equal(projected.same_verification_context, false);
+  assert.equal(projected.same_action_class, true);
+  assert.deepEqual(projected.evidence_changes, { added: [], removed: [] });
+  assert.equal(compareBundles(normal, normal, trust()).same_verification_context, true);
+  repaired.evidence_manifest.reverse();
+  assert.throws(() => compareBundles(normal, repaired, trust()));
+});
+
 test("timing groups recorded dwell by state and leaves terminal duration unknown", async () => {
   const { bundle } = await runRefundDemo({ fault: "remedy-lost-response-after-commit" });
   const report = lifecycleTiming(bundle, trust());

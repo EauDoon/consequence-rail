@@ -89,6 +89,7 @@ export function reviewBundle(input, options = {}) {
     verification_scope: bundle.profile === "audit" ? "integrity_and_lifecycle_semantics" : "integrity_only",
     action_id: verification.action_id,
     action_digest: bundle.action.action_digest,
+    action_class: bundle.action.action_type,
     outcome: verification.outcome,
     assurance_mode: verification.assurance_mode,
     bypass_possible: verification.bypass_possible,
@@ -115,7 +116,7 @@ export function compareBundles(leftInput, rightInput, options = {}) {
   const rightBundle = deepClone(rightInput);
   const left = reviewBundle(leftBundle, options);
   const right = reviewBundle(rightBundle, options);
-  const fields = ["profile", "verification_scope", "action_digest", "outcome", "assurance_mode",
+  const fields = ["profile", "verification_scope", "action_digest", "action_class", "outcome", "assurance_mode",
     "bypass_possible", "recourse_final_status", "closed_at", "event_count", "evidence_count", "event_chain_head"];
   const sameReceipt = digest(leftBundle.settlement_receipt) === digest(rightBundle.settlement_receipt);
   return {
@@ -123,6 +124,14 @@ export function compareBundles(leftInput, rightInput, options = {}) {
     same_bundle: left.bundle_digest === right.bundle_digest,
     same_action: left.action_digest === right.action_digest,
     same_receipt: sameReceipt,
+    same_action_class: left.action_class === right.action_class,
+    same_verification_context: left.verification_scope === right.verification_scope &&
+      digest(left.trusted_key_ids) === digest(right.trusted_key_ids),
+    same_evidence_manifest: digest(leftBundle.evidence_manifest) === digest(rightBundle.evidence_manifest),
+    evidence_changes: {
+      added: rightBundle.evidence_manifest.filter(item => !leftBundle.evidence_manifest.includes(item)),
+      removed: leftBundle.evidence_manifest.filter(item => !rightBundle.evidence_manifest.includes(item)),
+    },
     left_bundle_digest: left.bundle_digest,
     right_bundle_digest: right.bundle_digest,
     changes: fields.filter((field) => left[field] !== right[field]).map((field) => ({ field, left: left[field], right: right[field] })),
