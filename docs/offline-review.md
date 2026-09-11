@@ -19,6 +19,13 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+Automation can use `bundle verify audit.json --require-outcome settled --json`
+or the same flag with `verify-many`. A different verified outcome produces exit 1
+and `outcome_expectation_met: false`, while `valid` still describes artifact
+verification. Supported expectations are `settled`, `compensated`, and `disputed`.
+Batch expectations require every input to verify and match; they never suppress
+differing-receipt review. Without the flag, existing verification behavior remains.
+
 Settlement collections summarize outcomes, assurance modes, unique bundles and
 attention counts. Counts include each successfully verified file, including
 duplicates; invalid files contribute only to failure counts. `attention_required`

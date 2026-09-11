@@ -37,6 +37,7 @@ const VALUE_FLAGS = {
   "--at": "at",
   "--expect-digest": "expect-digest",
   "--expect-other-digest": "expect-other-digest",
+  "--require-outcome": "require-outcome",
 };
 const BOOL_FLAGS = {
   "--json": "json",
@@ -137,6 +138,7 @@ Flags:
   --at <ISO timestamp>  Require recovery qualification to be current at this instant
   --expect-digest <digest> Require the recorded canonical artifact digest
   --expect-other-digest <digest> Pin the second input of compare or link
+  --require-outcome <outcome> Require settled, compensated or disputed (bundle verify/verify-many)
   -h, --help            Show this help
 
 Examples:
@@ -232,6 +234,13 @@ function requireNoExtra(positional, count, command) {
   }
 }
 
+function applyOutcomeExpectation(result, expected) {
+  if (expected === undefined) return;
+  result.expected_outcome = expected;
+  result.outcome_expectation_met = (result.results ?? [result]).every(row => row.valid && row.outcome === expected);
+  if (!result.outcome_expectation_met) process.exitCode = 1;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
@@ -240,6 +249,9 @@ async function main() {
   }
 
   const { positional, options } = parseCliArgs(args);
+  if (options["require-outcome"] !== undefined && !["settled", "compensated", "disputed"].includes(options["require-outcome"])) {
+    throw usage("Expected outcome must be settled, compensated or disputed.");
+  }
   if (options.json && options.markdown) throw usage("Choose --json or --markdown, not both.");
   const [command, subcommand, target] = positional;
 
@@ -363,10 +375,11 @@ async function main() {
       return;
     }
     if (subcommand === "verify-many") {
-      assertFlags(options, new Set(["json"]));
+      assertFlags(options, new Set(["json", "require-outcome"]));
       const result = verifyArtifactFiles(positional.slice(2), {
         trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
       });
+      applyOutcomeExpectation(result, options["require-outcome"]);
       process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
       if (!result.valid || result.review_required) process.exitCode = 1;
       return;
@@ -388,7 +401,8 @@ async function main() {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest"] : ["json", "expect-digest"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest"] :
+      subcommand === "verify" ? ["json", "expect-digest", "require-outcome"] : ["json", "expect-digest"]));
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
       process.stdout.write(settlementMarkdown(bundle, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() }));
@@ -410,6 +424,7 @@ async function main() {
         requireSemantics: true,
       });
       result.bundle_digest = digest(bundle);
+      applyOutcomeExpectation(result, options["require-outcome"]);
       if (options.json) {
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       } else {
@@ -422,6 +437,7 @@ async function main() {
             `events: ${result.event_count}`,
             `semantics: ${result.semantics.status}`,
             `trusted_key: ${result.trusted_key_id}`,
+            ...(options["require-outcome"] ? [`outcome_expectation_met: ${result.outcome_expectation_met}`] : []),
           ].join("\n") + "\n",
         );
       }
