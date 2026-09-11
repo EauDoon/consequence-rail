@@ -19,6 +19,13 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+Use `recovery-preflight verify drill.json --require-qualified --json` to require
+`QUALIFIED_EXACT`; `verify-many` supports the same flag. Authentic failed,
+untestable or compensation-review drills return exit 1 with
+`qualification_expectation_met: false`. Validity remains separate. Add `--at`
+to require freshness at an explicit instant. Qualification alone does not check
+current time and never grants admission, execution or production authority.
+
 Automation can use `bundle verify audit.json --require-outcome settled --json`
 or the same flag with `verify-many`. A different verified outcome produces exit 1
 and `outcome_expectation_met: false`, while `valid` still describes artifact

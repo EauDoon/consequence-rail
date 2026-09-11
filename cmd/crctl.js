@@ -42,6 +42,7 @@ const VALUE_FLAGS = {
 const BOOL_FLAGS = {
   "--json": "json",
   "--markdown": "markdown",
+  "--require-qualified": "require-qualified",
 };
 
 function usage(message) {
@@ -139,6 +140,7 @@ Flags:
   --expect-digest <digest> Require the recorded canonical artifact digest
   --expect-other-digest <digest> Pin the second input of compare or link
   --require-outcome <outcome> Require settled, compensated or disputed (bundle verify/verify-many)
+  --require-qualified   Require QUALIFIED_EXACT (recovery verify/verify-many; add --at for freshness)
   -h, --help            Show this help
 
 Examples:
@@ -239,6 +241,13 @@ function applyOutcomeExpectation(result, expected) {
   result.expected_outcome = expected;
   result.outcome_expectation_met = (result.results ?? [result]).every(row => row.valid && row.outcome === expected);
   if (!result.outcome_expectation_met) process.exitCode = 1;
+}
+
+function applyQualificationExpectation(result, required) {
+  if (!required) return;
+  result.expected_qualification = "QUALIFIED_EXACT";
+  result.qualification_expectation_met = (result.results ?? [result]).every(row => row.valid && row.qualification === "QUALIFIED_EXACT");
+  if (!result.qualification_expectation_met) process.exitCode = 1;
 }
 
 async function main() {
@@ -470,10 +479,11 @@ async function main() {
 
   if (command === "recovery-preflight") {
     if (subcommand === "verify-many") {
-      assertFlags(options, new Set(["json", "at"]));
+      assertFlags(options, new Set(["json", "at", "require-qualified"]));
       const result = verifyRecoveryFiles(positional.slice(2), {
         trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
       });
+      applyQualificationExpectation(result, options["require-qualified"]);
       process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
       if (!result.valid || result.review_required) process.exitCode = 1;
       return;
@@ -507,7 +517,7 @@ async function main() {
       throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
     }
     requireNoExtra(positional, 3, "recovery-preflight verify");
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown"] : ["json", "at", "expect-digest"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown"] : ["json", "at", "expect-digest", "require-qualified"]));
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
       process.stdout.write(recoveryMarkdown(bundle, { trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null }));
@@ -519,6 +529,7 @@ async function main() {
       now: options.at ?? null,
     });
     result.bundle_digest = digest(bundle);
+    applyQualificationExpectation(result, options["require-qualified"]);
     if (options.json || subcommand === "review") {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -529,6 +540,7 @@ async function main() {
           `freshness: ${result.freshness_checked ? "current" : "not_checked"}`,
           `attestation: ${result.attestation_digest}`,
           `trusted_key: ${result.trusted_key_id}`,
+          ...(options["require-qualified"] ? [`qualification_expectation_met: ${result.qualification_expectation_met}`] : []),
         ].join("\n") + "\n",
       );
     }
