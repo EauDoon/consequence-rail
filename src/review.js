@@ -60,8 +60,17 @@ export function reviewBundle(input, options = {}) {
     requireSemantics: bundle.profile === "audit",
   });
   const transitions = bundle.events.filter((event) => event.event_type === "STATE_TRANSITION");
+  const attentionReasons = [
+    ...(verification.outcome === "disputed" ? ["disputed_outcome"] : []),
+    ...(verification.outcome === "compensated" ? ["compensation_recorded"] : []),
+    ...(verification.bypass_possible ? ["bypass_possible"] : []),
+    ...(transitions.some(event => ["UNKNOWN", "REMEDY_UNKNOWN", "REVIEW_REQUIRED"].includes(event.payload.to_state)) ? ["ambiguous_history"] : []),
+    ...(bundle.profile === "receipt" ? ["semantics_not_checked"] : []),
+  ];
   return {
     valid: true,
+    attention_required: attentionReasons.length > 0,
+    attention_reasons: attentionReasons,
     bundle_digest: digest(bundle),
     profile: bundle.profile,
     verification_scope: bundle.profile === "audit" ? "integrity_and_lifecycle_semantics" : "integrity_only",

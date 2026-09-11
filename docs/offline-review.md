@@ -19,6 +19,11 @@ the destination. Signed data is unchanged by whitespace selection.
 
 ## Inspect evidence coverage
 
+Settlement review JSON and Markdown distinguish artifact validity from attention:
+`attention_reasons` identifies disputed outcomes, compensation, bypass exposure,
+ambiguous history and omitted semantic replay. These are recorded review cues,
+not a production risk score or permission to retry. A valid artifact may require attention.
+
 `crctl bundle evidence audit.json` lists evidence digests, phase, source,
 observation/acceptance times, age at acceptance, signer and derived satisfaction.
 It omits raw facts, resource IDs and detailed evaluations. Receipt-only inputs

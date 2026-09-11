@@ -13,7 +13,8 @@ export function settlementMarkdown(bundle, options = {}) {
   return markdown("Settlement artifact review", report,
     ["bundle_digest", "profile", "verification_scope", "action_id", "action_digest", "outcome",
       "assurance_mode", "bypass_possible", "recourse_final_status", "closed_at", "event_count", "evidence_count"],
-    ["Recorded state path: " + report.state_path.join(" -> ")]);
+    ["Recorded state path: " + report.state_path.join(" -> "),
+      "Attention reasons: " + (report.attention_reasons.join(", ") || "none recorded")]);
 }
 
 export function recoveryMarkdown(bundle, options = {}) {
