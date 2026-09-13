@@ -785,12 +785,12 @@ export class ConsequenceRail {
       source: accepted.source,
       satisfied: evaluation.satisfied,
     });
-    record.evidence.push(accepted);
 
     if (evaluation.satisfied) {
       this.transition(record, "SATISFIED", "POSTCONDITION_SATISFIED", {
         evidence_digest: digest(accepted),
       });
+      record.evidence.push(accepted);
       this.close(record);
     } else {
       this.transition(record, "BREACHED", "POSTCONDITION_BREACHED", {
@@ -799,6 +799,7 @@ export class ConsequenceRail {
       this.transition(record, "REMEDY_DUE", "RESERVED_REMEDY_DUE", {
         reservation_digest: record.reservation_digest,
       });
+      record.evidence.push(accepted);
     }
     return this.inspect(actionId);
   }
@@ -974,7 +975,6 @@ export class ConsequenceRail {
       evidence_digest: digest(accepted),
       satisfied: evaluation.satisfied,
     });
-    record.evidence.push(accepted);
 
     if (evaluation.satisfied) {
       this.transition(record, "REMEDIATED", "REMEDY_VERIFIED", {
@@ -985,6 +985,7 @@ export class ConsequenceRail {
         evidence_digest: digest(accepted),
       });
     }
+    record.evidence.push(accepted);
     this.close(record);
   }
 
