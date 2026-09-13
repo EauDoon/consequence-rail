@@ -264,6 +264,38 @@ test("failed evidence append cannot retain uncommitted evidence", async () => {
   assert.equal(runtime.rail.get(actionId).evidence.length, 0);
 });
 
+test("failed postcondition transition cannot retain committed evidence", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId);
+  runtime.eventStore.skipTransitions = 1;
+  runtime.eventStore.failOn.add("STATE_TRANSITION");
+  await assert.rejects(
+    () => runtime.rail.verifyOutcome(actionId),
+    /event store unavailable/,
+  );
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.evidence.length, 0);
+  assert.equal(record.state, "VERIFYING");
+});
+
+test("failed remedy postcondition transition cannot retain committed evidence", async () => {
+  const runtime = createRuntimeWithEventStore(createToggleEventStore);
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(actionId);
+  const beforeEvidence = runtime.rail.get(actionId).evidence.length;
+  runtime.eventStore.skipTransitions = 1;
+  runtime.eventStore.failOn.add("STATE_TRANSITION");
+  await assert.rejects(
+    () => runtime.rail.remediate(actionId),
+    /event store unavailable/,
+  );
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.evidence.length, beforeEvidence);
+  assert.equal(record.state, "REMEDIATING");
+});
+
 test("failed remedy-started append cannot retain the attempt count", async () => {
   const runtime = createRuntimeWithEventStore(createToggleEventStore);
   const { actionId } = prepareRefund(runtime);
