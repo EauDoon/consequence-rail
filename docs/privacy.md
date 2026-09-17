@@ -43,6 +43,6 @@ credential, customer record or infrastructure endpoint.
 
 ## Retention
 
-The v0.1 sidecar stores state only in memory. It has no retention scheduler or
+The reference sidecar stores state only in memory. It has no retention scheduler or
 deletion API. A persistent adapter must define retention, access, deletion and
 legal requirements before use.

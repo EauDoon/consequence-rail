@@ -1,6 +1,6 @@
 # Non-goals
 
-Consequence Rail v0.1 is not:
+Consequence Rail is not:
 
 - a general AI governance, alignment, fairness or model-evaluation framework
 - a judge of whether an action is wise, ethical, lawful or socially acceptable
