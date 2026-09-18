@@ -1,0 +1,11 @@
+# CODEOWNERS
+# Default ownership: @EauDoon
+
+* @EauDoon
+
+# Sensitive signed-receipt path: Ed25519 sign + verify primitives,
+# canonicalization feeding the signature, and the main receipt orchestrator.
+/src/signing.js @EauDoon
+/src/verify.js @EauDoon
+/src/canonical.js @EauDoon
+/src/rail.js @EauDoon
