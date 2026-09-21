@@ -1,5 +1,9 @@
 # Consequence Rail
 
+[![build](https://img.shields.io/github/actions/workflow/status/EauDoon/consequence-rail/ci.yml?branch=main)](https://github.com/EauDoon/consequence-rail/actions)
+[![license](https://img.shields.io/github/license/EauDoon/consequence-rail)](https://github.com/EauDoon/consequence-rail/blob/main/LICENSE)
+[![last commit](https://img.shields.io/github/last-commit/EauDoon/consequence-rail)](https://github.com/EauDoon/consequence-rail)
+
 Recourse-gated execution and settlement receipts for autonomous actions.
 
 Authorization can establish that a system may act. Logs can record what it
