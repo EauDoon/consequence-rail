@@ -1,4 +1,4 @@
-# consequence-rail regression baseline — 2026-09-23
+# consequence-rail regression baseline: 2026-09-23
 
 ## Scope
 Post-monolith-split project `consequence-rail`. Test target invoked:
