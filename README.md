@@ -126,8 +126,10 @@ node ./cmd/crctl.js demo recovery-preflight --fault out-of-scope
 
 Offline `recovery-preflight verify` checks signatures and replay bindings. It
 reports freshness as `not_checked` unless a caller supplies a verification
-time through the library API. The Rail always supplies its clock and requires
-the attestation to be current.
+time with `--at` or through the library API. The Rail always supplies its clock
+and requires the attestation to be current. Follow the
+[recovery evidence walkthrough](docs/recovery-evidence.md) to export an isolated
+drill, verify it independently, and exercise successful and refused admission.
 
 Settlement bundles can be verified and rendered as a metadata-only event
 timeline without network access:
@@ -394,7 +396,7 @@ Run `node ./cmd/crctl.js demo matrix --json` to exercise all 31 catalog cases, o
 
 ## Check recovery freshness explicitly
 
-Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2026-07-23T12:00:00.000Z --json` with your intended verification instant. The timestamp must be an ISO UTC timestamp supported by the protocol. Verification requires drill time at or before that instant and expiry strictly after it. Without `--at`, the result explicitly reports that freshness was not checked. No command changes a live qualification or issues a permit.
+Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2035-01-01T00:00:00.000Z --json` for the deterministic demo, or supply your intended verification instant for another artifact. The timestamp must be an ISO UTC timestamp supported by the protocol. Verification requires drill time at or before that instant and expiry strictly after it. Without `--at`, the result explicitly reports that freshness was not checked. No verification command changes a live qualification or issues a permit.
 
 ## Pin the artifact under review
 

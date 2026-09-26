@@ -202,11 +202,14 @@ export class ConsequenceRail {
   acceptRecoveryQualification(actionId, bundle) {
     const record = this.get(actionId);
     this.assertState(record, "RECOURSE_RESERVED");
-    const verification = verifyRecoveryPreflight(bundle, {
+    // Prepare the exact evidence we will retain before recording acceptance.
+    // No input validation or caller-owned object reads may fail after append.
+    bundle = deepFreeze(deepClone(bundle));
+    const verification = deepFreeze(verifyRecoveryPreflight(bundle, {
       trustedKeys: this.recoveryTrustedKeys,
       now: this.clock.now(),
       requireCurrent: true,
-    });
+    }));
     assert(
       verification.qualification === "QUALIFIED_EXACT",
       "RECOVERY_PREFLIGHT_NOT_QUALIFIED",
@@ -250,10 +253,8 @@ export class ConsequenceRail {
         expires_at: verification.expires_at,
       },
     );
-    record.recovery_preflight = deepFreeze(deepClone(bundle));
-    record.recovery_preflight_verification = deepFreeze(
-      deepClone(verification),
-    );
+    record.recovery_preflight = bundle;
+    record.recovery_preflight_verification = verification;
     return this.inspect(actionId);
   }
 

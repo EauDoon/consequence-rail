@@ -1,5 +1,17 @@
 # Changelog
 
+## Recovery evidence snapshot candidate (26-09-2026)
+
+- Validate the complete recovery bundle's canonical JSON boundary before replay,
+  including unsigned hints, hidden fields and aggregate resource limits.
+- Prepare and freeze recovery evidence before recording acceptance, preventing
+  rejected input from leaving an acceptance event without retained evidence and
+  preserving the verified snapshot across event-store callbacks.
+- Add an executable synthetic export, independent verification and permit-refusal
+  walkthrough; clarify the existing `--at` CLI freshness option.
+- Preserve signed artifact bytes, v0.1/v0.2 schemas, receipt/audit profiles and
+  separately configured trust anchors. No live connectors are added.
+
 ## Offline review triage candidate (11-09-2026)
 
 - Distinguish verified artifact integrity from settlement attention reasons.
