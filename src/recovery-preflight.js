@@ -555,6 +555,9 @@ export function verifyRecoveryPreflight(
   bundle,
   { trustedKeys = new Map(), now = null, requireCurrent = false } = {},
 ) {
+  // Validate the entire JSON boundary, including unsigned hints, before any
+  // property reads. Replay must use one detached, bounded evidence snapshot.
+  bundle = deepClone(bundle);
   assertObject(bundle, "RecoveryDrillBundle", "RECOVERY_BUNDLE_INVALID");
   assertExactFields(
     bundle,

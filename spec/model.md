@@ -135,6 +135,13 @@ or historical state was restored. A Rail policy may require a current
 records only bounded qualification metadata in its action event chain; the
 recovery bundle remains a separately verifiable artifact.
 
+Recovery verification applies the bounded canonical JSON input rules to the
+complete bundle, including its unsigned trust hint, before reading evidence.
+Admission MUST prepare and verify a detached evidence snapshot before appending
+`RECOVERY_PREFLIGHT_ACCEPTED`. The retained evidence MUST be that same snapshot.
+Rejected input or a failed atomic event append MUST NOT retain qualification or
+record acceptance. Embedded trust hints remain untrusted metadata.
+
 For a remote connector, a status check followed by execution still has a
 time-of-check to time-of-use interval. Production connectors SHOULD expose an
 atomic lease-consume or execute-with-reservation operation. The v0.1 mock
