@@ -1,5 +1,13 @@
 # Changelog
 
+## Sidecar bind failure reporting candidate (28-09-2026)
+
+- The sidecar now reports a listener that cannot bind through the same
+  structured single-line error contract as a usage failure, with exit status 1,
+  instead of an unhandled `error` event and a Node stack trace.
+- Document the sidecar exit statuses in `rail --help`.
+- No protocol, schema, receipt or verification behaviour changes.
+
 ## State machine spec sync candidate (28-09-2026)
 
 - Record the `REMEDY_DUE -> REVIEW_REQUIRED` guard in the normative transition
