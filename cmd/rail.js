@@ -19,7 +19,16 @@ Options:
   -h, --help              Show this help
 
 The sidecar listens on 127.0.0.1 only and is not an authenticated boundary.
-`);
+
+Exit status:
+  0  the sidecar is bound to a loopback port
+  1  invalid usage, or the port could not be bound
+'`);
+}
+
+function fail(code, message) {
+  process.stderr.write(`${JSON.stringify({ code, message })}\n`);
+  process.exitCode = 1;
 }
 
 function usageError(message) {
@@ -109,6 +118,13 @@ try {
     const server = createReferenceServer({
       runtime: createDemoRuntime({ clock: createSidecarClock(parsed.clock) }),
     });
+    // Binding is asynchronous, so a busy port surfaces as an "error" event
+    // rather than a throw from listen(). Without this listener Node reports an
+    // unhandled error and prints a stack trace, bypassing the structured error
+    // line above.
+    server.on("error", (error) => {
+      fail("LISTEN_FAILED", `The sidecar could not bind 127.0.0.1:${parsed.port}: ${error.message}`);
+    });
     server.listen(parsed.port, "127.0.0.1", () => {
       const address = server.address();
       process.stdout.write(
@@ -117,11 +133,5 @@ try {
     });
   }
 } catch (error) {
-  process.stderr.write(
-    `${JSON.stringify({
-      code: error.code === "USAGE_INVALID" ? "USAGE_INVALID" : "INTERNAL_ERROR",
-      message: error.message,
-    })}\n`,
-  );
-  process.exitCode = 1;
+  fail(error.code === "USAGE_INVALID" ? "USAGE_INVALID" : "INTERNAL_ERROR", error.message);
 }

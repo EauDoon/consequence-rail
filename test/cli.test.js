@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -154,6 +155,22 @@ test("rail rejects missing --port values and unknown arguments", () => {
     code: "USAGE_INVALID",
     message: "Unknown argument --help-me.",
   });
+});
+
+test("rail reports a refused bind in the structured error form", async () => {
+  const blocker = createServer();
+  await new Promise((resolve) => blocker.listen(0, "127.0.0.1", resolve));
+  const { port } = blocker.address();
+  try {
+    const result = runCli("rail.js", ["--port", String(port)]);
+    assert.equal(result.status, 1);
+    const failure = stderrJson(result);
+    assert.equal(failure.code, "LISTEN_FAILED");
+    assert.match(failure.message, new RegExp(`could not bind 127\\.0\\.0\\.1:${port}`));
+    assert.doesNotMatch(result.stderr, /at Server\.setupListenHandle/);
+  } finally {
+    await new Promise((resolve) => blocker.close(resolve));
+  }
 });
 
 test("rail rejects invalid --clock values and CONSEQUENCE_RAIL_* defaults", () => {
