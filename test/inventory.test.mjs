@@ -7,6 +7,7 @@ import {
   runInventoryDemo,
 } from "../src/inventory-demo.js";
 import { ManualClock } from "../src/clock.js";
+import { validateSettlementBundle } from "../src/bundle-validation.js";
 import { verifyBundle } from "../src/verify.js";
 import { demoConnectorTrustedKeys, demoTrustedKeys } from "../src/signing.js";
 
@@ -230,6 +231,34 @@ test("the remedy scope field must match the action type in verified bundles", as
     delete copy.recourse_reservation.connector_commitment.max_quantity;
     copy.recourse_reservation.connector_commitment.max_amount_minor = 4;
   }), "commitment with max_amount_minor");
+});
+
+test("allocation is a v0.1-only action type in the producer and the validator", async () => {
+  const runtime = createInventoryRuntime();
+  assert.throws(
+    () => runtime.rail.propose({
+      ...buildInventoryProposal(runtime.clock),
+      schema_version: "consequence-rail/action-proposal/v0.2",
+    }),
+    (error) => error.code === "SCHEMA_INVALID" && error.message === "Unsupported action type.",
+  );
+  // v0.1 still admits it, so the narrowing does not retire the action type.
+  assert.equal(
+    typeof runtime.rail.propose(buildInventoryProposal(runtime.clock)).action_id,
+    "string",
+  );
+
+  const { bundle } = await runInventoryDemo({ fault: "duplicate" });
+  const relabelled = JSON.parse(JSON.stringify(bundle));
+  relabelled.schema_version = "consequence-rail/settlement-bundle/v0.2";
+  relabelled.action.proposal.schema_version = "consequence-rail/action-proposal/v0.2";
+  relabelled.settlement_receipt.schema_version = "consequence-rail/settlement-receipt/v0.2";
+  relabelled.settlement_receipt.proposal_schema_version = "consequence-rail/action-proposal/v0.2";
+  assert.throws(
+    () => validateSettlementBundle(relabelled),
+    (error) => error.code === "BUNDLE_TAMPERED" &&
+      /ActionProposal action type is unsupported/.test(error.message),
+  );
 });
 
 test("inventory bundles verify with the rail's own verifier", async () => {

@@ -1,5 +1,17 @@
 # Changelog
 
+## Action proposal version narrowing enforcement candidate (28-09-2026)
+
+- The rail and the offline bundle validator now enforce the published
+  `ActionProposal.action_type` enum per schema version. Allocation is a
+  v0.1-only action type, matching
+  `spec/schemas/action-proposal-v0.2.schema.json`.
+- Previously both admitted allocation under v0.2, so the rail could sign and
+  the verifier could accept a v0.2 settlement bundle carrying an action type
+  the published v0.2 proposal schema rejects.
+- No schema, receipt format or CLI change. Existing v0.1 allocation artifacts are
+  unaffected.
+
 ## Remedy scope field single source candidate (28-09-2026)
 
 - `validateSettlementBundle` and `verifySemantics` now call the existing

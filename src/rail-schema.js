@@ -58,6 +58,20 @@ export const DEMO_ACTION_TYPES = new Set([
   "demo.email.send/v1",
   "demo.inventory.allocate/v1",
 ]);
+// Each published ActionProposal schema declares its own action_type enum.
+// v0.2 narrowed the set to the two money-and-message domains; allocation
+// remains a v0.1-only action type.
+const PROPOSAL_ACTION_TYPES = new Map([
+  ["consequence-rail/action-proposal/v0.1", DEMO_ACTION_TYPES],
+  ["consequence-rail/action-proposal/v0.2", new Set([
+    "demo.refund.issue/v1",
+    "demo.email.send/v1",
+  ])],
+]);
+/** The action types a published ActionProposal schema version admits. */
+export function proposalAdmitsActionType(schemaVersion, actionType) {
+  return PROPOSAL_ACTION_TYPES.get(schemaVersion)?.has(actionType) === true;
+}
 /**
  * The remedy scope field is domain-specific: refunds scope by minor currency
  * amount, inventory allocations by unit quantity. Each action type keeps its

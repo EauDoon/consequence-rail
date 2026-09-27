@@ -1,6 +1,6 @@
 import { digest } from "./canonical.js";
 import { RailError } from "./errors.js";
-import { recourseScopeField } from "./rail.js";
+import { recourseScopeField, proposalAdmitsActionType } from "./rail.js";
 
 const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
 const ED25519_BASE64URL = /^[A-Za-z0-9_-]{86}$/;
@@ -300,7 +300,7 @@ function proposal(value, expectedVersion) {
   if (expectedVersion && value.schema_version !== expectedVersion) {
     invalid("ActionProposal schema version does not match the settlement bundle.");
   }
-  if (!new Set(["demo.refund.issue/v1", "demo.email.send/v1", "demo.inventory.allocate/v1"]).has(value.action_type)) {
+  if (!proposalAdmitsActionType(value.schema_version, value.action_type)) {
     invalid("ActionProposal action type is unsupported.");
   }
   exactObject(value.subject, SUBJECT_FIELDS, SUBJECT_FIELDS, "ActionProposal.subject");
