@@ -1,5 +1,17 @@
 # Changelog
 
+## OpenAPI boundary response coverage candidate (28-09-2026)
+
+- Every operation in `api/openapi.json` now declares the boundary statuses the
+  reference server can return before route-specific processing: 400, 403, 413,
+  415, 429, 500 and 503, plus 404 and 409 where the route can reach them.
+- The document already described those statuses in `info.description` but
+  declared none of them per operation.
+- Add a test that asserts each boundary status is declared on every operation
+  and that the statuses the server actually returns for a rejected request are
+  declared for that route.
+- Documentation and test only. No server, schema or CLI behaviour change.
+
 ## Event chain action binding candidate (28-09-2026)
 
 - `verifyEventChain` now requires every event in a chain to carry the same
