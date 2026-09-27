@@ -1,5 +1,14 @@
 # Changelog
 
+## Event chain action binding candidate (28-09-2026)
+
+- `verifyEventChain` now requires every event in a chain to carry the same
+  `action_id` and reports `BUNDLE_TAMPERED` when it does not.
+- Previously only sequence and `previous_hash` linkage were checked, so a
+  locally consistent chain assembled from two actions verified as one history.
+- No schema, receipt format or CLI change. Already-signed v0.1 event chains are
+  unaffected because the rail always records one action per chain.
+
 ## Action proposal version narrowing enforcement candidate (28-09-2026)
 
 - The rail and the offline bundle validator now enforce the published

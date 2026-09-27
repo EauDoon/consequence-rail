@@ -91,6 +91,32 @@ test("event store snapshots cannot be mutated through inputs or returned events"
   });
 });
 
+test("event chain verification binds every event to one action", () => {
+  const signer = createDemoSigner();
+  const store = new MemoryEventStore(signer, new ManualClock());
+  const first = store.append("act_chain_binding_000001", "TEST_RECORDED", "test", { step: 1 });
+  const foreign = store.append("act_other_action_0000001", "TEST_RECORDED", "test", { step: 1 });
+  const keys = demoTrustedKeys();
+
+  // A chain stitched from two actions is internally consistent: sequence 0 then
+  // 1, and the second event binds the first event's hash.
+  const stitched = [first, { ...foreign, sequence: 1, previous_hash: first.event_hash }];
+  assert.throws(
+    () => verifyEventChain(stitched, keys),
+    (error) => error.code === "BUNDLE_TAMPERED" &&
+      /Event action binding is invalid/.test(error.message),
+  );
+
+  // Re-sequencing a genuine foreign chain does not make it a second action.
+  const single = store.list("act_chain_binding_000001");
+  assert.equal(verifyEventChain(single, keys).event_count, 1);
+  assert.deepEqual(verifyEventChain([], keys), {
+    valid: true,
+    event_count: 0,
+    chain_head: null,
+  });
+});
+
 test("MemoryEventStore append failures cannot advance the event revision", () => {
   const clock = new ManualClock();
   const store = new MemoryEventStore(createDemoSigner(), clock);

@@ -44,9 +44,18 @@ export class MemoryEventStore {
 
 export function verifyEventChain(events, trustedKeys) {
   let previousHash = null;
+  // Every event in a chain must belong to the same action. A chain that is
+  // internally consistent but stitched from two actions is not that action's
+  // history, so the binding is checked before linkage is trusted.
+  const actionId = events[0]?.action_id;
 
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index];
+    if (typeof event.action_id !== "string" || event.action_id !== actionId) {
+      throw new RailError("BUNDLE_TAMPERED", "Event action binding is invalid.", {
+        sequence: index,
+      });
+    }
     if (event.sequence !== index || event.previous_hash !== previousHash) {
       throw new RailError("BUNDLE_TAMPERED", "Event ordering or chain linkage is invalid.", {
         sequence: index,
