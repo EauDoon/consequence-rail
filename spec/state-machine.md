@@ -46,6 +46,7 @@ BREACHED
 
 REMEDY_DUE
   -> REMEDIATING
+  -> REVIEW_REQUIRED
 
 REMEDIATING
   -> REMEDY_FAILED
@@ -116,6 +117,13 @@ the remedy idempotency key.
 A successful connector response is not enough. Fresh post-remedy evidence
 must satisfy the configured postcondition before the action can close as
 `compensated`.
+
+`REMEDY_DUE -> REVIEW_REQUIRED` is the no-remedy-started path. Before the rail
+invokes the remedy operation it re-reads the reserved recourse. If the
+reservation expired, or the connector no longer reports the reservation as
+active, the rail MUST NOT start a remedy and MUST transition to
+`REVIEW_REQUIRED` instead. That edge is a guard, not a settlement path: the
+action can only leave `REVIEW_REQUIRED` by closing as `disputed`.
 
 An unanticipated or irreversible remedy becomes a new child action with its
 own proposal, authorization, reservation and permit.
