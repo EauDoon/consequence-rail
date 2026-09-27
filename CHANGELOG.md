@@ -1,5 +1,12 @@
 # Changelog
 
+## State machine spec sync check candidate (28-09-2026)
+
+- Add a conformance test that parses the fenced transition table in
+  `spec/state-machine.md` and requires it to list exactly the transitions in
+  `ALLOWED_TRANSITIONS`, with no edge in either direction and no duplicates.
+- Test only. No runtime, schema, receipt or CLI change.
+
 ## OpenAPI boundary response coverage candidate (28-09-2026)
 
 - Every operation in `api/openapi.json` now declares the boundary statuses the
