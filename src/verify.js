@@ -3,7 +3,7 @@ import { validateSettlementBundle } from "./bundle-validation.js";
 import { verifyEventChain } from "./event-store.js";
 import { RailError } from "./errors.js";
 import { evaluatePostcondition } from "./postconditions.js";
-import { ALLOWED_TRANSITIONS } from "./rail.js";
+import { ALLOWED_TRANSITIONS, recourseScopeField } from "./rail.js";
 import { verifyArtifact } from "./signing.js";
 
 const SETTLEMENT_VERSION_BINDINGS = new Map([
@@ -281,8 +281,7 @@ function verifySemantics(bundle) {
 
   semanticAssert(reservation.action_digest === action.action_digest, "Reservation action binding is invalid.");
   semanticAssert(commitment.action_digest === action.action_digest, "Connector commitment action binding is invalid.");
-  const scopeField =
-    action.action_type === "demo.inventory.allocate/v1" ? "max_quantity" : "max_amount_minor";
+  const scopeField = recourseScopeField(action.action_type);
   semanticAssert(
     Object.hasOwn(commitment, scopeField) && Object.hasOwn(reservation, scopeField),
     `Reservation and commitment must both carry the ${scopeField} remedy scope.`,

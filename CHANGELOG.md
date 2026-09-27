@@ -1,5 +1,13 @@
 # Changelog
 
+## Remedy scope field single source candidate (28-09-2026)
+
+- `validateSettlementBundle` and `verifySemantics` now call the existing
+  `recourseScopeField` helper instead of repeating its action-type rule, so
+  the producer and both verifiers select the remedy scope field from one
+  definition.
+- Internal refactor. No observable behaviour, schema, receipt or CLI change.
+
 ## Sidecar bind failure reporting candidate (28-09-2026)
 
 - The sidecar now reports a listener that cannot bind through the same
