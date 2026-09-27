@@ -1,5 +1,6 @@
 import { digest } from "./canonical.js";
 import { RailError } from "./errors.js";
+import { recourseScopeField } from "./rail.js";
 
 const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
 const ED25519_BASE64URL = /^[A-Za-z0-9_-]{86}$/;
@@ -601,9 +602,7 @@ export function validateSettlementBundle(bundle) {
     invalid("SettlementBundle profile is unsupported.");
   }
   action(bundle.action, versionBinding.proposal);
-  const scopeField = bundle.action?.action_type === "demo.inventory.allocate/v1"
-    ? "max_quantity"
-    : "max_amount_minor";
+  const scopeField = recourseScopeField(bundle.action?.action_type);
   reservation(bundle.recourse_reservation, scopeField);
   permit(bundle.action_permit);
   stringArray(bundle.evidence_manifest, "SettlementBundle.evidence_manifest", { digests: true });
