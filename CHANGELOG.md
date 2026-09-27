@@ -1,5 +1,13 @@
 # Changelog
 
+## State machine spec sync candidate (28-09-2026)
+
+- Record the `REMEDY_DUE -> REVIEW_REQUIRED` guard in the normative transition
+  table and in the Remediation section of the artifact spec.
+- The edge is taken when the reserved recourse has expired or the connector no
+  longer reports the reservation as active, before any remedy invocation.
+- No runtime behaviour, schema, CLI surface or receipt bytes change.
+
 ## Recovery evidence snapshot candidate (26-09-2026)
 
 - Validate the complete recovery bundle's canonical JSON boundary before replay,
