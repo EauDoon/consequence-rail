@@ -5,7 +5,10 @@
 
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { digest } from "../src/canonical.js";
 import { ManualClock, SystemClock } from "../src/clock.js";
 import {
@@ -355,6 +358,66 @@ test("HTTP sidecar closes an over-cap request instead of waiting for the declare
     2_000,
   );
   assert.equal(outcome.closed, true, "server left a declared 5 MB request open after rejecting it");
+});
+
+test("OpenAPI declares every boundary status the reference server can return", async (context) => {
+  const openapi = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "api", "openapi.json"), "utf8"),
+  );
+  const declared = (route, method, status) =>
+    Object.hasOwn(openapi.paths[route][method.toLowerCase()].responses, String(status));
+
+  for (const [route, operations] of Object.entries(openapi.paths)) {
+    for (const method of Object.keys(operations).filter((key) => key !== "parameters")) {
+      for (const status of [403, 413, 415, 429, 500, 503]) {
+        assert.ok(
+          declared(route, method, status),
+          `${method.toUpperCase()} ${route} does not declare ${status}`,
+        );
+      }
+    }
+  }
+
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+  const proposal = JSON.stringify(buildRefundProposal(runtime.clock));
+
+  const observed = [
+    ["POST", "/v0/actions", 415, await fetch(`${base}/v0/actions`, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: proposal,
+    })],
+    ["POST", "/v0/actions", 403, await fetch(`${base}/v0/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://not-loopback.example" },
+      body: proposal,
+    })],
+    ["GET", "/v0/actions/{action_id}", 404, await fetch(
+      `${base}/v0/actions/act_00000000000000000000`,
+    )],
+    ["GET", "/v0/actions/{action_id}", 400, await fetch(
+      `${base}/v0/actions/act_00000000000000000000?profile=receipt`,
+    )],
+    ["GET", "/.well-known/consequence-rail", 403, await fetch(
+      `${base}/.well-known/consequence-rail`,
+      { headers: { origin: "http://not-loopback.example" } },
+    )],
+  ];
+
+  for (const [method, route, expected, response] of observed) {
+    assert.equal(response.status, expected, `${method} ${route}`);
+    assert.ok(
+      declared(route, method, response.status),
+      `${method} ${route} returned undeclared ${response.status}`,
+    );
+  }
+  assert.equal(runtime.rail.actions.size, 0, "a rejected request mutated rail state");
 });
 
 test("HTTP sidecar still answers a valid proposal on the same route", async (context) => {
