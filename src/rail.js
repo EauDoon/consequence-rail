@@ -4,5 +4,5 @@
 // preserves the public API of src/rail.js unchanged.
 
 export { ASSURANCE_MODES, ALLOWED_TRANSITIONS } from "./rail-state.js";
-export { recourseScopeField } from "./rail-schema.js";
+export { recourseScopeField, proposalAdmitsActionType } from "./rail-schema.js";
 export { ConsequenceRail } from "./rail-class.js";

@@ -20,9 +20,9 @@ import {
   assertRequiredFields,
   assertSafeInteger,
   assertTimestamp,
-  DEMO_ACTION_TYPES,
   RECEIPT_RECOURSE_STATUSES,
   recourseScopeField,
+  proposalAdmitsActionType,
   MAX_DURATION_SECONDS,
   AUTHORIZATION_FIELDS,
   CONNECTOR_CAPABILITY_FIELDS,
@@ -1107,7 +1107,7 @@ export class ConsequenceRail {
       "Unsupported ActionProposal schema version.",
     );
     assert(
-      DEMO_ACTION_TYPES.has(input.action_type),
+      proposalAdmitsActionType(input.schema_version, input.action_type),
       "SCHEMA_INVALID",
       "Unsupported action type.",
     );
