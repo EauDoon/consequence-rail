@@ -328,26 +328,32 @@ export function runIrreversibleDemo() {
   });
 
   try {
+    // A complete request on purpose: the refusal below must come from the
+    // connector capability gate, not from a missing request field.
     runtime.rail.reserveRecourse(proposed.action_id, {
       action_digest: proposed.action_digest,
       kind: "reverse",
       connector: "mock-email-sender",
       capability: "unsend-email",
+      capability_reference: "demo-capability:unsend-email",
       expires_at: addMilliseconds(proposal.expires_at, 300_000),
       remedy_window_seconds: 120,
       max_attempts: 1,
+      max_amount_minor: 0,
       idempotency_key: "remedy:email:msg_demo_1:unsend",
     });
     return {
       scenario: "irreversible-email",
       admitted: true,
       code: null,
+      detail: null,
     };
   } catch (error) {
     return {
       scenario: "irreversible-email",
       admitted: false,
       code: error.code,
+      detail: error.message,
       reason: "No connector-backed, bounded remedy capability was available.",
     };
   }

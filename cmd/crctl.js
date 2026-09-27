@@ -356,6 +356,7 @@ async function main() {
             `admitted: ${result.admitted}`,
             `decision: ${result.code}`,
             `reason: ${result.reason}`,
+            `detail: ${result.detail ?? "none"}`,
           ].join("\n") + "\n",
         );
       }
