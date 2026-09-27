@@ -1,5 +1,15 @@
 # Changelog
 
+## Irreversible scenario refusal cause candidate (28-09-2026)
+
+- `runIrreversibleDemo` now sends a complete recourse request, so the refusal
+  comes from the connector capability gate the scenario describes rather than
+  from a missing request field, and reports the refusal `detail` so the stated
+  reason is checkable.
+- `crctl demo irreversible` prints the new `detail` line.
+- The refusal code stays `RECOURSE_INVALID`; the scenario catalogue, matrix and
+  `admitted: false` expectation are unchanged. No schema or receipt change.
+
 ## State machine spec sync check candidate (28-09-2026)
 
 - Add a conformance test that parses the fenced transition table in

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { scenarioCatalog } from "../src/scenarios.js";
-import { runRefundDemo } from "../src/demo.js";
+import { runRefundDemo, runIrreversibleDemo } from "../src/demo.js";
 import { runInventoryDemo } from "../src/inventory-demo.js";
 
 test("every advertised execution assurance mode completes its synthetic demo", async () => {
@@ -14,6 +14,16 @@ test("every advertised execution assurance mode completes its synthetic demo", a
     }
     await assert.rejects(() => run({ assuranceMode: "observed" }), { code: "MODE_NOT_EXECUTABLE" });
   }
+});
+
+test("the irreversible scenario is refused by the connector capability gate", () => {
+  const result = runIrreversibleDemo();
+  assert.equal(result.admitted, false);
+  assert.equal(result.code, "RECOURSE_INVALID");
+  // The stated reason is only true if the request was complete and the rail
+  // refused it for the capability the connector does not advertise.
+  assert.match(result.detail, /does not advertise the reserved remedy capability/);
+  assert.doesNotMatch(result.detail, /unknown fields|missing required fields/);
 });
 
 test("catalog documents every runnable synthetic fault with detached expectations", () => {
