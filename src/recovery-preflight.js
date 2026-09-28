@@ -1,6 +1,7 @@
 import { deepClone, deepFreeze, digest } from "./canonical.js";
 import { RailError } from "./errors.js";
 import { measureMockRefundRecoveryAdapterImplementation } from "./mock-refund-recovery-adapter.js";
+import { MAX_DURATION_SECONDS } from "./rail-schema.js";
 import { signArtifact, verifyArtifact } from "./signing.js";
 
 export const RECOVERY_QUALIFICATIONS = [
@@ -290,10 +291,11 @@ export function validateRecoveryContract(input) {
     "RecoveryContract.expires_at must be after issued_at.",
   );
   assert(
-    Number.isInteger(input.max_attestation_age_seconds) &&
-      input.max_attestation_age_seconds > 0,
+    Number.isSafeInteger(input.max_attestation_age_seconds) &&
+      input.max_attestation_age_seconds >= 1 &&
+      input.max_attestation_age_seconds <= MAX_DURATION_SECONDS,
     "RECOVERY_CONTRACT_INVALID",
-    "RecoveryContract.max_attestation_age_seconds must be a positive integer.",
+    "RecoveryContract.max_attestation_age_seconds must be a positive safe integer within the duration limit.",
   );
 
   return deepFreeze(deepClone(input));
