@@ -105,6 +105,21 @@ test("semantic verification binds the permit window to the proposal", async () =
   assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
 });
 
+test("semantic verification binds the receipt close time to the terminal event", async () => {
+  const { bundle } = await runRefundDemo();
+  const shifted = deepClone(bundle);
+  shifted.settlement_receipt.closed_at = "2036-01-01T00:00:00.000Z";
+  shifted.settlement_receipt = signArtifact(shifted.settlement_receipt, createDemoSigner());
+  assert.equal(bundle.events.at(-1).payload.to_state, "CLOSED");
+  assert.notEqual(shifted.settlement_receipt.closed_at, bundle.events.at(-1).recorded_at);
+  assert.throws(
+    () => verifyBundle(shifted, trust()),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message.includes("Receipt close time does not match the terminal event"),
+  );
+  assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
+});
+
 test("semantic verification rejects a reservation scope below the proposal", async () => {
   const refund = await runRefundDemo();
   const undersizedRefund = withReservationScope(refund.bundle, "max_amount_minor", 1);

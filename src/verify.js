@@ -478,6 +478,10 @@ function verifySemantics(bundle) {
       "The configured postcondition was evaluated against declared evidence sources.",
     "Receipt contains an unsupported technical claim.",
   );
+  semanticAssert(
+    events.at(-1).recorded_at === receipt.closed_at,
+    "Receipt close time does not match the terminal event.",
+  );
 
   return {
     status: "verified",
