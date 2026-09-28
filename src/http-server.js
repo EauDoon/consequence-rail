@@ -22,7 +22,11 @@ function requestError(code, message, details = {}) {
   return new RailError(code, message, details);
 }
 
-const oversizedRequests = new WeakSet();
+const unreadBodyRefusals = new WeakSet();
+
+function refuseUnreadBody(request) {
+  unreadBodyRefusals.add(request);
+}
 
 async function readJson(request, { required = false } = {}) {
   // Rejecting before the body is consumed leaves the client's upload in
@@ -30,6 +34,7 @@ async function readJson(request, { required = false } = {}) {
   // bytes the sidecar has already decided to refuse.
   const contentEncoding = request.headers["content-encoding"];
   if (contentEncoding && contentEncoding.toLowerCase() !== "identity") {
+    refuseUnreadBody(request);
     throw requestError(
       "CONTENT_ENCODING_UNSUPPORTED",
       "Request content encoding is not supported.",
@@ -39,13 +44,14 @@ async function readJson(request, { required = false } = {}) {
   const declaredLength = request.headers["content-length"];
   if (declaredLength !== undefined) {
     if (!/^\d+$/.test(declaredLength)) {
+      refuseUnreadBody(request);
       throw requestError("REQUEST_INVALID", "Content-Length is invalid.");
     }
     if (Number(declaredLength) > MAX_BODY_BYTES) {
       // The declared body is still in flight and will never be read. Mark the
       // request so the response is delivered and the socket is then closed,
       // instead of staying open for bytes the sidecar already refused.
-      oversizedRequests.add(request);
+      refuseUnreadBody(request);
       throw requestError("REQUEST_TOO_LARGE", "Request body is too large.");
     }
   }
@@ -56,6 +62,7 @@ async function readJson(request, { required = false } = {}) {
     Number(declaredLength ?? 0) > 0 ||
     request.headers["transfer-encoding"] !== undefined;
   if (mayHaveBody && (!contentType || !JSON_CONTENT_TYPE.test(contentType))) {
+    refuseUnreadBody(request);
     throw requestError(
       "MEDIA_TYPE_UNSUPPORTED",
       "JSON requests require application/json with optional UTF-8 charset.",
@@ -105,6 +112,7 @@ function assertNoBody(request) {
     Number(request.headers["content-length"] ?? 0) !== 0 ||
     request.headers["transfer-encoding"] !== undefined
   ) {
+    refuseUnreadBody(request);
     throw requestError("REQUEST_INVALID", "This route does not accept a request body.");
   }
 }
@@ -429,7 +437,7 @@ export function createReferenceServer({
         : {};
       if (error instanceof RailError) {
         send(response, errorStatus(error), failureBody(error, requestId, extra));
-        if (oversizedRequests.has(request)) {
+        if (unreadBodyRefusals.has(request)) {
           // Graceful FIN, not destroy (RST): destroy discards the queued 413
           // on some platforms, while FIN delivers it and still frees the
           // socket instead of waiting for bytes already refused.

@@ -338,6 +338,53 @@ test("HTTP sidecar logs unexpected exceptions and returns INTERNAL_ERROR with a 
   assert.equal(diagnostic.message, "connector timeout detail must not escape");
 });
 
+test("HTTP sidecar closes the socket when it refuses a body before reading it", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const { port } = server.address();
+  const cases = [
+    {
+      name: "content-encoding",
+      request:
+        `POST /v0/actions HTTP/1.1\r\n` +
+        `Host: 127.0.0.1:${port}\r\n` +
+        `Content-Type: application/json\r\n` +
+        `Content-Encoding: gzip\r\n` +
+        `Content-Length: 100000\r\n` +
+        `\r\n`,
+      code: "CONTENT_ENCODING_UNSUPPORTED",
+    },
+    {
+      name: "media-type",
+      request:
+        `POST /v0/actions HTTP/1.1\r\n` +
+        `Host: 127.0.0.1:${port}\r\n` +
+        `Content-Type: text/plain\r\n` +
+        `Content-Length: 1000\r\n` +
+        `\r\n`,
+      code: "MEDIA_TYPE_UNSUPPORTED",
+    },
+    {
+      name: "unexpected-body",
+      request:
+        `GET /.well-known/consequence-rail HTTP/1.1\r\n` +
+        `Host: 127.0.0.1:${port}\r\n` +
+        `Content-Length: 100000\r\n` +
+        `\r\n`,
+      code: "REQUEST_INVALID",
+    },
+  ];
+  for (const item of cases) {
+    const outcome = await socketOutcome(port, item.request, 2_000);
+    assert.equal(outcome.closed, true, `${item.name} left the unread body holding the socket`);
+    assert.match(outcome.response, new RegExp(`"code":"${item.code}"`));
+  }
+  assert.equal(runtime.rail.actions.size, 0);
+});
+
 test("HTTP sidecar closes an over-cap request instead of waiting for the declared body", async (context) => {
   const runtime = createDemoRuntime();
   const server = createReferenceServer({ runtime });
