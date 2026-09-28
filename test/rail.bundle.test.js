@@ -200,6 +200,26 @@ test("receipt bundle profile omits proposal and raw evidence", async () => {
   );
 });
 
+test("a receipt profile bundle cannot re-attach the full proposal", async () => {
+  const result = await runRefundDemo();
+  const actionId = result.summary.action_id;
+  const trust = {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+    requireSemantics: false,
+  };
+  const audit = result.runtime.rail.exportBundle(actionId, { profile: "audit" });
+  const smuggled = result.runtime.rail.exportBundle(actionId);
+  smuggled.action.proposal = deepClone(audit.action.proposal);
+  assert.throws(
+    () => verifyBundle(smuggled, trust),
+    (error) => error.code === "BUNDLE_TAMPERED",
+  );
+  // The rail's own receipt profile is unaffected.
+  const honest = result.runtime.rail.exportBundle(actionId);
+  assert.equal(verifyBundle(honest, trust).integrity.valid, true);
+});
+
 test("mutating an exported bundle cannot corrupt stored evidence", async () => {
   const result = await runRefundDemo();
   result.bundle.events[0].payload.state = "CORRUPTED";
