@@ -1,5 +1,17 @@
 # Changelog
 
+## Refund remedy stays on its own action candidate (28-09-2026)
+
+- A refund remedy now voids only an active refund created for that action's
+  proposal idempotency key. When the action has a duplicate, the later of
+  its own refunds is voided and its primary refund stays active.
+- Previously the connector voided the last active refund on the order. A
+  later refund from another action on the same order was voided instead, and
+  the action's own duplicate stayed active.
+- The measured refund-connector digest changed with that source, and the
+  conformance recovery contract now pins the new digest. No schema, receipt
+  format, or canonical-byte change.
+
 ## Inventory remedy consumes its reservation candidate (28-09-2026)
 
 - A successful inventory remedy now marks the connector reservation
