@@ -369,6 +369,52 @@ test("HTTP propose rejects duplicate JSON object members before admission", asyn
   assert.equal(runtime.rail.actions.size, 0);
 });
 
+test("HTTP sidecar closes the socket when an early refusal leaves the body unread", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const { port } = server.address();
+  const cases = [
+    {
+      name: "method-not-allowed",
+      request:
+        `POST /.well-known/consequence-rail HTTP/1.1\r\n` +
+        `Host: 127.0.0.1:${port}\r\n` +
+        `Content-Length: 100000\r\n` +
+        `\r\n`,
+      code: "METHOD_NOT_ALLOWED",
+    },
+    {
+      name: "unknown-route",
+      request:
+        `POST /v0/unknown HTTP/1.1\r\n` +
+        `Host: 127.0.0.1:${port}\r\n` +
+        `Content-Type: application/json\r\n` +
+        `Content-Length: 100000\r\n` +
+        `\r\n`,
+      code: "ROUTE_NOT_FOUND",
+    },
+    {
+      name: "invalid-action-id",
+      request:
+        `POST /v0/actions/not-an-action/execute HTTP/1.1\r\n` +
+        `Host: 127.0.0.1:${port}\r\n` +
+        `Content-Type: application/json\r\n` +
+        `Content-Length: 100000\r\n` +
+        `\r\n`,
+      code: "REQUEST_INVALID",
+    },
+  ];
+  for (const item of cases) {
+    const outcome = await socketOutcome(port, item.request, 2_000);
+    assert.equal(outcome.closed, true, `${item.name} left the unread body holding the socket`);
+    assert.match(outcome.response, new RegExp(`"code":"${item.code}"`));
+  }
+  assert.equal(runtime.rail.actions.size, 0);
+});
+
 test("HTTP sidecar closes the socket when it refuses a body before reading it", async (context) => {
   const runtime = createDemoRuntime();
   const server = createReferenceServer({ runtime });
