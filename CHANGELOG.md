@@ -1,5 +1,14 @@
 # Changelog
 
+## Semantic verification binds the receipt close time to the terminal event (28-09-2026)
+
+- An audit bundle is now `SEMANTIC_INVALID` when `settlement_receipt.closed_at`
+  is not the `recorded_at` of the terminal `CLOSED` event.
+- The rail writes both from the same clock read. The verifier checked the
+  chain ended in `CLOSED` and that the receipt signature was valid, so a
+  re-signed receipt could claim the action closed a year later.
+- No schema, signature, or canonical-byte change.
+
 ## Semantic verification binds the permit window to the proposal (28-09-2026)
 
 - An audit bundle is now `SEMANTIC_INVALID` when the permit expires at a
