@@ -7,9 +7,74 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { deepClone, digest } from "../src/canonical.js";
 import { buildRefundProposal, createDemoRuntime, prepareRefund, runRefundDemo } from "../src/demo.js";
-import { createDemoSigner, demoConnectorTrustedKeys, demoTrustedKeys, signArtifact } from "../src/signing.js";
+import { runInventoryDemo } from "../src/inventory-demo.js";
+import { createDemoConnectorSigner, createDemoSigner, demoConnectorTrustedKeys, demoTrustedKeys, signArtifact } from "../src/signing.js";
 import { verifyBundle } from "../src/verify.js";
 import { resignEventChain } from "../src/rail-test-helpers.js";
+
+function trust() {
+  return {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+    requireSemantics: true,
+  };
+}
+
+// Re-sign a reservation scope change through the commitment, permit, receipt,
+// and the recourse-finalization event that pins the commitment digest.
+function withReservationScope(bundle, field, value) {
+  const signer = createDemoSigner();
+  const connectorSigner = createDemoConnectorSigner();
+  const next = deepClone(bundle);
+  next.recourse_reservation[field] = value;
+  next.recourse_reservation.connector_commitment[field] = value;
+  next.recourse_reservation.connector_commitment = signArtifact(
+    next.recourse_reservation.connector_commitment,
+    connectorSigner,
+  );
+  next.recourse_reservation = signArtifact(next.recourse_reservation, signer);
+  const reservationDigest = digest(next.recourse_reservation);
+  const commitmentDigest = digest(next.recourse_reservation.connector_commitment);
+  next.action_permit.recourse_reservation_digest = reservationDigest;
+  next.action_permit = signArtifact(next.action_permit, signer);
+  const permitDigest = digest(next.action_permit);
+  for (const event of next.events) {
+    if (event.payload?.connector_commitment_digest) {
+      event.payload.connector_commitment_digest = commitmentDigest;
+    }
+    if (event.payload?.permit_digest) event.payload.permit_digest = permitDigest;
+    if (event.payload?.reservation_digest) event.payload.reservation_digest = reservationDigest;
+  }
+  next.events = resignEventChain(next.events, signer, next.action.action_id);
+  next.settlement_receipt.recourse_reservation_digest = reservationDigest;
+  next.settlement_receipt.connector_recourse_commitment_digest = commitmentDigest;
+  next.settlement_receipt.action_permit_digest = permitDigest;
+  next.settlement_receipt.event_chain_head = next.events.at(-1).event_hash;
+  next.settlement_receipt = signArtifact(next.settlement_receipt, signer);
+  return next;
+}
+
+test("semantic verification rejects a reservation scope below the proposal", async () => {
+  const refund = await runRefundDemo();
+  const undersizedRefund = withReservationScope(refund.bundle, "max_amount_minor", 1);
+  assert.equal(undersizedRefund.action.proposal.parameters.amount_minor, 12_000);
+  assert.throws(
+    () => verifyBundle(undersizedRefund, trust()),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message.includes("does not cover the proposed refund"),
+  );
+  assert.equal(verifyBundle(refund.bundle, trust()).semantics.status, "verified");
+
+  const inventory = await runInventoryDemo();
+  const undersizedInventory = withReservationScope(inventory.bundle, "max_quantity", 1);
+  assert.equal(undersizedInventory.action.proposal.parameters.quantity, 4);
+  assert.throws(
+    () => verifyBundle(undersizedInventory, trust()),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message.includes("does not cover the proposed allocation"),
+  );
+  assert.equal(verifyBundle(inventory.bundle, trust()).semantics.status, "verified");
+});
 
 test("semantic verification rejects execution at the permit expiry instant", async () => {
   const result = await runRefundDemo();
