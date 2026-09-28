@@ -1,5 +1,17 @@
 # Changelog
 
+## Insufficient inventory is a confirmed failure (28-09-2026)
+
+- When the inventory connector refuses an allocation before creating one, the
+  rail now records `FAILED`, releases the reservation, and rethrows
+  `INVENTORY_INSUFFICIENT`.
+- That refusal was caught by the ambiguous-execution path. The action stayed
+  `UNKNOWN`, reconciliation could not find an effect, and close recorded a
+  disputed receipt while the unused reservation stayed active.
+- An idempotency conflict is still `FAILED` for the same reason: the connector
+  raised it before an effect. A lost response remains ambiguous. No schema,
+  signature, or canonical-byte change.
+
 ## Inventory allocation rejects a non-positive quantity (28-09-2026)
 
 - `createAllocation` now refuses a quantity that is not a positive safe integer,
