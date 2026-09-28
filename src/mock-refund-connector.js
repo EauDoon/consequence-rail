@@ -73,6 +73,21 @@ export class MockRefundConnector {
     ) {
       throw new RailError("RECOURSE_UNAVAILABLE", "The connector cannot reserve the requested remedy.");
     }
+    if (proposal.action_type !== "demo.refund.issue/v1") {
+      throw new RailError(
+        "RECOURSE_UNAVAILABLE",
+        "The connector only reserves refund remedies for refund actions.",
+      );
+    }
+    if (
+      !Number.isSafeInteger(request.max_amount_minor) ||
+      !Number.isSafeInteger(proposal.parameters?.amount_minor)
+    ) {
+      throw new RailError(
+        "RECOURSE_SCOPE_INSUFFICIENT",
+        "The refund remedy requires integer minor amounts.",
+      );
+    }
     if (request.max_amount_minor < proposal.parameters.amount_minor) {
       throw new RailError("RECOURSE_SCOPE_INSUFFICIENT", "The requested remedy scope is insufficient.");
     }

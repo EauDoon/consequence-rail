@@ -778,9 +778,66 @@ test("mutating an authorized action is rejected before side effects", async () =
   assert.equal(result.summary.state, "PERMITTED");
 });
 
+test("the refund connector refuses recourse for a non-refund action", () => {
+  const runtime = createDemoRuntime();
+  const proposal = buildRefundProposal(runtime.clock);
+  proposal.action_type = "demo.email.send/v1";
+  proposal.parameters = {
+    recipient_id: "recipient_demo",
+    subject: "Synthetic message",
+  };
+  proposal.target.resource_type = "message";
+  proposal.target.resource_id = "msg_demo_1";
+  const proposed = runtime.rail.propose(proposal);
+  runtime.rail.authorize(proposed.action_id, {
+    allow: true,
+    policy_id: "demo-email-policy/v1",
+    policy_digest: digest({ allow_synthetic_email: true }),
+  });
+  assert.throws(
+    () => runtime.rail.reserveRecourse(proposed.action_id, {
+      action_digest: proposed.action_digest,
+      kind: "reverse",
+      connector: "mock-refund-processor",
+      capability: "void-duplicate-refund",
+      capability_reference: "demo-capability:void-duplicate-refund",
+      expires_at: new Date(new Date(proposal.expires_at).getTime() + 300_000).toISOString(),
+      remedy_window_seconds: 120,
+      max_attempts: 1,
+      max_amount_minor: 0,
+      idempotency_key: "remedy:email:msg_demo_1:unsend",
+    }),
+    (error) => error.code === "RECOURSE_UNAVAILABLE",
+  );
+  assert.equal(runtime.rail.inspect(proposed.action_id).state, "AUTHORIZED");
+  assert.equal(runtime.connector.recourseReservations.size, 0);
+
+  const connector = new MockRefundConnector(new ManualClock());
+  assert.throws(
+    () => connector.reserveRecourse(
+      {
+        action_type: "demo.refund.issue/v1",
+        parameters: {},
+      },
+      {
+        capability: "void-duplicate-refund",
+        connector: "mock-refund-processor",
+        max_amount_minor: 10,
+        action_digest: "b".repeat(43),
+        kind: "reverse",
+        expires_at: "2035-01-01T00:05:00.000Z",
+        max_attempts: 1,
+      },
+    ),
+    (error) => error.code === "RECOURSE_SCOPE_INSUFFICIENT",
+  );
+  assert.equal(connector.recourseReservations.size, 0);
+});
+
 test("a refund remedy voids only the refunds created by that action", async () => {
   const connector = new MockRefundConnector(new ManualClock());
   const shared = {
+    action_type: "demo.refund.issue/v1",
     target: { resource_id: "ord_shared" },
     parameters: { amount_minor: 100, currency: "USD" },
   };
