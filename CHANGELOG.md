@@ -1,5 +1,15 @@
 # Changelog
 
+## Refund execution rejects a non-positive amount (28-09-2026)
+
+- The refund connector now refuses to create a refund unless `amount_minor`
+  is a positive safe integer. The refusal happens before any refund is stored.
+- `execute` previously stored a zero or negative amount, and a non-finite
+  amount was stored and then failed while the execution was remembered, leaving
+  the refund in place without a cached result.
+- The measured connector digest changed, and the conformance recovery contract
+  pins the new value. No schema, receipt format, or canonical-byte change.
+
 ## Recovery contracts bound the attestation age (28-09-2026)
 
 - `max_attestation_age_seconds` must now be a safe integer from 1 through the
