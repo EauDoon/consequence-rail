@@ -25,6 +25,18 @@ import {
   demoRecoveryTrustedKeys,
 } from "../src/signing.js";
 
+test("recovery verification rejects a trace whose notes are not an array", async () => {
+  const { bundle } = await runRecoveryPreflightDemo();
+  for (const notes of ["not-an-array", null, { text: "hidden" }]) {
+    const tampered = structuredClone(bundle);
+    tampered.trace.notes = notes;
+    assert.throws(
+      () => verifyRecoveryPreflight(tampered, { trustedKeys: demoRecoveryTrustedKeys() }),
+      (error) => error.name === "RailError" && error.code === "RECOVERY_BUNDLE_INVALID",
+    );
+  }
+});
+
 test("recovery preflight qualifies exact restoration on an isolated fixture", async () => {
   const result = await runRecoveryPreflightDemo();
   assert.equal(result.summary.qualification, "QUALIFIED_EXACT");
