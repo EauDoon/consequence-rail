@@ -284,6 +284,9 @@ export class MockInventoryConnector {
       idempotency_key: idempotencyKey,
     };
     this.remedyExecutions.set(idempotencyKey, result);
+    // The remedy ran, so the reservation is consumed. Leaving it active lets
+    // close() release it and record the receipt as if the remedy never started.
+    recourse.status = "consumed";
     if (fault === "remedy-lost-response-after-commit") {
       throw new UnknownRemedyError("The remedy response was lost after the external effect.", {
         external_id: bound.allocation_id,

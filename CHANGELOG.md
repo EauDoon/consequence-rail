@@ -1,5 +1,18 @@
 # Changelog
 
+## Inventory remedy consumes its reservation candidate (28-09-2026)
+
+- A successful inventory remedy now marks the connector reservation
+  `consumed`, including when the remedy response is lost after the release
+  commits.
+- Previously the reservation stayed `active`, and closing a compensated
+  allocation released it. The receipt then said `released`, which is the
+  status of an unused reservation, even though the extra allocation had
+  already been returned.
+- The refund connector already recorded `consumed` for the same success path.
+  Settled allocations that never start a remedy still release the reservation.
+  No schema or canonical-byte change.
+
 ## Receipt profile proposal exclusion candidate (28-09-2026)
 
 - `verifyBundle` now rejects a `receipt` profile bundle that carries
