@@ -378,6 +378,15 @@ function verifySemantics(bundle) {
     "Execution occurred outside the permit validity window.",
   );
   semanticAssert(
+    permit.expires_at === proposal.expires_at,
+    "Permit expiry is not the proposal expiry.",
+  );
+  semanticAssert(
+    new Date(permit.issued_at).getTime() >= new Date(proposal.requested_at).getTime() &&
+      new Date(permit.issued_at).getTime() < new Date(proposal.expires_at).getTime(),
+    "Permit was issued outside the proposal window.",
+  );
+  semanticAssert(
     states.filter((state) => state === "EXECUTING").length === 1,
     "Lifecycle contains more than one execution attempt.",
   );

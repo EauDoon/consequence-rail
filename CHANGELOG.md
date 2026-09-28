@@ -1,5 +1,17 @@
 # Changelog
 
+## Semantic verification binds the permit window to the proposal (28-09-2026)
+
+- An audit bundle is now `SEMANTIC_INVALID` when the permit expires at a
+  different instant than the proposal, or when the permit was issued before
+  the proposal was requested.
+- The rail copies `proposal.expires_at` onto the permit and will not issue a
+  permit outside that window. The verifier only checked that execution fell
+  inside whatever window the permit itself declared, so a longer permit or an
+  earlier issue time still verified.
+- Execution at `issued_at` remains inside the window, and execution at
+  `expires_at` remains outside it. No schema, signature, or canonical-byte change.
+
 ## Semantic verification requires the reserved scope to cover the proposal (28-09-2026)
 
 - An audit bundle whose reservation or connector commitment is scoped below
