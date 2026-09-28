@@ -338,6 +338,37 @@ test("HTTP sidecar logs unexpected exceptions and returns INTERNAL_ERROR with a 
   assert.equal(diagnostic.message, "connector timeout detail must not escape");
 });
 
+test("HTTP propose rejects duplicate JSON object members before admission", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const { port } = server.address();
+  const proposal = JSON.stringify(buildRefundProposal(runtime.clock));
+  assert.match(proposal, /"amount_minor":12000/);
+  const duplicated = proposal.replace(
+    '"amount_minor":12000',
+    '"amount_minor":1,"amount_minor":12000',
+  );
+  const escaped = proposal.replace(
+    '"amount_minor":12000',
+    '"amount_minor":1,"\\u0061mount_minor":12000',
+  );
+  for (const body of [duplicated, escaped]) {
+    const response = await fetch(`http://127.0.0.1:${port}/v0/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.equal(payload.code, "JSON_DUPLICATE_KEY");
+    assert.match(payload.request_id, /^req_[A-Za-z0-9_-]{22}$/);
+  }
+  assert.equal(runtime.rail.actions.size, 0);
+});
+
 test("HTTP sidecar closes the socket when it refuses a body before reading it", async (context) => {
   const runtime = createDemoRuntime();
   const server = createReferenceServer({ runtime });

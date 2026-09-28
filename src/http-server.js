@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { SystemClock } from "./clock.js";
 import { createDemoRuntime } from "./demo.js";
 import { RailError } from "./errors.js";
+import { parseUniqueJson } from "./json-input.js";
 import { demoConnectorTrustedKeys, demoTrustedKeys } from "./signing.js";
 import { verifyBundle } from "./verify.js";
 
@@ -101,8 +102,12 @@ async function readJson(request, { required = false } = {}) {
     throw requestError("REQUEST_INVALID", "Request body must be valid UTF-8 JSON.");
   }
   try {
-    return JSON.parse(text);
-  } catch {
+    // JSON.parse keeps the last duplicate member. Artifact loading already
+    // rejects that, and a request must not be able to smuggle a second value
+    // for the same field.
+    return parseUniqueJson(text);
+  } catch (error) {
+    if (error instanceof RailError) throw error;
     throw requestError("REQUEST_INVALID", "Request body must be valid JSON.");
   }
 }

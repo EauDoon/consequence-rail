@@ -1,5 +1,14 @@
 # Changelog
 
+## HTTP requests reject duplicate JSON members (28-09-2026)
+
+- The reference server now parses request bodies with the same duplicate-member
+  rejection artifact files already use. A repeated object key, including one
+  written with a different escape sequence, is `JSON_DUPLICATE_KEY`.
+- `JSON.parse` kept the last value, so a proposal could carry two amounts and
+  the sidecar would admit whichever came last.
+- No schema, signature, or canonical-byte change.
+
 ## Early HTTP refusals close the unread body candidate (28-09-2026)
 
 - A request refused before its body is read now gets the response and then
