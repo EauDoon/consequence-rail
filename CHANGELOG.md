@@ -1,5 +1,14 @@
 # Changelog
 
+## Semantic verification requires the reserved scope to cover the proposal (28-09-2026)
+
+- An audit bundle whose reservation or connector commitment is scoped below
+  the proposed refund amount or allocation quantity is now `SEMANTIC_INVALID`.
+- The rail already refuses that reservation at admission. The verifier only
+  checked that the commitment and reservation named the same scope field, so
+  a re-signed bundle could settle a 12000 refund under a scope of 1.
+- No schema, signature, or canonical-byte change.
+
 ## HTTP requests reject duplicate JSON members (28-09-2026)
 
 - The reference server now parses request bodies with the same duplicate-member

@@ -323,6 +323,19 @@ function verifySemantics(bundle) {
     proposal.target.connector === reservation.connector,
     "Reservation connector does not match the action target.",
   );
+  if (proposal.action_type === "demo.refund.issue/v1") {
+    semanticAssert(
+      reservation.max_amount_minor >= proposal.parameters.amount_minor &&
+        commitment.max_amount_minor >= proposal.parameters.amount_minor,
+      "Reservation scope does not cover the proposed refund.",
+    );
+  } else if (proposal.action_type === "demo.inventory.allocate/v1") {
+    semanticAssert(
+      reservation.max_quantity >= proposal.parameters.quantity &&
+        commitment.max_quantity >= proposal.parameters.quantity,
+      "Reservation scope does not cover the proposed allocation.",
+    );
+  }
   semanticAssert(
     permit.max_uses === 1 &&
       (permit.assurance_mode === "enforced" || permit.assurance_mode === "cooperative"),
