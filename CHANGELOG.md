@@ -1,5 +1,14 @@
 # Changelog
 
+## Recovery contracts bound the attestation age (28-09-2026)
+
+- `max_attestation_age_seconds` must now be a safe integer from 1 through the
+  same duration limit as an evidence plan, `floor(Number.MAX_SAFE_INTEGER / 1000)`.
+- The field previously accepted any positive `Number.isInteger` value, including
+  `2^53` and `1e20`. Multiplying those by 1000 is not an exact millisecond
+  count, so the derived attestation expiry was not the age the contract named.
+- No schema, signature, or canonical-byte change.
+
 ## Semantic verification binds evidence currency and SKU to the proposal (28-09-2026)
 
 - An audit bundle is now `SEMANTIC_INVALID` when refund evidence reports a

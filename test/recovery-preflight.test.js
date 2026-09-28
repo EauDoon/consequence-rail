@@ -584,6 +584,26 @@ test("HTTP sidecar accepts evidence but never executes the drill plan", async (c
   assert.equal(runtime.connector.remedyCalls, 0);
 });
 
+test("recovery contract rejects an attestation age that is not a bounded safe integer", () => {
+  const runtime = createDemoRuntime();
+  const maxDurationSeconds = Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
+  for (const value of [0, -1, 1.5, Number.NaN, 2 ** 53, 1e20, maxDurationSeconds + 1]) {
+    const contract = buildRefundRecoveryContract(runtime.clock);
+    contract.max_attestation_age_seconds = value;
+    assert.throws(
+      () => validateRecoveryContract(contract),
+      (error) => error.code === "RECOVERY_CONTRACT_INVALID",
+      `max_attestation_age_seconds=${value} must be rejected`,
+    );
+  }
+  const contract = buildRefundRecoveryContract(runtime.clock);
+  contract.max_attestation_age_seconds = maxDurationSeconds;
+  assert.equal(
+    validateRecoveryContract(contract).max_attestation_age_seconds,
+    maxDurationSeconds,
+  );
+});
+
 test("RecoveryContract rejects unknown fields", () => {
   const runtime = createDemoRuntime();
   const contract = buildRefundRecoveryContract(runtime.clock);
