@@ -25,8 +25,25 @@ function requestError(code, message, details = {}) {
 
 const unreadBodyRefusals = new WeakSet();
 
+function declaresBody(request) {
+  const declaredLength = request.headers["content-length"];
+  if (declaredLength !== undefined && declaredLength !== "0") return true;
+  return request.headers["transfer-encoding"] !== undefined;
+}
+
 function refuseUnreadBody(request) {
   unreadBodyRefusals.add(request);
+}
+
+function armUnreadBodyClose(request, response) {
+  // A declared body that this request never reads would keep the socket open.
+  // Mark it up front. A later full read clears the mark. Finish then sends
+  // FIN, which delivers the response and frees the socket. destroy (RST) can
+  // drop the queued response on some platforms.
+  if (declaresBody(request)) refuseUnreadBody(request);
+  response.once("finish", () => {
+    if (unreadBodyRefusals.has(request)) request.socket?.end();
+  });
 }
 
 async function readJson(request, { required = false } = {}) {
@@ -88,6 +105,8 @@ async function readJson(request, { required = false } = {}) {
   if (tooLarge) {
     throw requestError("REQUEST_TOO_LARGE", "Request body is too large.");
   }
+  // The body was consumed, so keep-alive may reuse the socket.
+  unreadBodyRefusals.delete(request);
   if (received === 0) {
     if (required) {
       throw requestError("REQUEST_INVALID", "A JSON request body is required.");
@@ -283,6 +302,7 @@ export function createReferenceServer({
 
   const server = createServer({ maxHeaderSize: 16_384 }, async (request, response) => {
     const requestId = createRequestId();
+    armUnreadBodyClose(request, response);
     if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
       send(response, 503, {
         code: "SERVER_BUSY",
@@ -442,14 +462,6 @@ export function createReferenceServer({
         : {};
       if (error instanceof RailError) {
         send(response, errorStatus(error), failureBody(error, requestId, extra));
-        if (unreadBodyRefusals.has(request)) {
-          // Graceful FIN, not destroy (RST): destroy discards the queued 413
-          // on some platforms, while FIN delivers it and still frees the
-          // socket instead of waiting for bytes already refused.
-          response.once("finish", () => {
-            request.socket?.end();
-          });
-        }
         return;
       }
       process.stderr.write(

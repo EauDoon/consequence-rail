@@ -1,5 +1,17 @@
 # Changelog
 
+## Early refusals close a declared unread body (28-09-2026)
+
+- A request that declares a body and is refused before that body is read now
+  gets the response and then a socket close. That includes method-not-allowed,
+  an unknown route, an invalid action id, a busy server, a rate limit, and a
+  rejected host or origin.
+- Previously only a refusal inside the body reader closed the socket. A client
+  could hold the connection open by withholding a body the sidecar had already
+  rejected for another reason.
+- A body that is fully read still leaves the socket reusable. No schema,
+  signature, or canonical-byte change.
+
 ## Insufficient inventory is a confirmed failure (28-09-2026)
 
 - When the inventory connector refuses an allocation before creating one, the
