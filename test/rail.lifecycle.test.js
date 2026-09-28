@@ -851,6 +851,28 @@ test("a remedy idempotency key cannot be replayed for a different action", async
   );
 });
 
+test("the refund connector refuses a non-positive amount before creating a refund", async () => {
+  const clock = new ManualClock();
+  const connector = new MockRefundConnector(clock);
+  const proposal = buildRefundProposal(clock);
+  for (const amount of [0, -50, 12_000.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const bad = {
+      ...proposal,
+      parameters: { ...proposal.parameters, amount_minor: amount },
+    };
+    await assert.rejects(
+      () => connector.execute(bad, `refund-amount:${String(amount)}`),
+      (error) => error.code === "REFUND_AMOUNT_INVALID",
+      `amount_minor=${amount} must be refused before a refund is created`,
+    );
+  }
+  assert.equal(connector.refunds.length, 0);
+  const executed = await connector.execute(proposal, proposal.idempotency_key);
+  assert.equal(executed.status, "executed");
+  assert.equal(connector.refunds.length, 1);
+  assert.equal(connector.refunds[0].amount_minor, 12_000);
+});
+
 test("the refund connector refuses recourse for a non-refund action", () => {
   const runtime = createDemoRuntime();
   const proposal = buildRefundProposal(runtime.clock);

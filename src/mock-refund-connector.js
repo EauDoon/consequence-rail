@@ -343,6 +343,15 @@ export class MockRefundConnector {
   }
 
   createRefund(proposal, suffix) {
+    if (
+      !Number.isSafeInteger(proposal?.parameters?.amount_minor) ||
+      proposal.parameters.amount_minor < 1
+    ) {
+      throw new RailError(
+        "REFUND_AMOUNT_INVALID",
+        "Refund amount_minor must be a positive integer.",
+      );
+    }
     const refund = {
       refund_id: `rf_${this.refunds.length + 1}`,
       order_id: proposal.target.resource_id,

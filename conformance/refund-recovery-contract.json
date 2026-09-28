@@ -14,7 +14,7 @@
   "recourse": {
     "kind": "reverse",
     "capability": "void-duplicate-refund",
-    "implementation_digest": "sp85X_T-gOrd84_F0RgzChYXD9nkimbtKeAeoBl9twc",
+    "implementation_digest": "UZZbMWM3s9JK8ixr6NWCcRivX6DS3IGros9tLjL9bM0",
     "reservation_digest": "ojziEUQo4xQCHkY7lbdO9sSeDHcsxqUnqAPJ0rr9VyI",
     "capability_reference_digest": "hQVGx_B4-JQBq8CvDw33swkg7Sil8DKE31TiKBc6bhM",
     "connector_commitment_digest": "kjeRqSDyDGgcAWMuCP3Dmmhm8C6XYEZDGs9pvf0QI3s"
