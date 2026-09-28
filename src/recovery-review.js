@@ -80,6 +80,15 @@ export function linkRecovery(settlementInput, recoveryInput, options = {}) {
     remedy_kind: contract.recourse.kind === reservation.kind,
     capability: contract.recourse.capability === reservation.capability,
   };
+  const proposal = settlement.action?.proposal;
+  if (proposal) {
+    bindings.connector = contract.scope.connector === proposal.target?.connector;
+    bindings.resource_type = contract.scope.resource_type === proposal.target?.resource_type;
+    bindings.assurance_mode = contract.scope.assurance_mode === proposal.assurance_mode;
+    bindings.parameters = contract.scope.parameters_digest === digest(proposal.parameters);
+    bindings.postcondition = contract.scope.postcondition_digest === digest(proposal.postcondition);
+    bindings.evidence_plan = contract.scope.evidence_plan_digest === digest(proposal.evidence_plan);
+  }
   const accepted = settlement.events.filter(event => event.event_type === "RECOVERY_PREFLIGHT_ACCEPTED")
     .some(event => event.payload.attestation_digest === drill.attestation_digest && event.payload.coverage_digest === drill.coverage_digest);
   return { valid: true, settlement_bundle_digest: review.bundle_digest, recovery_bundle_digest: drill.bundle_digest,

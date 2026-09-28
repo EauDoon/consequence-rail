@@ -1,5 +1,17 @@
 # Changelog
 
+## Recovery link checks the proposal scope candidate (28-09-2026)
+
+- `linkRecovery` now compares a drill's scope with the audit proposal:
+  connector, resource type, assurance mode, and the parameter, postcondition,
+  and evidence-plan digests. `bindings_match` is false when any of those
+  differ.
+- Previously a drill could name the settlement's action digest and still
+  carry a parameters digest for a different payload. The report said the
+  bindings matched. Live admission already rejects that drill.
+- A receipt profile has no proposal, so those scope fields stay unchecked.
+  No schema, signature, or canonical-byte change.
+
 ## Execution at permit expiry is outside the window candidate (28-09-2026)
 
 - Semantic verification now rejects an execution whose recorded time is the

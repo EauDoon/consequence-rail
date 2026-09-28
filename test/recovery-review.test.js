@@ -66,6 +66,31 @@ test("offline recovery link distinguishes binding agreement from recorded accept
   assert.throws(() => linkRecovery(settlement, drill, { ...keys, trustedRecoveryKeys: new Map() }));
 });
 
+test("offline recovery link rejects a drill whose scope does not cover the proposal", async () => {
+  const settlement = (await runRefundDemo()).bundle;
+  const drill = (await runRecoveryPreflightDemo()).bundle;
+  const contract = structuredClone(drill.recovery_contract);
+  contract.scope = {
+    ...contract.scope,
+    parameters_digest: digest("not-the-parameters"),
+  };
+  const clock = new ManualClock();
+  const changed = await runRecoveryPreflight({
+    contract,
+    clock,
+    adapter: new MockRefundRecoveryAdapter(clock),
+    signer: createDemoRecoverySigner(),
+  });
+  const report = linkRecovery(settlement, changed, {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+    trustedRecoveryKeys: demoRecoveryTrustedKeys(),
+  });
+  assert.equal(report.bindings.action, true);
+  assert.equal(report.bindings.parameters, false);
+  assert.equal(report.bindings_match, false);
+});
+
 test("linked accepted drill is identified without additional connector calls", async () => {
   const { runtime, bundle: drill } = await runRecoveryPreflightDemo();
   const actionId = [...runtime.rail.actions.keys()][0];
