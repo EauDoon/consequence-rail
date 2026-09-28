@@ -143,7 +143,13 @@ export class MockInventoryConnector {
   }
 
   createAllocation(proposal, suffix) {
-    const quantity = proposal.parameters.quantity;
+    const quantity = proposal.parameters?.quantity;
+    if (!Number.isSafeInteger(quantity) || quantity < 1) {
+      throw new RailError(
+        "INVENTORY_QUANTITY_INVALID",
+        "Allocation quantity must be a positive integer.",
+      );
+    }
     const available = this.inventory.get(proposal.parameters.sku) ?? 0;
     if (quantity > available) {
       throw new RailError("INVENTORY_INSUFFICIENT", "The requested quantity exceeds available inventory.");
