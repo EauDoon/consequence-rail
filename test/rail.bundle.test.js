@@ -54,6 +54,57 @@ function withReservationScope(bundle, field, value) {
   return next;
 }
 
+function resignLifecycle(bundle) {
+  const signer = createDemoSigner();
+  const connectorSigner = createDemoConnectorSigner();
+  const next = deepClone(bundle);
+  next.recourse_reservation.connector_commitment = signArtifact(
+    next.recourse_reservation.connector_commitment,
+    connectorSigner,
+  );
+  next.recourse_reservation = signArtifact(next.recourse_reservation, signer);
+  const reservationDigest = digest(next.recourse_reservation);
+  const commitmentDigest = digest(next.recourse_reservation.connector_commitment);
+  next.action_permit.recourse_reservation_digest = reservationDigest;
+  next.action_permit = signArtifact(next.action_permit, signer);
+  const permitDigest = digest(next.action_permit);
+  for (const event of next.events) {
+    if (event.payload?.connector_commitment_digest) {
+      event.payload.connector_commitment_digest = commitmentDigest;
+    }
+  }
+  next.events = resignEventChain(next.events, signer, next.action.action_id);
+  next.settlement_receipt.recourse_reservation_digest = reservationDigest;
+  next.settlement_receipt.connector_recourse_commitment_digest = commitmentDigest;
+  next.settlement_receipt.action_permit_digest = permitDigest;
+  next.settlement_receipt.event_chain_head = next.events.at(-1).event_hash;
+  next.settlement_receipt = signArtifact(next.settlement_receipt, signer);
+  return next;
+}
+
+test("semantic verification binds the permit window to the proposal", async () => {
+  const { bundle } = await runRefundDemo();
+  const widened = deepClone(bundle);
+  widened.action_permit.expires_at = "2035-01-01T00:03:00.000Z";
+  assert.notEqual(widened.action_permit.expires_at, widened.action.proposal.expires_at);
+  assert.throws(
+    () => verifyBundle(resignLifecycle(widened), trust()),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message.includes("Permit expiry is not the proposal expiry"),
+  );
+
+  const early = deepClone(bundle);
+  early.action_permit.issued_at = "2034-06-01T00:00:00.000Z";
+  early.recourse_reservation.reserved_at = "2034-05-01T00:00:00.000Z";
+  early.recourse_reservation.connector_commitment.reserved_at = "2034-05-01T00:00:00.000Z";
+  assert.throws(
+    () => verifyBundle(resignLifecycle(early), trust()),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message.includes("Permit was issued outside the proposal window"),
+  );
+  assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
+});
+
 test("semantic verification rejects a reservation scope below the proposal", async () => {
   const refund = await runRefundDemo();
   const undersizedRefund = withReservationScope(refund.bundle, "max_amount_minor", 1);
