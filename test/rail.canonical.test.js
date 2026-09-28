@@ -3,11 +3,11 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canonicalJson, deepClone, digest } from "../src/canonical.js";
+import { canonicalJson, deepClone, digest, without } from "../src/canonical.js";
 import { ManualClock } from "../src/clock.js";
 import { buildRefundProposal, prepareRefund } from "../src/demo.js";
 import { MemoryEventStore, verifyEventChain } from "../src/event-store.js";
-import { createDemoSigner, demoTrustedKeys } from "../src/signing.js";
+import { createDemoSigner, demoTrustedKeys, signArtifact, verifyArtifact } from "../src/signing.js";
 import {
   createFailingAtomicEventStore,
   createRuntimeWithEventStore,
@@ -31,6 +31,34 @@ test("canonical action digest is independent of object key order", () => {
   };
   assert.equal(canonicalJson(left), canonicalJson(right));
   assert.equal(digest(left), digest(right));
+});
+
+test("canonical key order is UTF-16 code unit order, not array-index order", () => {
+  // JSON.stringify emits array-index-like keys first, in ascending numeric
+  // order, so delegating to it would silently drop the sorted order the
+  // profile in spec/model.md requires. "07" is not an array index.
+  const value = { b: 1, "10": 2, "2": 3, a: 4, "07": 5, z: [1, { "9": "x", "1": "y" }] };
+  const expected =
+    '{"07":5,"10":2,"2":3,"a":4,"b":1,"z":[1,{"1":"y","9":"x"}]}';
+  assert.equal(canonicalJson(value), expected);
+  assert.equal(digest(value), "QaVCyRzjCJXhxqxNQLRHH5lDD_gICcO_apKNHEv0b2o");
+  assert.equal(
+    canonicalJson(JSON.parse('{"z":[1,{"1":"y","9":"x"}],"07":5,"a":4,"2":3,"10":2,"b":1}')),
+    expected,
+  );
+
+  const signer = createDemoSigner();
+  const artifact = signArtifact({ "3": "c", "1": "a", "2": "b" }, signer);
+  const keys = demoTrustedKeys();
+  assert.equal(verifyArtifact(artifact, keys).valid, true);
+  assert.equal(
+    canonicalJson(without(artifact, ["signature"])),
+    '{"1":"a","2":"b","3":"c"}',
+  );
+  assert.throws(
+    () => verifyArtifact({ ...artifact, "1": "tampered" }, keys),
+    (error) => error.code === "SIGNATURE_INVALID",
+  );
 });
 
 test("canonicalization rejects prototype-sensitive fields without collisions", () => {
