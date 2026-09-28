@@ -578,6 +578,17 @@ function verifyEvidenceSemantics(evidence, proposal, events) {
       evidence.resource?.id === proposal.target.resource_id,
     "Evidence resource does not match the proposal.",
   );
+  if (proposal.action_type === "demo.refund.issue/v1") {
+    semanticAssert(
+      evidence.facts?.currency === proposal.parameters.currency,
+      "Evidence currency does not match the proposal.",
+    );
+  } else if (proposal.action_type === "demo.inventory.allocate/v1") {
+    semanticAssert(
+      evidence.facts?.sku === proposal.parameters.sku,
+      "Evidence SKU does not match the proposal.",
+    );
+  }
   const evidenceDigest = digest(evidence);
   const acceptedEvent = events.find(
     (event) =>

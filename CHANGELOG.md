@@ -1,5 +1,16 @@
 # Changelog
 
+## Semantic verification binds evidence currency and SKU to the proposal (28-09-2026)
+
+- An audit bundle is now `SEMANTIC_INVALID` when refund evidence reports a
+  different currency than the proposal, or when allocation evidence reports a
+  different SKU.
+- The rail's observer copies those fields from the proposal. The verifier
+  checked the resource id and re-ran the postcondition, which does not mention
+  currency or SKU, so a USD refund could be settled on EUR evidence and an
+  allocation of `sku_demo_1` could be settled on another SKU.
+- No schema, signature, or canonical-byte change.
+
 ## Semantic verification binds the receipt close time to the terminal event (28-09-2026)
 
 - An audit bundle is now `SEMANTIC_INVALID` when `settlement_receipt.closed_at`
