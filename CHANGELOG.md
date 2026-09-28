@@ -1,5 +1,15 @@
 # Changelog
 
+## Execution at permit expiry is outside the window candidate (28-09-2026)
+
+- Semantic verification now rejects an execution whose recorded time is the
+  permit's `expires_at`. The rail already treats that instant as expired
+  (`isExpired` is true when the clock is equal to the expiry).
+- The verifier previously used an inclusive upper bound, so a signed bundle
+  could show an execution that the reference rail would have refused.
+- Execution at `issued_at` is still accepted. No schema, signature, or
+  canonical-byte change.
+
 ## Idempotency keys are bound to one action candidate (28-09-2026)
 
 - Reusing an execution or remedy idempotency key for a different proposal is
