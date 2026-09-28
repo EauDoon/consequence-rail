@@ -200,6 +200,24 @@ test("the remedy refuses cross-order reversal, double restoration, and unknown r
   );
 });
 
+test("a negative allocation quantity does not increase on-hand inventory", () => {
+  const fresh = createInventoryRuntime({ clock: new ManualClock() });
+  const proposal = buildInventoryProposal(fresh.clock);
+  const onHand = fresh.connector.inventory.get("sku_demo_1");
+  for (const quantity of [-3, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => fresh.connector.createAllocation(
+        { ...proposal, parameters: { ...proposal.parameters, quantity } },
+        `bad-${quantity}`,
+      ),
+      (error) => error.code === "INVENTORY_QUANTITY_INVALID",
+      `quantity=${quantity} must be refused before inventory changes`,
+    );
+  }
+  assert.equal(fresh.connector.inventory.get("sku_demo_1"), onHand);
+  assert.equal(fresh.connector.allocations.length, 0);
+});
+
 test("inventory cannot over-allocate or go negative", async () => {
   const fresh = createInventoryRuntime({ clock: new ManualClock() });
   const proposal = buildInventoryProposal(fresh.clock);

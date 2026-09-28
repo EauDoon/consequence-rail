@@ -1,5 +1,14 @@
 # Changelog
 
+## Inventory allocation rejects a non-positive quantity (28-09-2026)
+
+- `createAllocation` now refuses a quantity that is not a positive safe integer,
+  before it changes on-hand stock or records an allocation.
+- A negative quantity previously passed the `quantity > available` check and
+  increased stock by that amount. `NaN` did the same comparison and stored
+  `NaN` as the on-hand balance.
+- No schema, signature, or canonical-byte change.
+
 ## Refund execution rejects a non-positive amount (28-09-2026)
 
 - The refund connector now refuses to create a refund unless `amount_minor`
