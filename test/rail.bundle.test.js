@@ -105,6 +105,50 @@ test("semantic verification binds the permit window to the proposal", async () =
   assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
 });
 
+function resignEvidenceFacts(bundle, mutate) {
+  const signer = createDemoSigner();
+  const next = deepClone(bundle);
+  assert.equal(next.outcome_evidence.length, 1);
+  mutate(next.outcome_evidence[0]);
+  next.outcome_evidence[0] = signArtifact(next.outcome_evidence[0], signer);
+  const evidenceDigest = digest(next.outcome_evidence[0]);
+  next.evidence_manifest = [evidenceDigest];
+  for (const event of next.events) {
+    if (event.payload?.evidence_digest) event.payload.evidence_digest = evidenceDigest;
+  }
+  next.events = resignEventChain(next.events, signer, next.action.action_id);
+  next.settlement_receipt.evidence_digests = [evidenceDigest];
+  next.settlement_receipt.event_chain_head = next.events.at(-1).event_hash;
+  next.settlement_receipt = signArtifact(next.settlement_receipt, signer);
+  return next;
+}
+
+test("semantic verification binds refund currency and inventory sku to the evidence", async () => {
+  const refund = await runRefundDemo();
+  const wrongCurrency = resignEvidenceFacts(refund.bundle, (evidence) => {
+    evidence.facts.currency = "EUR";
+  });
+  assert.equal(wrongCurrency.action.proposal.parameters.currency, "USD");
+  assert.throws(
+    () => verifyBundle(wrongCurrency, trust()),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message.includes("Evidence currency does not match the proposal"),
+  );
+
+  const inventory = await runInventoryDemo();
+  const wrongSku = resignEvidenceFacts(inventory.bundle, (evidence) => {
+    evidence.facts.sku = "sku_other";
+  });
+  assert.equal(wrongSku.action.proposal.parameters.sku, "sku_demo_1");
+  assert.throws(
+    () => verifyBundle(wrongSku, trust()),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message.includes("Evidence SKU does not match the proposal"),
+  );
+  assert.equal(verifyBundle(refund.bundle, trust()).semantics.status, "verified");
+  assert.equal(verifyBundle(inventory.bundle, trust()).semantics.status, "verified");
+});
+
 test("semantic verification binds the receipt close time to the terminal event", async () => {
   const { bundle } = await runRefundDemo();
   const shifted = deepClone(bundle);
