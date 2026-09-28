@@ -346,9 +346,9 @@ function normalizeTrace(
     assert(typeof trace[field] === "boolean", code, `Recovery drill trace ${field} must be boolean.`);
   }
   assert(
-    trace.notes.every((item) => typeof item === "string"),
+    Array.isArray(trace.notes) && trace.notes.every((item) => typeof item === "string"),
     code,
-    "Recovery drill trace notes must be strings.",
+    "Recovery drill trace notes must be an array of strings.",
   );
   digest(trace);
   return deepFreeze(deepClone(trace));

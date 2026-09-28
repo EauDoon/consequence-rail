@@ -1,5 +1,14 @@
 # Changelog
 
+## Recovery trace notes must be an array candidate (28-09-2026)
+
+- `verifyRecoveryPreflight` now rejects a drill trace whose `notes` field is
+  not an array of strings, with `RECOVERY_BUNDLE_INVALID`.
+- A string, `null`, or object in that field threw `TypeError` from
+  `notes.every` before the trace digest was checked. Callers reported an
+  internal failure instead of a rejected bundle.
+- No schema, signature, or canonical-byte change.
+
 ## Refund recourse requires a refund action candidate (28-09-2026)
 
 - The refund connector now refuses to reserve `void-duplicate-refund` unless
