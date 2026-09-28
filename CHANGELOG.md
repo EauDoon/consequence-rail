@@ -1,5 +1,22 @@
 # Changelog
 
+## Canonical key order candidate (28-09-2026)
+
+- `canonicalJson` now emits object keys in the UTF-16 code unit order that
+  `spec/model.md` documents, instead of handing the sorted copy to
+  `JSON.stringify` and letting it re-sort array-index-like keys (`"0"`, `"1"`,
+  `"10"`) into ascending numeric order.
+- Same input, different key order and different process still produce identical
+  bytes, as before. The change is that the bytes now equal the documented
+  profile, so an independent implementation of that profile computes the same
+  digests and the same signed payloads.
+- Canonical bytes change for any object that has an array-index-like own key.
+  Artifacts produced by this repository contain none, so existing signatures and
+  receipt digests are unchanged; a third-party artifact with such a key changes
+  digest. This is the receipt format changing, so the version goes to 0.2.1.
+- Leaf encoding is still delegated to `JSON.stringify`, so string escaping and
+  number formatting are byte-identical. No validation rule is relaxed.
+
 ## Irreversible scenario refusal cause candidate (28-09-2026)
 
 - `runIrreversibleDemo` now sends a complete recourse request, so the refusal

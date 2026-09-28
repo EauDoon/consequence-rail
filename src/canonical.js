@@ -63,6 +63,10 @@ function arrayValues(value) {
   });
 }
 
+function compareCodeUnits(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function copyJson(value, sorted, state, depth = 0) {
   if (depth > JSON_LIMITS.maxDepth || ++state.nodes > JSON_LIMITS.maxNodes) {
     canonicalizationError("JSON depth or node limit exceeded.");
@@ -87,7 +91,7 @@ function copyJson(value, sorted, state, depth = 0) {
       return arrayValues(value).map((item) => copyJson(item, sorted, state, depth + 1));
     }
     const entries = objectEntries(value);
-    if (sorted) entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+    if (sorted) entries.sort(([left], [right]) => compareCodeUnits(left, right));
     const output = {};
     for (const [key, item] of entries) {
       state.stringUnits += key.length;
@@ -107,8 +111,25 @@ function copy(value, sorted) {
   return copyJson(value, sorted, { nodes: 0, stringUnits: 0, ancestors: new Set() });
 }
 
+// JSON.stringify cannot be used on the sorted copy: it emits array-index-like
+// own keys ("0", "1", "10") first, in ascending numeric order, so it silently
+// discards the code-unit order the profile requires and the signed bytes stop
+// matching the documented profile. Leaf encoding is still delegated to
+// JSON.stringify so escaping stays byte-identical.
+function writeCanonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(writeCanonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const body = Object.keys(value)
+      .sort(compareCodeUnits)
+      .map((key) => `${JSON.stringify(key)}:${writeCanonicalJson(value[key])}`)
+      .join(",");
+    return `{${body}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export function canonicalJson(value) {
-  return JSON.stringify(copy(value, true));
+  return writeCanonicalJson(copy(value, true));
 }
 
 /** SHA-256 of canonical JSON as unpadded base64url (43 characters). */
