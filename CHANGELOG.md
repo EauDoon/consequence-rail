@@ -1,5 +1,18 @@
 # Changelog
 
+## Receipt profile proposal exclusion candidate (28-09-2026)
+
+- `verifyBundle` now rejects a `receipt` profile bundle that carries
+  `action.proposal`, with `BUNDLE_TAMPERED`, the same way it already rejects one
+  that carries raw `outcome_evidence`.
+- The rail's own receipt export omits the proposal and `receiptBundle` deletes
+  it, so no artifact this repository produces is affected. A bundle assembled
+  elsewhere could carry the subject, parameters and evidence plan inside a file
+  labelled `receipt`, and every downstream report still stated that the proposal
+  was omitted.
+- Tightening only. No schema, receipt format or CLI flag change, so the version
+  goes to 0.2.2.
+
 ## Canonical key order candidate (28-09-2026)
 
 - `canonicalJson` now emits object keys in the UTF-16 code unit order that

@@ -142,6 +142,10 @@ export function verifyBundle(
       (bundle.outcome_evidence ?? []).length === 0,
       "Receipt profile must not include raw outcome evidence.",
     );
+    integrityAssert(
+      !Object.hasOwn(action, "proposal"),
+      "Receipt profile must not include the full proposal.",
+    );
   }
   integrityAssert(
     receipt.event_chain_head === chain.chain_head,
