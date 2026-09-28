@@ -25,6 +25,15 @@ test("inventory allocation settles with the declared quantity reserved", async (
   assert.ok(runtime.connector.inventory.get("sku_demo_1") >= 0);
 });
 
+test("a completed inventory remedy is recorded as consumed recourse", async () => {
+  const { summary, bundle, runtime } = await runInventoryDemo({ fault: "duplicate" });
+  assert.equal(summary.outcome, "compensated");
+  assert.equal(summary.bundle_verification, "pass");
+  assert.equal(bundle.settlement_receipt.recourse_final_status, "consumed");
+  const token = runtime.rail.get(summary.action_id).reservation.connector_commitment.reservation_token;
+  assert.equal(runtime.connector.recourseReservations.get(token).status, "consumed");
+});
+
 test("duplicate allocation reverses the extra allocation and keeps the action's own", async () => {
   const { summary, runtime } = await runInventoryDemo({ fault: "duplicate" });
   assert.equal(summary.outcome, "compensated");
@@ -106,13 +115,17 @@ test("the remedy refuses cross-order reversal, double restoration, and unknown r
   assert.equal(first.status, "remediated");
   const onHandAfterFirst = fresh.connector.inventory.get("sku_demo_1");
 
-  // A new remedy key cannot restore the same allocation twice.
-  const second = await fresh.connector.remediate(
-    proposal,
-    { connector_commitment: reservation },
-    "remedy:second",
+  // A new remedy key cannot restore the same allocation twice. The first
+  // success consumed the reservation, so the second call is refused before
+  // it can move inventory.
+  await assert.rejects(
+    () => fresh.connector.remediate(
+      proposal,
+      { connector_commitment: reservation },
+      "remedy:second",
+    ),
+    (error) => error.code === "RECOURSE_NOT_ACTIVE",
   );
-  assert.equal(second.status, "failed");
   assert.equal(fresh.connector.inventory.get("sku_demo_1"), onHandAfterFirst);
 
   // An allocation belonging to another order is never released.
