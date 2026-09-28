@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { digest } from "../src/canonical.js";
 import {
   INVENTORY_DEMO_FAULTS,
   buildInventoryProposal,
+  buildInventoryReservation,
   createInventoryRuntime,
   runInventoryDemo,
 } from "../src/inventory-demo.js";
@@ -23,6 +25,37 @@ test("inventory allocation settles with the declared quantity reserved", async (
   assert.equal(summary.allocated_quantity, 4);
   assert.equal(summary.inventory_on_hand, 21);
   assert.ok(runtime.connector.inventory.get("sku_demo_1") >= 0);
+});
+
+test("an allocation idempotency key cannot be replayed for a different action", async () => {
+  const runtime = createInventoryRuntime({ clock: new ManualClock() });
+  const firstProposal = buildInventoryProposal(runtime.clock);
+  const secondProposal = buildInventoryProposal(runtime.clock);
+  secondProposal.parameters = { sku: "sku_demo_1", quantity: 1 };
+  secondProposal.target = { ...secondProposal.target, resource_id: "ord_inventory_other" };
+  const prepare = (proposal) => {
+    const proposed = runtime.rail.propose(proposal);
+    runtime.rail.authorize(proposed.action_id, {
+      allow: true,
+      policy_id: "demo-inventory-policy/v1",
+      policy_digest: digest({ allow: true }),
+    });
+    runtime.rail.reserveRecourse(
+      proposed.action_id,
+      buildInventoryReservation(proposed.action_digest, proposal, runtime.clock),
+    );
+    runtime.rail.issuePermit(proposed.action_id);
+    return proposed.action_id;
+  };
+  await runtime.rail.execute(prepare(firstProposal));
+  const secondId = prepare(secondProposal);
+  await assert.rejects(
+    () => runtime.rail.execute(secondId),
+    (error) => error.code === "IDEMPOTENCY_CONFLICT",
+  );
+  assert.equal(runtime.rail.inspect(secondId).state, "FAILED");
+  assert.equal(runtime.connector.allocations.length, 1);
+  assert.equal(runtime.connector.inventory.get("sku_demo_1"), 21);
 });
 
 test("a completed inventory remedy is recorded as consumed recourse", async () => {

@@ -155,7 +155,8 @@ function errorStatus(error) {
   if (
     error.code === "ILLEGAL_TRANSITION" ||
     error.code === "PERMIT_USED" ||
-    error.code === "MODE_NOT_EXECUTABLE"
+    error.code === "MODE_NOT_EXECUTABLE" ||
+    error.code === "IDEMPOTENCY_CONFLICT"
   ) {
     return 409;
   }

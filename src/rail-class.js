@@ -60,6 +60,16 @@ import {
   RECEIPT_VERSION_BY_PROPOSAL,
 } from "./rail-state.js";
 
+function isIdempotencyConflict(error) {
+  // A revoked proxy throws from instanceof. That is an untyped connector
+  // failure, not a conflict, and must stay on the ambiguous-result path.
+  try {
+    return error instanceof RailError && error.code === "IDEMPOTENCY_CONFLICT";
+  } catch {
+    return false;
+  }
+}
+
 export class ConsequenceRail {
   constructor({
     signer,
@@ -469,7 +479,17 @@ export class ConsequenceRail {
         external_reference_digest: digest(execution.external_id ?? execution.idempotency_key),
       });
       record.execution = execution;
-    } catch {
+    } catch (error) {
+      if (isIdempotencyConflict(error)) {
+        this.transition(record, "FAILED", "IDEMPOTENCY_CONFLICT", {
+          idempotency_key_digest: digest(record.proposal.idempotency_key),
+        });
+        this.finalizeRecourse(record, {
+          release: true,
+          reason: "IDEMPOTENCY_CONFLICT",
+        });
+        throw error;
+      }
       const execution = {
         status: "unknown",
         idempotency_key: record.proposal.idempotency_key,
@@ -654,7 +674,14 @@ export class ConsequenceRail {
         "CONNECTOR_RESULT_INVALID",
       );
       record.remedy_result = remedyResult;
-    } catch {
+    } catch (error) {
+      if (isIdempotencyConflict(error)) {
+        this.transition(record, "REMEDY_FAILED", "IDEMPOTENCY_CONFLICT", {
+          idempotency_key_digest: record.reservation.idempotency_key_digest,
+        });
+        this.close(record);
+        throw error;
+      }
       const remedyResult = {
         status: "unknown",
         idempotency_key: record.remedy_idempotency_key,
