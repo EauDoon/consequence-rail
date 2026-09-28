@@ -247,10 +247,14 @@ export class MockRefundConnector {
       throw new RailError("REMEDY_UNSUPPORTED", "The reserved remedy is not supported.");
     }
 
+    // Only this action's refunds. The last active refund on the order may
+    // belong to a different action, and voiding it would spend this
+    // reservation on someone else's effect.
     const active = this.refunds.filter(
       (refund) =>
         refund.order_id === proposal.target.resource_id &&
-        refund.status === "active",
+        refund.status === "active" &&
+        refund.execution_key === proposal.idempotency_key,
     );
     const duplicate = active.at(-1);
     if (!duplicate || active.length < 2) {
@@ -298,6 +302,9 @@ export class MockRefundConnector {
       status: "active",
       created_at: this.clock.now(),
       synthetic_reference: suffix,
+      // Ownership follows the proposal, not the execution-cache key. The
+      // recovery drill executes under a distinct cache key for the same proposal.
+      execution_key: proposal.idempotency_key,
     };
     this.refunds.push(refund);
     return refund;

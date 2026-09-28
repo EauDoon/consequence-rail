@@ -6,7 +6,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { deepClone, digest } from "../src/canonical.js";
+import { ManualClock } from "../src/clock.js";
 import { buildRefundProposal, buildRefundReservation, createDemoRuntime, prepareRefund, runRefundDemo } from "../src/demo.js";
+import { MockRefundConnector } from "../src/mock-refund-connector.js";
 import { evaluatePostcondition } from "../src/postconditions.js";
 import { createDemoSigner, demoConnectorTrustedKeys, demoTrustedKeys, signArtifact, verifyArtifact } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
@@ -774,6 +776,39 @@ test("mutating an authorized action is rejected before side effects", async () =
   assert.equal(result.summary.expected_rejection.code, "DIGEST_MISMATCH");
   assert.equal(result.summary.execute_calls, 0);
   assert.equal(result.summary.state, "PERMITTED");
+});
+
+test("a refund remedy voids only the refunds created by that action", async () => {
+  const connector = new MockRefundConnector(new ManualClock());
+  const shared = {
+    target: { resource_id: "ord_shared" },
+    parameters: { amount_minor: 100, currency: "USD" },
+  };
+  const actionA = { ...shared, idempotency_key: "refund:A" };
+  const actionB = { ...shared, idempotency_key: "refund:B" };
+  await connector.execute(actionA, actionA.idempotency_key, "duplicate");
+  await connector.execute(actionB, actionB.idempotency_key, "none");
+  const reservationA = connector.reserveRecourse(actionA, {
+    capability: "void-duplicate-refund",
+    connector: "mock-refund-processor",
+    max_amount_minor: actionA.parameters.amount_minor,
+    action_digest: "a".repeat(43),
+    kind: "reverse",
+    expires_at: "2035-01-01T00:05:00.000Z",
+    max_attempts: 1,
+  });
+  await connector.remediate(
+    actionA,
+    { connector_commitment: reservationA, capability: "void-duplicate-refund" },
+    "remedy:A",
+    "none",
+  );
+  const status = (reference) => connector.refunds.find(
+    (refund) => refund.synthetic_reference === reference,
+  ).status;
+  assert.equal(status("refund:B:primary"), "active");
+  assert.equal(status("refund:A:primary"), "active");
+  assert.equal(status("refund:A:duplicate"), "voided");
 });
 
 test("concurrent execution attempts consume a permit once", async () => {
