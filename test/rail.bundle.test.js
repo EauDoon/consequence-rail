@@ -11,6 +11,32 @@ import { createDemoSigner, demoConnectorTrustedKeys, demoTrustedKeys, signArtifa
 import { verifyBundle } from "../src/verify.js";
 import { resignEventChain } from "../src/rail-test-helpers.js";
 
+test("semantic verification rejects execution at the permit expiry instant", async () => {
+  const result = await runRefundDemo();
+  const signer = createDemoSigner();
+  const executing = result.bundle.events.find(
+    (event) => event.event_type === "STATE_TRANSITION" && event.payload.to_state === "EXECUTING",
+  );
+  const permit = deepClone(result.bundle.action_permit);
+  delete permit.signature;
+  permit.expires_at = executing.recorded_at;
+  const signedPermit = signArtifact(permit, signer);
+  const receipt = deepClone(result.bundle.settlement_receipt);
+  delete receipt.signature;
+  receipt.action_permit_digest = digest(signedPermit);
+  const bundle = deepClone(result.bundle);
+  bundle.action_permit = signedPermit;
+  bundle.settlement_receipt = signArtifact(receipt, signer);
+  assert.throws(
+    () => verifyBundle(bundle, {
+      trustedKeys: demoTrustedKeys(),
+      trustedConnectorKeys: demoConnectorTrustedKeys(),
+    }),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message.includes("permit validity window"),
+  );
+});
+
 test("bundle verification rejects an untrusted embedded key", async () => {
   const result = await runRefundDemo();
   assert.throws(

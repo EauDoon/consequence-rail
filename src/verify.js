@@ -360,7 +360,7 @@ function verifySemantics(bundle) {
   semanticAssert(
     new Date(executionEvent.recorded_at).getTime() >=
       new Date(permit.issued_at).getTime() &&
-      new Date(executionEvent.recorded_at).getTime() <=
+      new Date(executionEvent.recorded_at).getTime() <
         new Date(permit.expires_at).getTime(),
     "Execution occurred outside the permit validity window.",
   );
