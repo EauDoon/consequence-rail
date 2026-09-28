@@ -1,5 +1,16 @@
 # Changelog
 
+## Early HTTP refusals close the unread body candidate (28-09-2026)
+
+- A request refused before its body is read now gets the response and then
+  a socket close. That covers an unsupported content encoding, an invalid
+  content length, an unsupported media type, and a body on a route that
+  does not accept one.
+- Previously only an oversized declared length closed the socket. The other
+  refusals left the client able to hold the connection open by not sending
+  the body the sidecar had already rejected.
+- No schema, signature, or canonical-byte change.
+
 ## Recovery link checks the proposal scope candidate (28-09-2026)
 
 - `linkRecovery` now compares a drill's scope with the audit proposal:
