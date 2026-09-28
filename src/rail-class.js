@@ -70,6 +70,17 @@ function isIdempotencyConflict(error) {
   }
 }
 
+function isDefiniteExecutionRefusal(error) {
+  // These codes are raised before the connector records an effect. A lost
+  // response stays UnknownExecutionError and remains ambiguous.
+  try {
+    return error instanceof RailError &&
+      (error.code === "IDEMPOTENCY_CONFLICT" || error.code === "INVENTORY_INSUFFICIENT");
+  } catch {
+    return false;
+  }
+}
+
 export class ConsequenceRail {
   constructor({
     signer,
@@ -480,13 +491,13 @@ export class ConsequenceRail {
       });
       record.execution = execution;
     } catch (error) {
-      if (isIdempotencyConflict(error)) {
-        this.transition(record, "FAILED", "IDEMPOTENCY_CONFLICT", {
+      if (isDefiniteExecutionRefusal(error)) {
+        this.transition(record, "FAILED", error.code, {
           idempotency_key_digest: digest(record.proposal.idempotency_key),
         });
         this.finalizeRecourse(record, {
           release: true,
-          reason: "IDEMPOTENCY_CONFLICT",
+          reason: error.code,
         });
         throw error;
       }

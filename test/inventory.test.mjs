@@ -6,6 +6,7 @@ import {
   buildInventoryProposal,
   buildInventoryReservation,
   createInventoryRuntime,
+  prepareInventory,
   runInventoryDemo,
 } from "../src/inventory-demo.js";
 import { ManualClock } from "../src/clock.js";
@@ -198,6 +199,22 @@ test("the remedy refuses cross-order reversal, double restoration, and unknown r
     () => fresh.connector.remediate(other, { connector_commitment: { reservation_token: "rsv_missing" } }, "remedy:unknown"),
     (error) => error.code === "RECOURSE_NOT_ACTIVE",
   );
+});
+
+test("insufficient inventory is a confirmed failure and releases recourse", async () => {
+  const runtime = createInventoryRuntime({ clock: new ManualClock() });
+  runtime.connector.inventory.set("sku_demo_1", 1);
+  const { actionId } = prepareInventory(runtime);
+  await assert.rejects(
+    () => runtime.rail.execute(actionId),
+    (error) => error.code === "INVENTORY_INSUFFICIENT",
+  );
+  const view = runtime.rail.inspect(actionId);
+  assert.equal(view.state, "FAILED");
+  assert.equal(view.outcome, null);
+  assert.equal(runtime.connector.allocations.length, 0);
+  assert.equal(runtime.connector.inventory.get("sku_demo_1"), 1);
+  assert.equal([...runtime.connector.recourseReservations.values()][0].status, "released");
 });
 
 test("a negative allocation quantity does not increase on-hand inventory", () => {
