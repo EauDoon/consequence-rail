@@ -40,8 +40,10 @@ export class MockRefundConnector {
     this.signer = signer;
     this.refunds = [];
     this.executions = new Map();
+    this.executionActionDigests = new Map();
     this.recourseReservations = new Map();
     this.remedyExecutions = new Map();
+    this.remedyActionDigests = new Map();
     this.executeCalls = 0;
     this.statusCalls = 0;
     this.reserveRecourseCalls = 0;
@@ -146,15 +148,46 @@ export class MockRefundConnector {
     }
   }
 
+  rejectForeignIdempotency(bindings, idempotencyKey, proposal) {
+    const actionDigest = digest(proposal);
+    const bound = bindings.get(idempotencyKey);
+    if (bound !== undefined && bound !== actionDigest) {
+      throw new RailError(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key is already bound to a different action.",
+      );
+    }
+    return actionDigest;
+  }
+
+  rememberExecution(idempotencyKey, proposal, result) {
+    this.executionActionDigests.set(
+      idempotencyKey,
+      this.rejectForeignIdempotency(this.executionActionDigests, idempotencyKey, proposal),
+    );
+    this.executions.set(idempotencyKey, result);
+    return result;
+  }
+
+  rememberRemedy(idempotencyKey, proposal, result) {
+    this.remedyActionDigests.set(
+      idempotencyKey,
+      this.rejectForeignIdempotency(this.remedyActionDigests, idempotencyKey, proposal),
+    );
+    this.remedyExecutions.set(idempotencyKey, result);
+    return result;
+  }
+
   async execute(proposal, idempotencyKey, fault = "none") {
     this.executeCalls += 1;
 
-    if (this.executions.has(idempotencyKey)) {
+    if (this.executionActionDigests.has(idempotencyKey)) {
+      this.rejectForeignIdempotency(this.executionActionDigests, idempotencyKey, proposal);
       return this.executions.get(idempotencyKey);
     }
 
     if (fault === "lost-response-before-commit") {
-      this.executions.set(idempotencyKey, {
+      this.rememberExecution(idempotencyKey, proposal, {
         status: "no_effect",
         idempotency_key: idempotencyKey,
       });
@@ -169,7 +202,7 @@ export class MockRefundConnector {
       external_id: refund.refund_id,
       idempotency_key: idempotencyKey,
     };
-    this.executions.set(idempotencyKey, result);
+    this.rememberExecution(idempotencyKey, proposal, result);
 
     if (fault === "duplicate" || fault === "remedy-failure") {
       this.createRefund(proposal, `${idempotencyKey}:duplicate`);
@@ -227,7 +260,8 @@ export class MockRefundConnector {
 
   async remediate(proposal, reservation, idempotencyKey, fault = "none") {
     this.remedyCalls += 1;
-    if (this.remedyExecutions.has(idempotencyKey)) {
+    if (this.remedyActionDigests.has(idempotencyKey)) {
+      this.rejectForeignIdempotency(this.remedyActionDigests, idempotencyKey, proposal);
       return this.remedyExecutions.get(idempotencyKey);
     }
 
@@ -242,7 +276,7 @@ export class MockRefundConnector {
         status: "no_effect",
         idempotency_key: idempotencyKey,
       };
-      this.remedyExecutions.set(idempotencyKey, result);
+      this.rememberRemedy(idempotencyKey, proposal, result);
       throw new UnknownRemedyError("The remedy response was lost before an effect was confirmed.", {
         idempotency_key: idempotencyKey,
       });
@@ -254,7 +288,7 @@ export class MockRefundConnector {
         reason: "injected_failure",
         idempotency_key: idempotencyKey,
       };
-      this.remedyExecutions.set(idempotencyKey, result);
+      this.rememberRemedy(idempotencyKey, proposal, result);
       return result;
     }
 
@@ -277,7 +311,7 @@ export class MockRefundConnector {
         status: "no_change",
         idempotency_key: idempotencyKey,
       };
-      this.remedyExecutions.set(idempotencyKey, result);
+      this.rememberRemedy(idempotencyKey, proposal, result);
       return result;
     }
 
@@ -288,7 +322,7 @@ export class MockRefundConnector {
       external_id: duplicate.refund_id,
       idempotency_key: idempotencyKey,
     };
-    this.remedyExecutions.set(idempotencyKey, result);
+    this.rememberRemedy(idempotencyKey, proposal, result);
     recourse.status = "consumed";
 
     if (fault === "remedy-lost-response-after-commit") {

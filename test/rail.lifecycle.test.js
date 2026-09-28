@@ -778,6 +778,79 @@ test("mutating an authorized action is rejected before side effects", async () =
   assert.equal(result.summary.state, "PERMITTED");
 });
 
+test("an execution idempotency key cannot be replayed for a different action", async () => {
+  const runtime = createDemoRuntime();
+  const firstProposal = buildRefundProposal(runtime.clock);
+  const secondProposal = buildRefundProposal(runtime.clock);
+  secondProposal.parameters = { amount_minor: 500, currency: "USD" };
+  secondProposal.target = { ...secondProposal.target, resource_id: "ord_demo_99" };
+  const prepare = (proposal) => {
+    const proposed = runtime.rail.propose(proposal);
+    runtime.rail.authorize(proposed.action_id, {
+      allow: true,
+      policy_id: "demo-refund-policy/v1",
+      policy_digest: digest({ allow: true }),
+    });
+    runtime.rail.reserveRecourse(
+      proposed.action_id,
+      buildRefundReservation(proposed.action_digest, proposal, runtime.clock),
+    );
+    runtime.rail.issuePermit(proposed.action_id);
+    return proposed.action_id;
+  };
+  const firstId = prepare(firstProposal);
+  const secondId = prepare(secondProposal);
+  await runtime.rail.execute(firstId);
+  await assert.rejects(
+    () => runtime.rail.execute(secondId),
+    (error) => error.code === "IDEMPOTENCY_CONFLICT",
+  );
+  assert.equal(runtime.rail.inspect(secondId).state, "FAILED");
+  assert.equal(runtime.rail.inspect(secondId).outcome, null);
+  assert.equal(runtime.connector.refunds.length, 1);
+  assert.equal(runtime.connector.refunds[0].order_id, "ord_demo_42");
+  assert.equal(runtime.connector.refunds[0].amount_minor, 12_000);
+});
+
+test("a remedy idempotency key cannot be replayed for a different action", async () => {
+  const runtime = createDemoRuntime();
+  const prepare = (idempotencyKey, resourceId) => {
+    const proposal = buildRefundProposal(runtime.clock);
+    proposal.idempotency_key = idempotencyKey;
+    proposal.target = { ...proposal.target, resource_id: resourceId };
+    const proposed = runtime.rail.propose(proposal);
+    runtime.rail.authorize(proposed.action_id, {
+      allow: true,
+      policy_id: "demo-refund-policy/v1",
+      policy_digest: digest({ allow: true }),
+    });
+    const request = buildRefundReservation(proposed.action_digest, proposal, runtime.clock);
+    request.idempotency_key = "shared-remedy";
+    runtime.rail.reserveRecourse(proposed.action_id, request);
+    runtime.rail.issuePermit(proposed.action_id);
+    return proposed.action_id;
+  };
+  const firstId = prepare("refund:one", "ord_demo_42");
+  const secondId = prepare("refund:two", "ord_demo_99");
+  await runtime.rail.execute(firstId, { fault: "duplicate" });
+  await runtime.rail.execute(secondId, { fault: "duplicate" });
+  await runtime.rail.verifyOutcome(firstId);
+  await runtime.rail.verifyOutcome(secondId);
+  await runtime.rail.remediate(firstId);
+  await assert.rejects(
+    () => runtime.rail.remediate(secondId),
+    (error) => error.code === "IDEMPOTENCY_CONFLICT",
+  );
+  assert.equal(runtime.rail.inspect(secondId).state, "CLOSED");
+  assert.equal(runtime.rail.inspect(secondId).outcome, "disputed");
+  assert.equal(
+    runtime.connector.refunds
+      .filter((refund) => refund.order_id === "ord_demo_99")
+      .every((refund) => refund.status === "active"),
+    true,
+  );
+});
+
 test("the refund connector refuses recourse for a non-refund action", () => {
   const runtime = createDemoRuntime();
   const proposal = buildRefundProposal(runtime.clock);

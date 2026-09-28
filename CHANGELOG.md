@@ -1,5 +1,19 @@
 # Changelog
 
+## Idempotency keys are bound to one action candidate (28-09-2026)
+
+- Reusing an execution or remedy idempotency key for a different proposal is
+  now `IDEMPOTENCY_CONFLICT`. The same proposal still replays the stored
+  result. The rail records execution conflicts as `FAILED` and releases
+  recourse, and records remedy conflicts as disputed, instead of treating
+  the refusal as an ambiguous timeout and adopting the other action's result.
+- Previously both connectors returned the cached result for the key alone.
+  A second action with the same key was reported executed, or a second
+  remedy was reported remediated, without performing that action.
+- The measured refund-connector digest changed, and the conformance recovery
+  contract pins the new value. No schema, receipt format, or canonical-byte
+  change.
+
 ## Recovery trace notes must be an array candidate (28-09-2026)
 
 - `verifyRecoveryPreflight` now rejects a drill trace whose `notes` field is
