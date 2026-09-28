@@ -1,5 +1,17 @@
 # Changelog
 
+## Refund recourse requires a refund action candidate (28-09-2026)
+
+- The refund connector now refuses to reserve `void-duplicate-refund` unless
+  the proposal action type is `demo.refund.issue/v1` and both the requested
+  scope and the proposal amount are safe integers.
+- An email proposal aimed at this connector previously reserved a refund
+  remedy. The amount check compared the request with `undefined` and passed,
+  so the connector signed an active commitment for an action it cannot refund.
+- The measured connector digest changed, and the conformance recovery
+  contract pins the new value. No schema, receipt format, or canonical-byte
+  change.
+
 ## Refund remedy stays on its own action candidate (28-09-2026)
 
 - A refund remedy now voids only an active refund created for that action's
