@@ -327,7 +327,7 @@ function proposal(value, expectedVersion) {
       "ActionProposal.parameters",
     );
     integer(value.parameters.amount_minor, "ActionProposal.parameters.amount_minor", 1);
-    if (!/^[A-Z]{3}$/.test(value.parameters.currency ?? "")) {
+    if (typeof value.parameters.currency !== "string" || !/^[A-Z]{3}$/.test(value.parameters.currency)) {
       invalid("ActionProposal.parameters.currency is invalid.");
     }
   } else {

@@ -161,7 +161,8 @@ evidence. The demo uses this profile only with synthetic data.
 
 Threat: hostile JSON causes denial of service or parser inconsistencies.
 
-Control: the runtime uses the platform JSON parser, rejects unknown proposal
+Control: HTTP requests and offline artifact files reject duplicate JSON object
+members before interpretation. The runtime rejects unknown proposal
 and operation fields, rejects prototype-sensitive keys and inherited or
 accessor-backed JSON shapes before canonicalization, uses own-property-only
 postcondition paths, and restricts postcondition operators. The loopback server
@@ -171,9 +172,10 @@ and unknown or repeated query parameters before state mutation. Settlement
 verification checks every closed bundle object against its exact runtime shape
 before cryptographic and semantic validation.
 
-Residual risk: the platform parser does not diagnose duplicate JSON object
-members, and these local limits are not a substitute for production ingress,
-authentication, process isolation, or sustained fuzzing.
+Residual risk: library callers supply already-parsed objects, so the runtime
+cannot recover duplicate members discarded by a caller's parser. These local
+limits are not a substitute for production ingress, authentication, process
+isolation, or sustained fuzzing.
 
 ## Publication blockers
 

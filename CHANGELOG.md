@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Refund currency must be a string at both live proposal admission and offline
+  bundle-shape validation. A one-element array can no longer pass through regular
+  expression coercion. Existing string currencies and artifact bytes are unchanged.
+- Portable proposal vectors cover types and closed fields in both proposal
+  versions, with an HTTP refusal regression. Release and parser-boundary documents
+  now describe the current source version, connectors, and duplicate-key handling.
+
 ## Early refusals close a declared unread body (28-09-2026)
 
 - A request that declares a body and is refused before that body is read now

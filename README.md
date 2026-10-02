@@ -255,9 +255,13 @@ verification then:
 The CLI demo uses the `audit` profile. An embedded key is never trusted
 automatically.
 
-The conformance suite checks runtime presence of schema-required fields. It
-also requires every object schema to declare whether additional properties are
-allowed. It does not claim complete cross-language JSON Schema validation.
+The conformance suite checks runtime presence of schema-required fields and
+runs portable proposal accept/reject vectors through live admission and offline
+bundle-shape validation for both proposal versions. These cover currency and
+amount types, closed nested fields, evidence age, timestamps, and action types.
+Every object schema must declare whether additional properties are allowed.
+These focused checks do not claim complete cross-language JSON Schema validation
+or verify signatures on mutated conformance fixtures.
 
 A remote connector can still change reservation state between the final
 status check and execution. A production connector therefore needs an atomic
@@ -356,7 +360,7 @@ Read:
 
 ## Project status
 
-This checkout contains the experimental v0.2.0 source release. It is a
+This checkout contains the experimental v0.2.20 source release. It is a
 reference implementation, not a production deployment or hosted service.
 The public release status and maintenance boundaries are recorded in
 [`docs/release-status.md`](docs/release-status.md).

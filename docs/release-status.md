@@ -1,7 +1,8 @@
 # Release status
 
-Current public state: experimental v0.2.0 source release with Recovery
-Preflight.
+Current public state: experimental v0.2.20 source release with Recovery
+Preflight and synthetic refund and inventory connectors. The source version is
+recorded in `package.json`; the source repository remains the release channel.
 
 ## GitHub metadata
 
@@ -32,7 +33,7 @@ runtime-safety
 
 - one language-neutral artifact model
 - one Node.js reference runtime
-- one synthetic connector
+- two synthetic connectors, refund and inventory allocation
 - deterministic conformance and fault tests
 - adversarial canonicalization, exact-binding, checkpoint, implementation
   substitution, and loopback request-boundary regressions

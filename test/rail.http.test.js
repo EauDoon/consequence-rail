@@ -53,6 +53,22 @@ test("HTTP sidecar default runtime admits current-time proposals", async (contex
   assert.equal(proposed.state, "PROPOSED");
 });
 
+test("HTTP sidecar refuses array currency before action admission", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const proposal = buildRefundProposal(runtime.clock);
+  proposal.parameters.currency = ["USD"];
+  const refused = await postJson(
+    `http://127.0.0.1:${server.address().port}/v0/actions`, proposal, 422,
+  );
+  assert.equal(refused.code, "SCHEMA_INVALID");
+  assert.equal(runtime.rail.actions.size, 0);
+  assert.equal(runtime.connector.executeCalls, 0);
+});
+
 test("HTTP sidecar advertises executable and observed assurance modes", async (context) => {
   const server = createReferenceServer();
   server.listen(0, "127.0.0.1");
