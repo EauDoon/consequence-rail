@@ -1,0 +1,21 @@
+[
+  { "name": "string currency", "path": ["parameters", "currency"], "value": "USD", "accepted": true },
+  { "name": "array currency", "path": ["parameters", "currency"], "value": ["USD"], "accepted": false },
+  { "name": "object currency", "path": ["parameters", "currency"], "value": {}, "accepted": false },
+  { "name": "null currency", "path": ["parameters", "currency"], "value": null, "accepted": false },
+  { "name": "numeric currency", "path": ["parameters", "currency"], "value": 123, "accepted": false },
+  { "name": "lowercase currency", "path": ["parameters", "currency"], "value": "usd", "accepted": false },
+  { "name": "positive integer amount", "path": ["parameters", "amount_minor"], "value": 1, "accepted": true },
+  { "name": "zero amount", "path": ["parameters", "amount_minor"], "value": 0, "accepted": false },
+  { "name": "string amount", "path": ["parameters", "amount_minor"], "value": "12000", "accepted": false },
+  { "name": "fractional amount", "path": ["parameters", "amount_minor"], "value": 1.5, "accepted": false },
+  { "name": "unknown parameter", "path": ["parameters", "extra"], "value": true, "accepted": false },
+  { "name": "unknown subject field", "path": ["subject", "extra"], "value": true, "accepted": false },
+  { "name": "wrong subject type", "path": ["subject", "id"], "value": ["agent"], "accepted": false },
+  { "name": "unknown evidence field", "path": ["evidence_plan", "extra"], "value": true, "accepted": false },
+  { "name": "minimum evidence age", "path": ["evidence_plan", "max_age_seconds"], "value": 1, "accepted": true },
+  { "name": "zero evidence age", "path": ["evidence_plan", "max_age_seconds"], "value": 0, "accepted": false },
+  { "name": "string evidence age", "path": ["evidence_plan", "max_age_seconds"], "value": "60", "accepted": false },
+  { "name": "unknown action type", "path": ["action_type"], "value": "demo.unknown/v1", "accepted": false },
+  { "name": "wrong timestamp type", "path": ["requested_at"], "value": 0, "accepted": false }
+]

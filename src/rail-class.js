@@ -1222,7 +1222,8 @@ export class ConsequenceRail {
         },
       );
       assert(
-        /^[A-Z]{3}$/.test(input.parameters?.currency ?? ""),
+        typeof input.parameters.currency === "string" &&
+          /^[A-Z]{3}$/.test(input.parameters.currency),
         "SCHEMA_INVALID",
         "Refund currency must be a three-letter uppercase code.",
       );
