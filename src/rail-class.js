@@ -1125,7 +1125,7 @@ export class ConsequenceRail {
         outcome === "settled" || outcome === "compensated" ? "satisfied" : "unresolved",
       evidence_digests: record.evidence.map((item) => digest(item)),
       event_chain_head: events.at(-1).event_hash,
-      closed_at: this.clock.now(),
+      closed_at: events.at(-1).recorded_at,
       technical_claim:
         "The configured postcondition was evaluated against declared evidence sources.",
       limitations: [
