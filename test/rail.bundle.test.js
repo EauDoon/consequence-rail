@@ -164,6 +164,27 @@ test("semantic verification binds the receipt close time to the terminal event",
   assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
 });
 
+test("receipt close time uses the terminal event when the clock advances between reads", async () => {
+  for (const outcome of ["settled", "compensated", "disputed"]) {
+    let tick = Date.parse("2035-01-01T00:00:00.000Z");
+    const runtime = createDemoRuntime({
+      clock: { now: () => new Date(tick++).toISOString() },
+    });
+    const { actionId } = prepareRefund(runtime);
+    await runtime.rail.execute(actionId, {
+      fault: outcome === "compensated" ? "duplicate" : "none",
+    });
+    await runtime.rail.verifyOutcome(actionId, {
+      fault: outcome === "disputed" ? "stale-evidence" : "none",
+    });
+    if (outcome === "compensated") await runtime.rail.remediate(actionId);
+    const bundle = runtime.rail.exportBundle(actionId, { profile: "audit" });
+    assert.equal(bundle.settlement_receipt.outcome, outcome);
+    assert.equal(bundle.settlement_receipt.closed_at, bundle.events.at(-1).recorded_at);
+    assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
+  }
+});
+
 test("semantic verification rejects a reservation scope below the proposal", async () => {
   const refund = await runRefundDemo();
   const undersizedRefund = withReservationScope(refund.bundle, "max_amount_minor", 1);
