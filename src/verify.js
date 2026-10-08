@@ -2,7 +2,7 @@ import { digest } from "./canonical.js";
 import { validateSettlementBundle } from "./bundle-validation.js";
 import { verifyEventChain } from "./event-store.js";
 import { RailError } from "./errors.js";
-import { evaluatePostcondition } from "./postconditions.js";
+import { evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
 import { ALLOWED_TRANSITIONS, recourseScopeField } from "./rail.js";
 import { verifyArtifact } from "./signing.js";
 
@@ -589,6 +589,10 @@ function verifyEvidenceSemantics(evidence, proposal, events) {
       "Evidence SKU does not match the proposal.",
     );
   }
+  semanticAssert(
+    missingPostconditionPaths(proposal.postcondition, evidence.facts).length === 0,
+    "Evidence does not report every postcondition fact.",
+  );
   const evidenceDigest = digest(evidence);
   const acceptedEvent = events.find(
     (event) =>

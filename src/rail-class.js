@@ -6,7 +6,7 @@ import { deepClone, deepFreeze, digest } from "./canonical.js";
 import { isExpired } from "./clock.js";
 import { MemoryEventStore } from "./event-store.js";
 import { RailError } from "./errors.js";
-import { evaluatePostcondition } from "./postconditions.js";
+import { evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
 import { verifyRecoveryPreflight } from "./recovery-preflight.js";
 import { signArtifact, verifyArtifact } from "./signing.js";
 import {
@@ -574,8 +574,12 @@ export class ConsequenceRail {
       return this.inspect(actionId);
     }
 
+    let accepted;
+    let evaluation;
+    let acceptedDigest;
     try {
       evidence = this.validateEvidence(record, evidence);
+      ({ accepted, evaluation, acceptedDigest } = this.acceptEvidence(record, evidence));
     } catch (error) {
       if (error instanceof RailError && error.code.startsWith("EVIDENCE_")) {
         this.eventStore.append(actionId, "EVIDENCE_REJECTED", "rail", {
@@ -589,14 +593,8 @@ export class ConsequenceRail {
       return this.inspect(actionId);
     }
 
-    const evaluation = evaluatePostcondition(record.proposal.postcondition, evidence);
-    const accepted = signArtifact({
-      ...evidence,
-      evaluation,
-      captured_by: "consequence-rail",
-    }, this.signer);
     this.eventStore.append(actionId, "EVIDENCE_ACCEPTED", "rail", {
-      evidence_digest: digest(accepted),
+      evidence_digest: acceptedDigest,
       source: accepted.source,
       satisfied: evaluation.satisfied,
     });
@@ -604,12 +602,12 @@ export class ConsequenceRail {
 
     if (evaluation.satisfied) {
       this.transition(record, "SATISFIED", "POSTCONDITION_SATISFIED", {
-        evidence_digest: digest(accepted),
+        evidence_digest: acceptedDigest,
       });
       this.close(record);
     } else {
       this.transition(record, "BREACHED", "POSTCONDITION_BREACHED", {
-        evidence_digest: digest(accepted),
+        evidence_digest: acceptedDigest,
       });
       this.transition(record, "REMEDY_DUE", "RESERVED_REMEDY_DUE", {
         reservation_digest: record.reservation_digest,
@@ -765,13 +763,20 @@ export class ConsequenceRail {
 
   async verifyRemedyOutcome(record, { fault = "none" } = {}) {
     this.assertState(record, "REMEDY_VERIFYING");
-    let evidence;
+    let accepted;
+    let evaluation;
+    let acceptedDigest;
     try {
       const observed = await this.connector.observe(record.proposal, {
         actionDigest: record.action_digest,
         fault,
       });
-      evidence = this.validateEvidence(record, observed);
+      const evidence = this.validateEvidence(record, observed);
+      ({ accepted, evaluation, acceptedDigest } = this.acceptEvidence(
+        record,
+        evidence,
+        "post-remedy",
+      ));
     } catch (error) {
       if (error instanceof RailError && error.code.startsWith("EVIDENCE_")) {
         this.eventStore.append(record.action_id, "REMEDY_EVIDENCE_REJECTED", "rail", {
@@ -785,29 +790,48 @@ export class ConsequenceRail {
       return;
     }
 
-    const evaluation = evaluatePostcondition(record.proposal.postcondition, evidence);
-    const accepted = signArtifact({
-      ...evidence,
-      evaluation,
-      captured_by: "consequence-rail",
-      phase: "post-remedy",
-    }, this.signer);
     this.eventStore.append(record.action_id, "REMEDY_EVIDENCE_ACCEPTED", "rail", {
-      evidence_digest: digest(accepted),
+      evidence_digest: acceptedDigest,
       satisfied: evaluation.satisfied,
     });
     record.evidence.push(accepted);
 
     if (evaluation.satisfied) {
       this.transition(record, "REMEDIATED", "REMEDY_VERIFIED", {
-        evidence_digest: digest(accepted),
+        evidence_digest: acceptedDigest,
       });
     } else {
       this.transition(record, "REMEDY_INCONCLUSIVE", "REMEDY_POSTCONDITION_UNRESOLVED", {
-        evidence_digest: digest(accepted),
+        evidence_digest: acceptedDigest,
       });
     }
     this.close(record);
+  }
+
+  // Evaluate validated evidence and sign the accepted artifact. Both steps
+  // run inside the caller's guarded block, so evidence that cannot be
+  // represented once evaluated (for example a fact subtree that exceeds the
+  // canonical JSON limits when copied into the evaluation) is rejected
+  // through the normal fail-closed path instead of stranding the action.
+  acceptEvidence(record, evidence, phase = null) {
+    const evaluation = evaluatePostcondition(record.proposal.postcondition, evidence);
+    try {
+      const accepted = signArtifact({
+        ...evidence,
+        evaluation,
+        captured_by: "consequence-rail",
+        ...(phase ? { phase } : {}),
+      }, this.signer);
+      return { accepted, evaluation, acceptedDigest: digest(accepted) };
+    } catch (error) {
+      if (error instanceof RailError && error.code === "CANONICALIZATION_FAILED") {
+        throw new RailError(
+          "EVIDENCE_UNREPRESENTABLE",
+          "Evaluated evidence exceeds the canonical JSON limits.",
+        );
+      }
+      throw error;
+    }
   }
 
   inspect(actionId) {
@@ -1446,6 +1470,16 @@ export class ConsequenceRail {
     );
     assertPlainObject(input.facts, "OutcomeEvidence.facts", "EVIDENCE_SCHEMA_INVALID");
     digest(input.facts);
+    const missingClauses = missingPostconditionPaths(
+      record.proposal.postcondition,
+      input.facts,
+    );
+    assert(
+      missingClauses.length === 0,
+      "EVIDENCE_FACT_MISSING",
+      "Evidence does not report every postcondition fact.",
+      { clause_indexes: missingClauses },
+    );
     const observedAt = assertTimestamp(
       input.observed_at,
       "OutcomeEvidence.observed_at",

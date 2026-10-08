@@ -624,3 +624,28 @@ test("semantic verification rejects recourse finalized before execution", async 
     (error) => error.code === "SEMANTIC_INVALID",
   );
 });
+
+test("semantic verification rejects accepted evidence that omits a postcondition fact", async () => {
+  const { bundle } = await runRefundDemo();
+  const signer = createDemoSigner();
+  const omitted = deepClone(bundle);
+  const { signature: ignoredSignature, ...unsigned } = omitted.outcome_evidence[0];
+  delete unsigned.facts.net_refunded_minor;
+  omitted.outcome_evidence[0] = signArtifact(unsigned, signer);
+  omitted.evidence_manifest[0] = digest(omitted.outcome_evidence[0]);
+  omitted.settlement_receipt = signArtifact({
+    ...omitted.settlement_receipt,
+    evidence_digests: omitted.evidence_manifest,
+  }, signer);
+
+  assert.equal(
+    verifyBundle(omitted, { ...trust(), requireSemantics: false }).integrity.valid,
+    true,
+  );
+  assert.throws(
+    () => verifyBundle(omitted, trust()),
+    (error) => error.code === "SEMANTIC_INVALID"
+      && error.message === "Evidence does not report every postcondition fact.",
+  );
+  assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
+});

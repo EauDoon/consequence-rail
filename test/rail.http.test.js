@@ -181,6 +181,37 @@ test("HTTP sidecar completes the synthetic action lifecycle", async (context) =>
   assert.equal(typeof verified.trusted_connector_key_id, "string");
 });
 
+test("HTTP sidecar closes disputed when evidence omits a postcondition fact", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const proposal = buildRefundProposal(runtime.clock);
+  proposal.postcondition.clauses.push({ path: "no_such_fact", op: "eq", value: 1 });
+
+  const proposed = await postJson(`${base}/v0/actions`, proposal, 201);
+  await postJson(`${base}/v0/actions/${proposed.action_id}/authorize`, {
+    allow: true,
+    policy_id: "demo-policy/v1",
+    policy_digest: digest({ allow: true }),
+  });
+  await postJson(
+    `${base}/v0/actions/${proposed.action_id}/recourse`,
+    buildRefundReservation(proposed.action_digest, proposal, runtime.clock),
+  );
+  await postJson(`${base}/v0/actions/${proposed.action_id}/permit`, {});
+  await postJson(`${base}/v0/actions/${proposed.action_id}/execute`, {});
+  const closed = await postJson(
+    `${base}/v0/actions/${proposed.action_id}/verify-outcome`,
+    {},
+  );
+  assert.equal(closed.state, "CLOSED");
+  assert.equal(closed.outcome, "disputed");
+  assert.equal(runtime.connector.remedyCalls, 0);
+});
+
 test("HTTP sidecar rejects unsafe requests before state mutation", async (context) => {
   const runtime = createDemoRuntime();
   const server = createReferenceServer({ runtime });

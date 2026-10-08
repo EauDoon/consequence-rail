@@ -176,6 +176,14 @@ Before use, the rail checks:
 - exact target resource
 - freshness
 - allowed postcondition operators
+- a reported fact for every postcondition clause path
+
+Evidence that omits a clause's fact, or that cannot be signed within the
+canonical JSON limits once its evaluation is attached, is invalid evidence.
+The rail records `EVIDENCE_REJECTED` (or `REMEDY_EVIDENCE_REJECTED` after a
+remedy) with `EVIDENCE_FACT_MISSING` or `EVIDENCE_UNREPRESENTABLE`, closes the
+action as `disputed`, and starts no remedy. Offline semantic verification
+rejects accepted evidence that omits a clause's fact.
 
 The v0.1 reference connector returns evidence directly to the rail. The rail
 then signs its captured artifact. That signature proves what the rail

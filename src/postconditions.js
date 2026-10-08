@@ -29,7 +29,7 @@ function exactOwnFields(value, expected) {
     Object.keys(value).every((key) => expected.has(key));
 }
 
-function readPath(object, path) {
+function resolvePath(object, path) {
   let current = object;
   for (const part of path.split(".")) {
     if (
@@ -38,11 +38,29 @@ function readPath(object, path) {
       typeof current !== "object" ||
       !Object.hasOwn(current, part)
     ) {
-      return undefined;
+      return { found: false, value: undefined };
     }
     current = current[part];
   }
-  return current;
+  return { found: true, value: current };
+}
+
+function readPath(object, path) {
+  return resolvePath(object, path).value;
+}
+
+// Indexes of the clauses whose fact is absent from the evidence. Evidence
+// that omits a declared fact cannot be evaluated, so the rail rejects it
+// instead of recording an undefined actual value.
+export function missingPostconditionPaths(postcondition, facts) {
+  const clauses = Array.isArray(postcondition?.clauses) ? postcondition.clauses : [];
+  const missing = [];
+  clauses.forEach((clause, index) => {
+    if (typeof clause?.path !== "string" || !resolvePath(facts, clause.path).found) {
+      missing.push(index);
+    }
+  });
+  return missing;
 }
 
 export function evaluatePostcondition(postcondition, evidence) {
