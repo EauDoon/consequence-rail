@@ -1120,3 +1120,28 @@ test("an escalate-only breach closes disputed through review without a remedy", 
     (error) => error.code === "ILLEGAL_TRANSITION",
   );
 });
+
+test("unknown final recourse on the satisfied path refuses a receipt and stays SATISFIED", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId);
+  const recourseStatus = runtime.connector.recourseStatus.bind(runtime.connector);
+  runtime.connector.recourseStatus = (token) => ({ ...recourseStatus(token), status: "unknown" });
+
+  await assert.rejects(
+    () => runtime.rail.verifyOutcome(actionId),
+    (error) => error.code === "RECEIPT_UNSUPPORTED",
+  );
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.state, "SATISFIED");
+  assert.equal(record.receipt, null);
+  const finalized = runtime.rail.eventStore
+    .list(actionId)
+    .filter((event) => event.event_type === "RECOURSE_FINALIZED");
+  assert.equal(finalized.length, 1);
+  assert.equal(finalized[0].payload.status, "unknown");
+  assert.throws(
+    () => runtime.rail.exportBundle(actionId),
+    (error) => error.code === "RECEIPT_NOT_AVAILABLE",
+  );
+});

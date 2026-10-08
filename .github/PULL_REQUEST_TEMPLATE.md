@@ -1,12 +1,3 @@
----
-name: Pull request
-about: Submit changes for review
-title: ''
-labels: ''
-assignees: ''
-
----
-
 **Description**
 A clear and concise description of the changes in this PR.
 

@@ -3,7 +3,13 @@ import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const excluded = new Set([".git", "node_modules", "coverage", ".consequence-rail"]);
+const excluded = new Set([
+  ".git",
+  "node_modules",
+  "coverage",
+  ".consequence-rail",
+  ".consequence-rail-evidence",
+]);
 const required = [
   "README.md",
   "SECURITY.md",

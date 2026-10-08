@@ -1,6 +1,7 @@
 node_modules/
 coverage/
 .consequence-rail/
+.consequence-rail-evidence/
 *.log
 *.sqlite
 *.sqlite-shm
