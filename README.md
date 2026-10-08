@@ -44,10 +44,12 @@ Expected result:
 ```text
 scenario: synthetic-refund
 fault: duplicate
+action: act_x4ZgajdJZH1SM33KmKCU
 assurance: enforced
 state: CLOSED
 outcome: compensated
 execution_calls: 1
+status_calls: 0
 remedy_calls: 1
 active_refunds: 1
 bundle_verification: pass
