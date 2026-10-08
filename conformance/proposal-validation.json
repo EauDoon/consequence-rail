@@ -17,5 +17,11 @@
   { "name": "zero evidence age", "path": ["evidence_plan", "max_age_seconds"], "value": 0, "accepted": false },
   { "name": "string evidence age", "path": ["evidence_plan", "max_age_seconds"], "value": "60", "accepted": false },
   { "name": "unknown action type", "path": ["action_type"], "value": "demo.unknown/v1", "accepted": false },
-  { "name": "wrong timestamp type", "path": ["requested_at"], "value": 0, "accepted": false }
+  { "name": "wrong timestamp type", "path": ["requested_at"], "value": 0, "accepted": false },
+  { "name": "numeric eq value", "path": ["postcondition", "clauses", 0, "value"], "value": 1, "accepted": true },
+  { "name": "string eq value", "path": ["postcondition", "clauses", 0, "value"], "value": "1", "accepted": true },
+  { "name": "boolean eq value", "path": ["postcondition", "clauses", 0, "value"], "value": true, "accepted": true },
+  { "name": "null eq value", "path": ["postcondition", "clauses", 0, "value"], "value": null, "accepted": true },
+  { "name": "array eq value", "path": ["postcondition", "clauses", 0, "value"], "value": [1], "accepted": false, "code": "POSTCONDITION_INVALID" },
+  { "name": "object eq value", "path": ["postcondition", "clauses", 0, "value"], "value": { "n": 1 }, "accepted": false, "code": "POSTCONDITION_INVALID" }
 ]

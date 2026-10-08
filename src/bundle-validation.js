@@ -289,6 +289,17 @@ function postcondition(value) {
     ) {
       invalid(`${label}.value must be a finite number for ordered comparison.`);
     }
+    if (
+      clause.op === "eq" &&
+      !(
+        clause.value === null ||
+        typeof clause.value === "string" ||
+        typeof clause.value === "boolean" ||
+        finiteBinary64(clause.value)
+      )
+    ) {
+      invalid(`${label}.value must be a string, finite number, boolean or null for eq comparison.`);
+    }
   });
 }
 

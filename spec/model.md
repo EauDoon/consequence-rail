@@ -26,7 +26,10 @@ number from `-1.7976931348623157e+308` to `1.7976931348623157e+308`, inclusive.
 The reference runtime applies that no-coercion rule to both proposal versions:
 non-numeric evidence does not satisfy an ordered clause, and a non-numeric
 ordered threshold is rejected. Existing v0.1 `eq` proposals retain their
-strict-equality behavior. A v0.2 proposal is carried by a v0.2 settlement
+strict-equality behavior. Because strict equality cannot match an array or
+object, the reference runtime and offline verifier refuse an `eq` value that
+is not a string, finite number, boolean or `null` for both proposal versions;
+the published schema bytes stay unchanged. A v0.2 proposal is carried by a v0.2 settlement
 bundle so the immutable v0.1 bundle schema continues to reference only the
 v0.1 proposal schema. Its v0.2 settlement receipt signs the exact v0.2
 proposal schema identifier, so receipt-profile bundles remain version-bound

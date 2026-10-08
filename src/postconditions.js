@@ -7,6 +7,13 @@ function isFiniteBinary64(value) {
     value <= Number.MAX_VALUE;
 }
 
+function isEqScalar(value) {
+  return value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    isFiniteBinary64(value);
+}
+
 const OPERATORS = {
   eq: (actual, expected) => actual === expected,
   gte: (actual, expected) =>
@@ -93,6 +100,14 @@ export function evaluatePostcondition(postcondition, evidence) {
       throw new RailError(
         "POSTCONDITION_INVALID",
         "Ordered postcondition values must be finite numbers.",
+      );
+    }
+    if (operatorName === "eq" && !isEqScalar(clause.value)) {
+      // Strict equality compares arrays and objects by reference, so a
+      // compound expected value could never be satisfied.
+      throw new RailError(
+        "POSTCONDITION_INVALID",
+        "Postcondition eq values must be a string, finite number, boolean or null.",
       );
     }
     const operator = OPERATORS[operatorName];

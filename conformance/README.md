@@ -12,6 +12,14 @@ top-level field.
 numeric `gte` and `lte` clauses under the bounded v0.2 proposal schema while
 the original v0.1 fixture remains unchanged.
 
+`proposal-validation.json` lists portable proposal-shape vectors. Each vector
+sets the value at `path` inside the canonical refund proposal and states
+whether a conforming implementation accepts it. A rejected vector must fail at
+both the live admission boundary and the offline settlement-bundle boundary.
+The optional `code` field names the live-boundary error code and defaults to
+`SCHEMA_INVALID`; the offline boundary reports `BUNDLE_TAMPERED`. Postcondition
+shape vectors use `POSTCONDITION_INVALID`.
+
 `refund-recovery-contract.json` is the canonical Recovery Preflight contract.
 It pins a synthetic duplicate-refund fault, the actual mock connector remedy,
 an exact declared-state oracle, the signed reservation and connector

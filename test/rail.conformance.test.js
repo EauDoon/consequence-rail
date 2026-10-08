@@ -86,7 +86,11 @@ test("portable proposal vectors agree at live and offline shape boundaries", asy
         // Shape validation only: changing the proposal does not re-sign a bundle.
         assert.doesNotThrow(() => validateSettlementBundle(candidate), label);
       } else {
-        assert.throws(() => runtime.rail.propose(proposal), { code: "SCHEMA_INVALID" }, label);
+        assert.throws(
+          () => runtime.rail.propose(proposal),
+          { code: vector.code ?? "SCHEMA_INVALID" },
+          label,
+        );
         assert.equal(runtime.rail.actions.size, 0, label);
         assert.throws(() => validateSettlementBundle(candidate), { code: "BUNDLE_TAMPERED" }, label);
       }
