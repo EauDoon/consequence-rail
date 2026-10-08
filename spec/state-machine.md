@@ -137,6 +137,12 @@ action can only leave `REVIEW_REQUIRED` by closing as `disputed`.
 An unanticipated or irreversible remedy becomes a new child action with its
 own proposal, authorization, reservation and permit.
 
+An `escalate` reservation never starts an automatic remedy. When an action
+with an `escalate` reservation is breached, the rail MUST take
+`REMEDY_DUE -> REVIEW_REQUIRED` with reason `REMEDY_REQUIRES_CHILD_ACTION` and
+close as `disputed`. It does not release the reservation, so the receipt
+records the recourse as still `active` for the operator's child action.
+
 ## Ambiguous remediation
 
 A remedy timeout has the same uncertainty problem as an action timeout. The

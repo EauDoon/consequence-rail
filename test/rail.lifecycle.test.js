@@ -1076,3 +1076,47 @@ test("post-remedy evidence missing a postcondition fact closes disputed", async 
   });
   assert.equal(verification.outcome, "disputed");
 });
+
+test("an escalate-only breach closes disputed through review without a remedy", async () => {
+  const runtime = createDemoRuntime();
+  const proposal = buildRefundProposal(runtime.clock);
+  const proposed = runtime.rail.propose(proposal);
+  runtime.rail.authorize(proposed.action_id, {
+    allow: true,
+    policy_id: "demo-refund-policy/v1",
+    policy_digest: digest({ allow: true }),
+  });
+  runtime.rail.reserveRecourse(proposed.action_id, {
+    ...buildRefundReservation(proposed.action_digest, proposal, runtime.clock),
+    kind: "escalate",
+  });
+  runtime.rail.issuePermit(proposed.action_id);
+  const actionId = proposed.action_id;
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  const breached = await runtime.rail.verifyOutcome(actionId);
+  assert.equal(breached.state, "REMEDY_DUE");
+
+  const result = await runtime.rail.remediate(actionId);
+  assert.equal(result.state, "CLOSED");
+  assert.equal(result.outcome, "disputed");
+  assert.equal(runtime.connector.remedyCalls, 0);
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.remedy_attempts, 0);
+  assert.equal(record.receipt.recourse_final_status, "active");
+  const review = runtime.rail.eventStore
+    .list(actionId)
+    .find((event) => event.event_type === "STATE_TRANSITION" && event.payload.to_state === "REVIEW_REQUIRED");
+  assert.equal(review.payload.from_state, "REMEDY_DUE");
+  assert.equal(review.payload.reason_code, "REMEDY_REQUIRES_CHILD_ACTION");
+  assert.equal(review.payload.details_digest, digest({ kind: "escalate" }));
+  const verification = verifyBundle(runtime.rail.exportBundle(actionId, { profile: "audit" }), {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+    requireSemantics: true,
+  });
+  assert.equal(verification.outcome, "disputed");
+  await assert.rejects(
+    () => runtime.rail.remediate(actionId),
+    (error) => error.code === "ILLEGAL_TRANSITION",
+  );
+});

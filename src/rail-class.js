@@ -643,6 +643,16 @@ export class ConsequenceRail {
       this.close(record);
       return this.inspect(actionId);
     }
+    if (record.reservation.kind !== "reverse" && record.reservation.kind !== "compensate") {
+      // An escalate reservation never starts an automatic remedy. The breach
+      // goes to review now, and the operator handles it as a child action
+      // against the recourse that stays reserved.
+      this.transition(record, "REVIEW_REQUIRED", "REMEDY_REQUIRES_CHILD_ACTION", {
+        kind: record.reservation.kind,
+      });
+      this.close(record);
+      return this.inspect(actionId);
+    }
     assert(
       record.remedy_attempts < record.reservation.max_attempts,
       "REMEDY_ATTEMPTS_EXHAUSTED",
@@ -656,11 +666,6 @@ export class ConsequenceRail {
       typeof remediate === "function",
       "RECOVERY_IMPLEMENTATION_INVALID",
       "The measured connector remediation method is unavailable.",
-    );
-    assert(
-      record.reservation.kind === "reverse" || record.reservation.kind === "compensate",
-      "REMEDY_REQUIRES_CHILD_ACTION",
-      "Only a pre-authorized, bounded reversible remedy may run automatically.",
     );
 
     const attempt = record.remedy_attempts + 1;
