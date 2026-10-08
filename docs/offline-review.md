@@ -9,7 +9,10 @@ establish the truth of evidence. Library calls require explicit trusted keys.
 `crctl bundle receipt audit.json --out receipt.json` verifies the source before
 removing its proposal and raw evidence. Signed artifacts and their bindings
 remain unchanged. The output uses the existing receipt profile, whose review
-checks integrity only. This is data minimization, not anonymization: signed
+checks integrity only. Integrity still binds the receipt outcome,
+postcondition result and close time to the bundle's terminal `CLOSED` event, so
+a re-signed receipt cannot claim a different settlement than its own event
+chain. This is data minimization, not anonymization: signed
 event metadata and connector commitments remain. Existing output files are
 never overwritten. Keep the original audit file for semantic replay.
 Serialized artifacts, including their final newline, must fit the same 1 MiB

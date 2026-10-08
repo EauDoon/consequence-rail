@@ -11,6 +11,7 @@ import { runInventoryDemo } from "../src/inventory-demo.js";
 import { createDemoConnectorSigner, createDemoSigner, demoConnectorTrustedKeys, demoTrustedKeys, signArtifact } from "../src/signing.js";
 import { verifyBundle } from "../src/verify.js";
 import { resignEventChain } from "../src/rail-test-helpers.js";
+import { receiptBundle, reviewBundle } from "../src/review.js";
 
 function trust() {
   return {
@@ -648,4 +649,48 @@ test("semantic verification rejects accepted evidence that omits a postcondition
       && error.message === "Evidence does not report every postcondition fact.",
   );
   assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
+});
+
+test("integrity binds a receipt-profile outcome and close time to the terminal CLOSED event", async () => {
+  const disputed = await runRefundDemo({ fault: "remedy-failure" });
+  assert.equal(disputed.summary.outcome, "disputed");
+  const integrityOnly = { ...trust(), requireSemantics: false };
+  const projected = receiptBundle(disputed.bundle, integrityOnly);
+  const signer = createDemoSigner();
+  const resigned = (changes) => {
+    const next = deepClone(projected);
+    next.settlement_receipt = signArtifact({ ...next.settlement_receipt, ...changes }, signer);
+    return next;
+  };
+
+  const overclaim = resigned({ outcome: "settled", configured_postcondition_result: "satisfied" });
+  assert.throws(
+    () => verifyBundle(overclaim, integrityOnly),
+    (error) => error.code === "BUNDLE_TAMPERED"
+      && error.message === "Receipt outcome does not match the terminal CLOSED event.",
+  );
+  assert.throws(() => reviewBundle(overclaim, integrityOnly), (error) => error.code === "BUNDLE_TAMPERED");
+
+  const resultOnly = resigned({ configured_postcondition_result: "satisfied" });
+  assert.throws(
+    () => verifyBundle(resultOnly, integrityOnly),
+    (error) => error.code === "BUNDLE_TAMPERED"
+      && error.message === "Receipt postcondition result does not match its outcome.",
+  );
+
+  const shifted = resigned({ closed_at: "2036-01-01T00:00:00.000Z" });
+  assert.throws(
+    () => verifyBundle(shifted, integrityOnly),
+    (error) => error.code === "BUNDLE_TAMPERED"
+      && error.message === "Receipt close time does not match the terminal CLOSED event.",
+  );
+
+  assert.equal(verifyBundle(projected, integrityOnly).outcome, "disputed");
+  const exported = disputed.runtime.rail.exportBundle(disputed.summary.action_id);
+  assert.equal(exported.profile, "receipt");
+  assert.equal(verifyBundle(exported, integrityOnly).outcome, "disputed");
+  for (const fault of ["none", "duplicate"]) {
+    const { bundle } = await runRefundDemo({ fault });
+    assert.equal(verifyBundle(receiptBundle(bundle, integrityOnly), integrityOnly).integrity.valid, true);
+  }
 });

@@ -242,6 +242,15 @@ reproducible tests.
 The `receipt` profile omits the full proposal and raw evidence. It supports
 signature, digest and event-chain integrity verification.
 
+For every profile, integrity verification binds the receipt outcome to the
+terminal `CLOSED` event: its reason code MUST be `SETTLEMENT_<OUTCOME>` and its
+details digest MUST be the digest of `{ "outcome": <outcome> }`. The receipt's
+`configured_postcondition_result` MUST be `satisfied` for `settled` or
+`compensated` and `unresolved` for `disputed`. For a `receipt` profile bundle,
+integrity verification also requires the receipt `closed_at` to equal the
+terminal event's recorded time; an `audit` bundle checks that binding during
+semantic verification.
+
 The `audit` profile includes the proposal and outcome evidence. Full semantic
 verification additionally replays the state machine, validates every
 cross-binding, reevaluates postconditions, checks evidence freshness and

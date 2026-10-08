@@ -178,6 +178,27 @@ export function verifyBundle(
       closed?.payload?.to_state === "CLOSED",
     "The event chain does not end in CLOSED.",
   );
+  // The rail signs the terminal CLOSED event with the outcome it settled on.
+  // A receipt that claims a different outcome contradicts the bundle's own
+  // signed history, whichever profile carries it.
+  integrityAssert(
+    closed.payload.reason_code === `SETTLEMENT_${receipt.outcome.toUpperCase()}` &&
+      closed.payload.details_digest === digest({ outcome: receipt.outcome }),
+    "Receipt outcome does not match the terminal CLOSED event.",
+  );
+  integrityAssert(
+    receipt.configured_postcondition_result ===
+      (receipt.outcome === "disputed" ? "unresolved" : "satisfied"),
+    "Receipt postcondition result does not match its outcome.",
+  );
+  if (bundle.profile === "receipt") {
+    // Audit bundles keep this as a semantic check; a receipt-profile bundle
+    // offers integrity only, so the binding is enforced here.
+    integrityAssert(
+      closed.recorded_at === receipt.closed_at,
+      "Receipt close time does not match the terminal CLOSED event.",
+    );
+  }
 
   const integrity = {
     valid: true,

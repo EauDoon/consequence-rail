@@ -81,7 +81,10 @@ connector trusted-key sets. Recovery Preflight has a separate verifier and
 explicit recovery trusted-key set.
 
 Integrity verification checks signatures, event order, hash linkage, artifact
-digests, assurance disclosure and the final receipt.
+digests, assurance disclosure and the final receipt. The receipt outcome and
+postcondition result must agree with the terminal `CLOSED` event the rail
+signed, and a receipt-profile bundle's close time must equal that event's
+recorded time.
 
 A settlement receipt only represents a determined final recourse state
 (`active`, `expired`, `released`, or `consumed`). When the connector reports
