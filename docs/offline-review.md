@@ -173,3 +173,5 @@ For either comparison or recovery linking, that flag pins the first input;
 `--expect-other-digest` pins the second. A mismatch emits no report and creates
 no receipt output. Both files still receive their normal signature/replay
 verification. Digest pins prevent substitution, not untrusted signer acceptance.
+About 1 digest in 64 begins with `-`; pass it as the next argument or as
+`--expect-digest=<digest>`. Every value flag accepts the `--name=value` form.

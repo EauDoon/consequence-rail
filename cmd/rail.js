@@ -23,7 +23,7 @@ The sidecar listens on 127.0.0.1 only and is not an authenticated boundary.
 Exit status:
   0  the sidecar is bound to a loopback port
   1  invalid usage, or the port could not be bound
-'`);
+`);
 }
 
 function fail(code, message) {
@@ -45,8 +45,12 @@ function envValue(env, name) {
   return value;
 }
 
+// Plain decimal digits only: Number() would also accept hex, exponent,
+// padded, signed and fractional spellings such as 0x1F90, 1e3 or 8080.0.
+const PORT_PATTERN = /^(0|[1-9][0-9]{0,4})$/;
+
 function parsePort(value, label) {
-  const parsed = Number(value);
+  const parsed = PORT_PATTERN.test(value) ? Number(value) : Number.NaN;
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
     throw usageError(`${label} must be an integer between 0 and 65535.`);
   }

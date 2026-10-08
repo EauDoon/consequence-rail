@@ -404,6 +404,6 @@ Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2035-01-01T00
 
 ## Pin the artifact under review
 
-Settlement and recovery verification accept `--expect-digest` with an independently recorded SHA-256 base64url canonical bundle digest. A mismatch fails before signature acceptance. JSON verification output includes `bundle_digest` for reproducible recording. Object key order and insignificant whitespace do not change this digest; changed data does. A digest pin detects artifact substitution but does not establish signer trust.
+Settlement and recovery verification accept `--expect-digest` with an independently recorded SHA-256 base64url canonical bundle digest. A mismatch fails before signature acceptance. JSON verification output includes `bundle_digest` for reproducible recording. Object key order and insignificant whitespace do not change this digest; changed data does. A digest pin detects artifact substitution but does not establish signer trust. A digest that begins with `-` can be passed as the next argument or in the `--expect-digest=<digest>` form, which every value flag accepts.
 
 Offline artifact JSON also rejects repeated object members, including names written with equivalent Unicode escapes. This prevents different parsers from interpreting the same uploaded bytes differently. Batch output includes the local input filenames supplied by the caller; remove those filenames before sharing a report if they contain private directory information.
