@@ -154,6 +154,22 @@ async function readEmptyJson(request) {
   }
 }
 
+// The library execute() also accepts proposalOverride for the action-mutation
+// demo. ExecutionFaultInput declares only fault, so the sidecar refuses any
+// other field before the rail sees it. Non-object bodies fall through to the
+// rail's own SCHEMA_INVALID check.
+function executeInput(body) {
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const unknown = Object.keys(body).filter((key) => key !== "fault");
+    if (unknown.length > 0) {
+      throw new RailError("SCHEMA_INVALID", "The execute route accepts only fault.", {
+        fields: unknown,
+      });
+    }
+  }
+  return body;
+}
+
 function send(response, status, body, extraHeaders = {}) {
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
@@ -435,7 +451,7 @@ export function createReferenceServer({
           return;
         }
         if (operation === "execute") {
-          send(response, 200, await rail.execute(actionId, await readJson(request)));
+          send(response, 200, await rail.execute(actionId, executeInput(await readJson(request))));
           return;
         }
         if (operation === "reconcile") {
