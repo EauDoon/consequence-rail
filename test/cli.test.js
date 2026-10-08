@@ -369,3 +369,34 @@ test("rail accepts only plain decimal ports and its help ends cleanly", () => {
   const help = runCli("rail.js", ["--help"]);
   assert.ok(help.stdout.endsWith("  1  invalid usage, or the port could not be bound\n"));
 });
+
+test("crctl reports a malformed --at as usage before reading any artifact", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-at-"));
+  try {
+    const { bundle } = await runRecoveryPreflightDemo();
+    const drill = join(dir, "drill.json");
+    writeFileSync(drill, JSON.stringify(bundle));
+    const settlement = join(dir, "settlement.json");
+    writeFileSync(settlement, JSON.stringify((await runRefundDemo()).bundle));
+    for (const args of [
+      ["recovery-preflight", "verify", drill],
+      ["recovery-preflight", "review", drill],
+      ["recovery-preflight", "compare", drill, drill],
+      ["recovery-preflight", "link", settlement, drill],
+      ["recovery-preflight", "verify-many", drill, drill],
+    ]) {
+      for (const at of [["--at", "2035-01-01"], ["--at=yesterday"]]) {
+        const result = runCli("crctl.js", [...args, ...at, "--json"]);
+        assert.equal(result.status, 1, args.join(" "));
+        assert.equal(result.stdout, "", args.join(" "));
+        assert.deepEqual(stderrJson(result), {
+          code: "USAGE_INVALID",
+          message: "--at must be an exact ISO UTC timestamp, for example 2035-01-01T00:00:00.000Z. Run with --help.",
+        });
+      }
+    }
+    const current = runCli("crctl.js", ["recovery-preflight", "verify-many", drill, "--at", bundle.drill_attestation.drilled_at]);
+    assert.equal(current.status, 0, current.stderr);
+    assert.equal(JSON.parse(current.stdout).passed, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

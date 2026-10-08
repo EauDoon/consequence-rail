@@ -218,6 +218,12 @@ async function main() {
   }
 
   const { positional, options } = parseCliArgs(args);
+  if (options.at !== undefined) {
+    const at = Date.parse(options.at);
+    if (!Number.isFinite(at) || new Date(at).toISOString() !== options.at) {
+      throw usage("--at must be an exact ISO UTC timestamp, for example 2035-01-01T00:00:00.000Z.");
+    }
+  }
   if (options["require-outcome"] !== undefined && !["settled", "compensated", "disputed"].includes(options["require-outcome"])) {
     throw usage("Expected outcome must be settled, compensated or disputed.");
   }

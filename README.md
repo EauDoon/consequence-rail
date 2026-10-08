@@ -400,7 +400,7 @@ Run `node ./cmd/crctl.js demo matrix --json` to exercise all 31 catalog cases, o
 
 ## Check recovery freshness explicitly
 
-Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2035-01-01T00:00:00.000Z --json` for the deterministic demo, or supply your intended verification instant for another artifact. The timestamp must be an ISO UTC timestamp supported by the protocol. Verification requires drill time at or before that instant and expiry strictly after it. Without `--at`, the result explicitly reports that freshness was not checked. No verification command changes a live qualification or issues a permit.
+Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2035-01-01T00:00:00.000Z --json` for the deterministic demo, or supply your intended verification instant for another artifact. The timestamp must be an exact ISO UTC timestamp such as `2035-01-01T00:00:00.000Z`; any other spelling is rejected as `USAGE_INVALID` before an artifact is read, and the library reports `VERIFICATION_TIME_INVALID`. Verification requires drill time at or before that instant and expiry strictly after it. Without `--at`, the result explicitly reports that freshness was not checked. No verification command changes a live qualification or issues a permit.
 
 ## Pin the artifact under review
 

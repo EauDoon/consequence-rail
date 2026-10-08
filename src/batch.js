@@ -3,6 +3,7 @@ import { reviewBundle } from "./review.js";
 import { RailError } from "./errors.js";
 import { deepClone, digest } from "./canonical.js";
 import { reviewRecovery } from "./recovery-review.js";
+import { assertVerificationTime } from "./recovery-preflight.js";
 
 export const MAX_BATCH_FILES = 64;
 
@@ -58,7 +59,10 @@ function batchResult(results) {
 
 /** Independent drill replay results, with one caller-supplied verification instant. */
 export function verifyRecoveryFiles(paths, options = {}) {
-  const results = validatePaths(paths).map(file => {
+  const files = validatePaths(paths);
+  // One bad instant is an operator error, not a failure of every drill.
+  if (options.requireCurrent) assertVerificationTime(options.now);
+  const results = files.map(file => {
     try {
       const result = reviewRecovery(readArtifactFile(file), options);
       return { file, valid: true, bundle_digest: result.bundle_digest, qualification: result.qualification,

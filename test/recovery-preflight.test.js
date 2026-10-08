@@ -722,3 +722,36 @@ function assertCanonicalEncodings(value, path = "") {
     assertCanonicalEncodings(item, next);
   }
 }
+
+test("a malformed verification instant is VERIFICATION_TIME_INVALID, not an invalid bundle", async () => {
+  const { bundle } = await runRecoveryPreflightDemo();
+  for (const now of ["yesterday", "2035-01-01", "2035-01-01T00:00:00Z", null, 0]) {
+    assert.throws(
+      () => verifyRecoveryPreflight(bundle, {
+        trustedKeys: demoRecoveryTrustedKeys(),
+        requireCurrent: true,
+        now,
+      }),
+      (error) => error.code === "VERIFICATION_TIME_INVALID",
+      `now ${JSON.stringify(now)}`,
+    );
+  }
+  // The instant is checked before the artifact, so even a malformed bundle
+  // reports the caller's time error first.
+  assert.throws(
+    () => verifyRecoveryPreflight({}, { requireCurrent: true, now: "x" }),
+    (error) => error.code === "VERIFICATION_TIME_INVALID",
+  );
+  assert.equal(
+    verifyRecoveryPreflight(bundle, {
+      trustedKeys: demoRecoveryTrustedKeys(),
+      requireCurrent: true,
+      now: bundle.drill_attestation.drilled_at,
+    }).current,
+    true,
+  );
+  assert.equal(
+    verifyRecoveryPreflight(bundle, { trustedKeys: demoRecoveryTrustedKeys(), now: "x" }).freshness_checked,
+    false,
+  );
+});
