@@ -6,6 +6,7 @@ import { RailError } from "./errors.js";
 import { parseUniqueJson } from "./json-input.js";
 import { demoConnectorTrustedKeys, demoTrustedKeys } from "./signing.js";
 import { verifyBundle } from "./verify.js";
+import { VERSION } from "./version.js";
 
 const MAX_BODY_BYTES = 65_536;
 const MAX_URL_BYTES = 2_048;
@@ -355,6 +356,7 @@ export function createReferenceServer({
         send(response, 200, {
           protocol_version: "v0.1",
           implementation: "consequence-rail-node-reference",
+          implementation_version: VERSION,
           assurance_modes: ["enforced", "cooperative", "observed"],
           executable_modes: ["enforced", "cooperative"],
           optional_features: ["recovery-preflight/v0.1"],

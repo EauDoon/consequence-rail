@@ -32,7 +32,8 @@ applies: **no current, trusted, coverage-matched recovery drill, no permit.**
 ## Try the failure path first
 
 Requirements: Node.js 20 or newer. The project has no third-party runtime
-dependencies.
+dependencies. `node ./cmd/crctl.js --version` and `node ./cmd/rail.js --version`
+print the implementation version; include it in bug reports.
 
 ```text
 node ./cmd/crctl.js --help

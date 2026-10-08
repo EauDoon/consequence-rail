@@ -26,6 +26,7 @@
                   "required": [
                     "protocol_version",
                     "implementation",
+                    "implementation_version",
                     "assurance_modes",
                     "executable_modes",
                     "optional_features",
@@ -34,6 +35,10 @@
                   "properties": {
                     "protocol_version": { "const": "v0.1" },
                     "implementation": { "type": "string" },
+                    "implementation_version": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?$"
+                    },
                     "assurance_modes": { "type": "array", "items": { "type": "string" } },
                     "executable_modes": { "type": "array", "items": { "type": "string" } },
                     "optional_features": { "type": "array", "items": { "type": "string" } },

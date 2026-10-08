@@ -3,13 +3,15 @@
 import { createSidecarClock, SIDECAR_CLOCKS } from "../src/clock.js";
 import { createDemoRuntime } from "../src/demo.js";
 import { createReferenceServer } from "../src/http-server.js";
+import { VERSION } from "../src/version.js";
 
 function printHelp() {
-  process.stdout.write(`Consequence Rail reference sidecar
+  process.stdout.write(`Consequence Rail reference sidecar ${VERSION}
 
 Usage:
   rail [--port <number>] [--clock <system|demo>]
   rail --help
+  rail --version
 
 Options:
   --port <number>         Loopback TCP port (default 8787, or CONSEQUENCE_RAIL_PORT).
@@ -17,6 +19,7 @@ Options:
   --clock <system|demo>   Time source (default system, or CONSEQUENCE_RAIL_CLOCK).
                           system uses the host clock; demo freezes 2035-01-01T00:00:00.000Z.
   -h, --help              Show this help
+  --version               Print the implementation version
 
 The sidecar listens on 127.0.0.1 only and is not an authenticated boundary.
 
@@ -68,6 +71,9 @@ function parseArgs(args, env = process.env) {
   if (args.includes("--help") || args.includes("-h")) {
     return { help: true };
   }
+  if (args.includes("--version")) {
+    return { version: true };
+  }
 
   let port;
   let clock;
@@ -118,6 +124,8 @@ try {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.help) {
     printHelp();
+  } else if (parsed.version) {
+    process.stdout.write(`consequence-rail ${VERSION}\n`);
   } else {
     const server = createReferenceServer({
       runtime: createDemoRuntime({ clock: createSidecarClock(parsed.clock) }),

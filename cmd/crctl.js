@@ -30,6 +30,7 @@ import { digest } from "../src/canonical.js";
 import { reviewRecovery, compareRecovery, linkRecovery } from "../src/recovery-review.js";
 import { settlementMarkdown, recoveryMarkdown } from "../src/review-markdown.js";
 import { parseCliArgs, usage } from "../src/cli-args.js";
+import { VERSION } from "../src/version.js";
 
 function assertFlags(options, allowed) {
   for (const name of Object.keys(options)) {
@@ -40,7 +41,7 @@ function assertFlags(options, allowed) {
 }
 
 function printHelp() {
-  process.stdout.write(`Consequence Rail CLI
+  process.stdout.write(`Consequence Rail CLI ${VERSION}
 
 Usage:
   crctl demo list [--json]
@@ -63,6 +64,7 @@ Usage:
   crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight verify-many <file>... [--at <ISO timestamp>] [--json]
   crctl --help
+  crctl --version
 
 Refund demo faults:
   ${DEMO_FAULTS.join(", ")}
@@ -88,6 +90,7 @@ Flags:
   --require-outcome <outcome> Require settled, compensated or disputed (bundle verify/verify-many)
   --require-qualified   Require QUALIFIED_EXACT (recovery verify/verify-many; add --at for freshness)
   -h, --help            Show this help
+  --version             Print the implementation version
 
   Every value flag also accepts the --name=value form, for example
   --expect-digest=<digest>. A digest pin may begin with a dash.
@@ -214,6 +217,10 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     printHelp();
+    return;
+  }
+  if (args.includes("--version")) {
+    process.stdout.write(`consequence-rail ${VERSION}\n`);
     return;
   }
 
