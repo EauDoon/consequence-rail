@@ -11,15 +11,93 @@ of the package version below.
 
 ## [Unreleased]
 
-- Refund currency must be a string at both live proposal admission and offline
-  bundle-shape validation. A one-element array can no longer pass through regular
-  expression coercion. Existing string currencies and artifact bytes are unchanged.
+## [0.3.0] - 2026-10-08
+
+This release changes observable behavior, so the minor version moves. There is
+no `schema_version`, signature or canonical-byte change for artifacts this
+repository produces, and the pinned default artifact hashes are unchanged.
+
+### Added
+
+- `crctl --version` and `rail --version` print `consequence-rail <version>`, and
+  both help headers show the version. The version is read from `package.json`.
+- `GET /.well-known/consequence-rail` reports `implementation_version`, declared
+  in OpenAPI. `protocol_version` stays `v0.1`.
+- Every crctl value flag accepts the `--name=value` form, and `--expect-digest`
+  and `--expect-other-digest` accept a digest that begins with `-`.
+- `scripts/check.js` gates version consistency across `package.json`, the
+  OpenAPI `info.version`, README, `docs/release-status.md`, the top released
+  CHANGELOG heading and, in tag builds, the tag.
+- `scripts/release-notes.js` prints one release's CHANGELOG section, and
+  `.github/workflows/release.yml` verifies a pushed `vX.Y.Z` tag on every
+  supported platform and publishes a GitHub Release from that section.
+- Dependabot updates for GitHub Actions and CodeQL analysis of the JavaScript
+  sources and workflows.
+- A test that runs the README's expected-output examples against real crctl
+  output.
 - Portable proposal vectors cover types and closed fields in both proposal
   versions, with an HTTP refusal regression. Release and parser-boundary documents
   now describe the current source version, connectors, and duplicate-key handling.
+- Proposal vectors gain an optional live-boundary `code` field and `eq` value
+  rows.
+
+### Changed
+
+- An `eq` postcondition value must be a string, finite number, boolean or
+  `null`. Arrays and objects, which strict equality can never match, are refused
+  with `POSTCONDITION_INVALID` at admission (HTTP 400) and `BUNDLE_TAMPERED`
+  offline, for both proposal versions.
+- A breach under an `escalate` reservation now closes `disputed` through
+  `REVIEW_REQUIRED` with reason `REMEDY_REQUIRES_CHILD_ACTION`, instead of
+  throwing from `remediate()` and waiting in `REMEDY_DUE` until the reservation
+  expired. HTTP `remediate` returns 200. The reservation stays `active` for the
+  operator's child action.
+- Integrity verification binds the receipt outcome and
+  `configured_postcondition_result` to the terminal `CLOSED` event for every
+  bundle profile, and binds a receipt-profile receipt's `closed_at` to that
+  event's recorded time. A contradicting receipt is `BUNDLE_TAMPERED`. Audit
+  bundles keep the `SEMANTIC_INVALID` close-time check.
+- A malformed `--at` is `USAGE_INVALID` before any artifact is read. The library
+  reports `VERIFICATION_TIME_INVALID`, and `verifyRecoveryFiles` fails once
+  instead of marking every drill invalid.
+- HTTP `execute` accepts only `fault`. The library-only `proposalOverride` is
+  refused with `SCHEMA_INVALID` (422) before the rail is called.
+- `rail` accepts only plain decimal ports for `--port` and
+  `CONSEQUENCE_RAIL_PORT`, so hex, exponent, padded, signed, fractional and empty
+  values are refused.
+- OpenAPI declares 422 for authorize, permit, verify-outcome, remediate and
+  reconcile-remedy, and its `info.version` follows the package version.
+- crctl help lists the inventory demo faults.
+- CHANGELOG follows Keep a Changelog, with a version heading for every release
+  since 0.1.0.
+
+### Fixed
+
+- Evidence that omits a postcondition fact (`EVIDENCE_FACT_MISSING`), or that is
+  too large to sign once evaluated (`EVIDENCE_UNREPRESENTABLE`), closes
+  `disputed` instead of stranding the action in `VERIFYING` or
+  `REMEDY_VERIFYING` with no receipt. Offline semantic verification reports
+  such evidence as `SEMANTIC_INVALID`.
+- crctl no longer refuses a digest pin that begins with `-`, which about 1
+  digest in 64 does.
+- `rail --help` no longer ends with a stray quote and no final newline.
+- The test suite passes from any working directory.
+- SECURITY.md and `docs/architecture.md` no longer contradict the code on
+  duplicate JSON members, the synthetic connectors and unknown final recourse.
+  The pull request template no longer carries issue-template front matter, and
+  the recovery walkthrough output directory is ignored and excluded from the
+  integrity scan.
+- Refund currency must be a string at both live proposal admission and offline
+  bundle-shape validation. A one-element array can no longer pass through regular
+  expression coercion. Existing string currencies and artifact bytes are unchanged.
 - A settlement receipt's `closed_at` is now the `recorded_at` of the terminal
   `CLOSED` event instead of a second clock read, so the two always agree even
   when the clock advances while the receipt is built.
+
+### Security
+
+- Evidence evaluation fails closed: evidence the rail cannot evaluate or sign
+  closes the action `disputed` and never starts a remedy.
 
 ## [0.2.20] - 2026-09-28
 
@@ -487,7 +565,8 @@ Public source release on 27 July 2026.
 
 Initial public source release on 23 July 2026.
 
-[Unreleased]: https://github.com/EauDoon/consequence-rail/compare/v0.2.20...HEAD
+[Unreleased]: https://github.com/EauDoon/consequence-rail/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/EauDoon/consequence-rail/compare/v0.2.20...v0.3.0
 [0.2.20]: https://github.com/EauDoon/consequence-rail/commit/418a212e8e7dfec8c158e99e0973bb22e3038e0a
 [0.2.19]: https://github.com/EauDoon/consequence-rail/commit/548fb22eece9644f4875ecb12e61fa031234016b
 [0.2.18]: https://github.com/EauDoon/consequence-rail/commit/40ba3c110cfbd41dafe4fec5327de6733e75ec47

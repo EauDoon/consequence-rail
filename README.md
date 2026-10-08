@@ -15,7 +15,7 @@ been reserved for that exact action. It then verifies the configured
 postcondition and closes the action with a signed technical outcome:
 `settled`, `compensated`, or `disputed`.
 
-> Experimental v0.2 reference implementation. It does not provide insurance,
+> Experimental reference implementation. It does not provide insurance,
 > legal compliance, guaranteed recovery, or proof that an evidence source is
 > truthful.
 
@@ -363,7 +363,7 @@ Read:
 
 ## Project status
 
-This checkout contains the experimental v0.2.20 source release. It is a
+This checkout contains the experimental v0.3.0 source release. It is a
 reference implementation, not a production deployment or hosted service.
 The public release status and maintenance boundaries are recorded in
 [`docs/release-status.md`](docs/release-status.md).

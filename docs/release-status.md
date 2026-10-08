@@ -1,6 +1,6 @@
 # Release status
 
-Current public state: experimental v0.2.20 source release with Recovery
+Current public state: experimental v0.3.0 source release with Recovery
 Preflight and synthetic refund and inventory connectors. The source version is
 recorded in `package.json`; the source repository remains the release channel.
 
