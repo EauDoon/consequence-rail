@@ -14,6 +14,7 @@ import { createReferenceServer } from "../src/http-server.js";
 import { evaluatePostcondition } from "../src/postconditions.js";
 import { demoConnectorTrustedKeys, demoTrustedKeys } from "../src/signing.js";
 import { verifyBundle } from "../src/verify.js";
+import { repoPath } from "../src/rail-test-helpers.js";
 
 const ORDERED_OPERATORS = ["gte", "lte"];
 const PROPOSAL_VERSIONS = [
@@ -79,7 +80,7 @@ function snapshotProposal(proposal) {
 async function createV2AuditBundle() {
   const runtime = createDemoRuntime();
   const proposal = JSON.parse(readFileSync(
-    join(process.cwd(), "conformance", "refund-action-v0.2.json"),
+    repoPath("conformance", "refund-action-v0.2.json"),
     "utf8",
   ));
   const proposed = runtime.rail.propose(proposal);
@@ -212,7 +213,7 @@ test("strict eq behavior remains compatible across proposal versions", () => {
 });
 
 test("v0.1 remains immutable while v0.2 schemas bind bounds and receipt versions", () => {
-  const schemas = join(process.cwd(), "spec", "schemas");
+  const schemas = repoPath("spec", "schemas");
   const v1 = JSON.parse(readFileSync(join(schemas, "action-proposal.schema.json"), "utf8"));
   const v2 = JSON.parse(readFileSync(
     join(schemas, "action-proposal-v0.2.schema.json"),
@@ -230,7 +231,7 @@ test("v0.1 remains immutable while v0.2 schemas bind bounds and receipt versions
     join(schemas, "settlement-receipt-v0.2.schema.json"),
     "utf8",
   ));
-  const openapi = JSON.parse(readFileSync(join(process.cwd(), "api", "openapi.json"), "utf8"));
+  const openapi = JSON.parse(readFileSync(repoPath("api", "openapi.json"), "utf8"));
   const v1Clause = v1.$defs.postcondition.properties.clauses.items;
   const v2Clause = v2.$defs.postcondition.properties.clauses.items;
 

@@ -5,7 +5,6 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import test from "node:test";
 import { createDemoRuntime, runRefundDemo } from "../src/demo.js";
 import { validateSettlementBundle } from "../src/bundle-validation.js";
@@ -13,11 +12,12 @@ import { ALLOWED_TRANSITIONS } from "../src/rail-state.js";
 import {
   assertCanonicalEncodings,
   assertRequiredFields,
+  repoPath,
 } from "../src/rail-test-helpers.js";
 
 /** Read the normative transition table out of spec/state-machine.md. */
 function documentedTransitions() {
-  const spec = readFileSync(join(process.cwd(), "spec", "state-machine.md"), "utf8");
+  const spec = readFileSync(repoPath("spec", "state-machine.md"), "utf8");
   const table = spec.split("```text")[1]?.split("```")[0];
   assert.ok(table, "spec/state-machine.md must declare a fenced transition table");
   const edges = [];
@@ -57,7 +57,7 @@ test("the normative state machine table matches the implemented transitions", ()
 test("conformance ActionProposal fixture is accepted", () => {
   const runtime = createDemoRuntime();
   const fixture = JSON.parse(
-    readFileSync(join(process.cwd(), "conformance", "refund-action.json"), "utf8"),
+    readFileSync(repoPath("conformance", "refund-action.json"), "utf8"),
   );
   const result = runtime.rail.propose(fixture);
   assert.equal(result.state, "PROPOSED");
@@ -65,7 +65,7 @@ test("conformance ActionProposal fixture is accepted", () => {
 });
 
 test("portable proposal vectors agree at live and offline shape boundaries", async () => {
-  const vectors = JSON.parse(readFileSync("conformance/proposal-validation.json", "utf8"));
+  const vectors = JSON.parse(readFileSync(repoPath("conformance", "proposal-validation.json"), "utf8"));
   const { bundle } = await runRefundDemo();
   for (const version of ["v0.1", "v0.2"]) {
     for (const vector of vectors) {
