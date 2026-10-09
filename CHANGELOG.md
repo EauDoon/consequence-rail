@@ -55,8 +55,12 @@ repository produces, and the pinned default artifact hashes are unchanged.
 - Integrity verification binds the receipt outcome and
   `configured_postcondition_result` to the terminal `CLOSED` event for every
   bundle profile, and binds a receipt-profile receipt's `closed_at` to that
-  event's recorded time. A contradicting receipt is `BUNDLE_TAMPERED`. Audit
-  bundles keep the `SEMANTIC_INVALID` close-time check.
+  event's recorded time: no earlier, and at most 1000 ms later. The window
+  keeps receipts from 0.2.20 and earlier verifying: they took `closed_at` from
+  a second clock read, so under the sidecar's system clock it can trail the
+  event by a millisecond or more. A contradicting receipt is
+  `BUNDLE_TAMPERED`. Audit bundles keep the exact `SEMANTIC_INVALID` close-time
+  check.
 - A malformed `--at` is `USAGE_INVALID` before any artifact is read. The library
   reports `VERIFICATION_TIME_INVALID`, and `verifyRecoveryFiles` fails once
   instead of marking every drill invalid.
