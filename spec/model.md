@@ -247,9 +247,12 @@ terminal `CLOSED` event: its reason code MUST be `SETTLEMENT_<OUTCOME>` and its
 details digest MUST be the digest of `{ "outcome": <outcome> }`. The receipt's
 `configured_postcondition_result` MUST be `satisfied` for `settled` or
 `compensated` and `unresolved` for `disputed`. For a `receipt` profile bundle,
-integrity verification also requires the receipt `closed_at` to equal the
-terminal event's recorded time; an `audit` bundle checks that binding during
-semantic verification.
+integrity verification also binds the receipt `closed_at` to the terminal
+event's recorded time: it MUST NOT be earlier than that time and MUST NOT be
+more than 1000 ms later. Current receipts copy the recorded time exactly. The
+window accepts receipts written by 0.2.20 and earlier, which took `closed_at`
+from a second clock read after the `CLOSED` event was appended. An `audit`
+bundle requires the two to be equal during semantic verification.
 
 The `audit` profile includes the proposal and outcome evidence. Full semantic
 verification additionally replays the state machine, validates every

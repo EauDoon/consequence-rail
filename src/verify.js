@@ -17,6 +17,11 @@ const SETTLEMENT_VERSION_BINDINGS = new Map([
   }],
 ]);
 
+// Largest lag a receipt-profile closed_at may have behind the terminal CLOSED
+// event's recorded_at. Current receipts copy recorded_at exactly; the tolerance
+// exists only for receipts from releases that read the clock a second time.
+const LEGACY_CLOSE_TIME_LAG_MS = 1000;
+
 function integrityAssert(condition, message, details = {}) {
   if (!condition) {
     throw new RailError("BUNDLE_TAMPERED", message, details);
@@ -193,9 +198,14 @@ export function verifyBundle(
   );
   if (bundle.profile === "receipt") {
     // Audit bundles keep this as a semantic check; a receipt-profile bundle
-    // offers integrity only, so the binding is enforced here.
+    // offers integrity only, so the binding is enforced here. Receipts written
+    // by 0.2.20 and earlier took closed_at from a second clock read after the
+    // CLOSED event was appended, so under a system clock it can trail that
+    // event by a millisecond or more. The bound accepts that legacy gap and
+    // still refuses a receipt that moves the close time.
+    const closeLagMs = Date.parse(receipt.closed_at) - Date.parse(closed.recorded_at);
     integrityAssert(
-      closed.recorded_at === receipt.closed_at,
+      closeLagMs >= 0 && closeLagMs <= LEGACY_CLOSE_TIME_LAG_MS,
       "Receipt close time does not match the terminal CLOSED event.",
     );
   }

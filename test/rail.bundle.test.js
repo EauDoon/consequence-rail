@@ -694,3 +694,39 @@ test("integrity binds a receipt-profile outcome and close time to the terminal C
     assert.equal(verifyBundle(receiptBundle(bundle, integrityOnly), integrityOnly).integrity.valid, true);
   }
 });
+
+test("integrity accepts the legacy receipt close time read after the CLOSED event", async () => {
+  // 0.2.20 and earlier wrote closed_at from a second clock read taken after
+  // the CLOSED event was appended. Under the sidecar's system clock it can
+  // trail that event by a millisecond or more, and those signed receipts must
+  // still verify.
+  const integrityOnly = { ...trust(), requireSemantics: false };
+  const signer = createDemoSigner();
+  for (const fault of ["none", "remedy-failure"]) {
+    const { bundle } = await runRefundDemo({ fault });
+    const projected = receiptBundle(bundle, integrityOnly);
+    const closedAt = Date.parse(projected.events.at(-1).recorded_at);
+    const withCloseLag = (milliseconds) => {
+      const next = deepClone(projected);
+      next.settlement_receipt = signArtifact({
+        ...next.settlement_receipt,
+        closed_at: new Date(closedAt + milliseconds).toISOString(),
+      }, signer);
+      return next;
+    };
+
+    const legacy = withCloseLag(1);
+    assert.notEqual(legacy.settlement_receipt.closed_at, legacy.events.at(-1).recorded_at);
+    assert.equal(verifyBundle(legacy, integrityOnly).integrity.valid, true);
+    assert.equal(reviewBundle(legacy, integrityOnly).closed_at, legacy.settlement_receipt.closed_at);
+    assert.equal(verifyBundle(withCloseLag(1000), integrityOnly).integrity.valid, true);
+
+    for (const milliseconds of [-1, 1001]) {
+      assert.throws(
+        () => verifyBundle(withCloseLag(milliseconds), integrityOnly),
+        (error) => error.code === "BUNDLE_TAMPERED"
+          && error.message === "Receipt close time does not match the terminal CLOSED event.",
+      );
+    }
+  }
+});

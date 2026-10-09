@@ -84,8 +84,10 @@ explicit recovery trusted-key set.
 Integrity verification checks signatures, event order, hash linkage, artifact
 digests, assurance disclosure and the final receipt. The receipt outcome and
 postcondition result must agree with the terminal `CLOSED` event the rail
-signed, and a receipt-profile bundle's close time must equal that event's
-recorded time.
+signed. A receipt-profile bundle's close time must be no earlier than that
+event's recorded time and at most 1000 ms later. Current receipts copy the
+recorded time exactly; the window accepts receipts from 0.2.20 and earlier,
+which read the clock a second time after appending the event.
 
 A settlement receipt only represents a determined final recourse state
 (`active`, `expired`, `released`, or `consumed`). When the connector reports
