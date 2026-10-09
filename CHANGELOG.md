@@ -11,7 +11,7 @@ of the package version below.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-10-08
+## [0.3.0] - 2026-10-09
 
 This release changes observable behavior, so the minor version moves. There is
 no `schema_version`, signature or canonical-byte change for artifacts this
