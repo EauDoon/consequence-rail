@@ -41,3 +41,21 @@ test("recovery batch continues after invalid files and requires current evidence
   assert.throws(() => verifyRecoveryFiles([], options), { code: "BATCH_INVALID" });
   assert.throws(() => verifyRecoveryFiles(Array(65).fill(good), options), { code: "BATCH_INVALID" });
 });
+
+test("a malformed batch verification instant fails once instead of per file", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-recovery-time-"));
+  const file = join(dir, "drill.json");
+  writeFileSync(file, JSON.stringify((await runRecoveryPreflightDemo()).bundle));
+  assert.throws(
+    () => verifyRecoveryFiles([file, file], {
+      trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: true, now: "x",
+    }),
+    (error) => error.code === "VERIFICATION_TIME_INVALID",
+  );
+  assert.throws(
+    () => verifyRecoveryFiles([join(dir, "missing.json")], {
+      trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: true, now: "2035-01-01",
+    }),
+    (error) => error.code === "VERIFICATION_TIME_INVALID",
+  );
+});

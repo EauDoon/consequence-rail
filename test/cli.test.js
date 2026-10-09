@@ -301,3 +301,102 @@ test("new CLI workflows exercise verified review, comparison, batch, catalog and
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+import { DEMO_FAULTS } from "../src/demo.js";
+import { INVENTORY_DEMO_FAULTS, runInventoryDemo } from "../src/inventory-demo.js";
+
+async function findDashDigestBundle() {
+  for (const [run, faults] of [[runRefundDemo, DEMO_FAULTS], [runInventoryDemo, INVENTORY_DEMO_FAULTS]]) {
+    for (const fault of faults) {
+      const { bundle } = await run({ fault });
+      if (bundle && digest(bundle).startsWith("-")) return bundle;
+    }
+  }
+  return null;
+}
+
+test("crctl pins a dash-leading digest as the next argument or with --name=value", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-dash-pin-"));
+  try {
+    const { bundle } = await runRefundDemo();
+    const file = join(dir, "audit.json");
+    writeFileSync(file, JSON.stringify(bundle));
+    const absent = runCli("crctl.js", ["bundle", "verify", file, "--expect-digest", `-${"A".repeat(42)}`]);
+    assert.equal(absent.status, 1);
+    assert.equal(stderrJson(absent).code, "DIGEST_PIN_MISMATCH");
+    const equalsForm = runCli("crctl.js", ["bundle", "verify", file, `--expect-digest=${digest(bundle)}`, "--json"]);
+    assert.equal(equalsForm.status, 0);
+    assert.equal(JSON.parse(equalsForm.stdout).bundle_digest, digest(bundle));
+
+    const dashBundle = await findDashDigestBundle();
+    assert.ok(
+      dashBundle,
+      "No refund or inventory demo bundle has a dash-leading digest; demo bytes changed, so pick another dash-leading fixture.",
+    );
+    const dashFile = join(dir, "dash.json");
+    writeFileSync(dashFile, JSON.stringify(dashBundle));
+    const pin = digest(dashBundle);
+    for (const args of [["--expect-digest", pin], [`--expect-digest=${pin}`]]) {
+      const result = runCli("crctl.js", ["bundle", "verify", dashFile, ...args, "--json"]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).bundle_digest, pin);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("crctl help lists inventory demo faults and the --name=value form", () => {
+  const result = runCli("crctl.js", ["--help"]);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /Inventory demo faults:/);
+  for (const fault of INVENTORY_DEMO_FAULTS) {
+    assert.ok(result.stdout.includes(fault), `help omits inventory fault ${fault}`);
+  }
+  assert.match(result.stdout, /--name=value/);
+});
+
+test("rail accepts only plain decimal ports and its help ends cleanly", () => {
+  for (const value of ["0x1F90", "1e3", " 8080", "8080.0", "+80", "65536", "08080", ""]) {
+    const result = runCli("rail.js", ["--port", value]);
+    assert.equal(result.status, 1, `--port ${JSON.stringify(value)}`);
+    assert.equal(stderrJson(result).code, "USAGE_INVALID", `--port ${JSON.stringify(value)}`);
+    assert.doesNotMatch(result.stdout, /listening/);
+  }
+  const env = runCli("rail.js", [], { env: { CONSEQUENCE_RAIL_PORT: "0x1F90" } });
+  assert.equal(env.status, 1);
+  assert.deepEqual(stderrJson(env), {
+    code: "USAGE_INVALID",
+    message: "CONSEQUENCE_RAIL_PORT must be an integer between 0 and 65535.",
+  });
+  const help = runCli("rail.js", ["--help"]);
+  assert.ok(help.stdout.endsWith("  1  invalid usage, or the port could not be bound\n"));
+});
+
+test("crctl reports a malformed --at as usage before reading any artifact", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-at-"));
+  try {
+    const { bundle } = await runRecoveryPreflightDemo();
+    const drill = join(dir, "drill.json");
+    writeFileSync(drill, JSON.stringify(bundle));
+    const settlement = join(dir, "settlement.json");
+    writeFileSync(settlement, JSON.stringify((await runRefundDemo()).bundle));
+    for (const args of [
+      ["recovery-preflight", "verify", drill],
+      ["recovery-preflight", "review", drill],
+      ["recovery-preflight", "compare", drill, drill],
+      ["recovery-preflight", "link", settlement, drill],
+      ["recovery-preflight", "verify-many", drill, drill],
+    ]) {
+      for (const at of [["--at", "2035-01-01"], ["--at=yesterday"]]) {
+        const result = runCli("crctl.js", [...args, ...at, "--json"]);
+        assert.equal(result.status, 1, args.join(" "));
+        assert.equal(result.stdout, "", args.join(" "));
+        assert.deepEqual(stderrJson(result), {
+          code: "USAGE_INVALID",
+          message: "--at must be an exact ISO UTC timestamp, for example 2035-01-01T00:00:00.000Z. Run with --help.",
+        });
+      }
+    }
+    const current = runCli("crctl.js", ["recovery-preflight", "verify-many", drill, "--at", bundle.drill_attestation.drilled_at]);
+    assert.equal(current.status, 0, current.stderr);
+    assert.equal(JSON.parse(current.stdout).passed, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

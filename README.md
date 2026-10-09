@@ -15,7 +15,7 @@ been reserved for that exact action. It then verifies the configured
 postcondition and closes the action with a signed technical outcome:
 `settled`, `compensated`, or `disputed`.
 
-> Experimental v0.2 reference implementation. It does not provide insurance,
+> Experimental reference implementation. It does not provide insurance,
 > legal compliance, guaranteed recovery, or proof that an evidence source is
 > truthful.
 
@@ -32,7 +32,8 @@ applies: **no current, trusted, coverage-matched recovery drill, no permit.**
 ## Try the failure path first
 
 Requirements: Node.js 20 or newer. The project has no third-party runtime
-dependencies.
+dependencies. `node ./cmd/crctl.js --version` and `node ./cmd/rail.js --version`
+print the implementation version; include it in bug reports.
 
 ```text
 node ./cmd/crctl.js --help
@@ -44,10 +45,12 @@ Expected result:
 ```text
 scenario: synthetic-refund
 fault: duplicate
+action: act_x4ZgajdJZH1SM33KmKCU
 assurance: enforced
 state: CLOSED
 outcome: compensated
 execution_calls: 1
+status_calls: 0
 remedy_calls: 1
 active_refunds: 1
 bundle_verification: pass
@@ -360,7 +363,7 @@ Read:
 
 ## Project status
 
-This checkout contains the experimental v0.2.20 source release. It is a
+This checkout contains the experimental v0.3.0 source release. It is a
 reference implementation, not a production deployment or hosted service.
 The public release status and maintenance boundaries are recorded in
 [`docs/release-status.md`](docs/release-status.md).
@@ -400,10 +403,10 @@ Run `node ./cmd/crctl.js demo matrix --json` to exercise all 31 catalog cases, o
 
 ## Check recovery freshness explicitly
 
-Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2035-01-01T00:00:00.000Z --json` for the deterministic demo, or supply your intended verification instant for another artifact. The timestamp must be an ISO UTC timestamp supported by the protocol. Verification requires drill time at or before that instant and expiry strictly after it. Without `--at`, the result explicitly reports that freshness was not checked. No verification command changes a live qualification or issues a permit.
+Use `node ./cmd/crctl.js recovery-preflight verify drill.json --at 2035-01-01T00:00:00.000Z --json` for the deterministic demo, or supply your intended verification instant for another artifact. The timestamp must be an exact ISO UTC timestamp such as `2035-01-01T00:00:00.000Z`; any other spelling is rejected as `USAGE_INVALID` before an artifact is read, and the library reports `VERIFICATION_TIME_INVALID`. Verification requires drill time at or before that instant and expiry strictly after it. Without `--at`, the result explicitly reports that freshness was not checked. No verification command changes a live qualification or issues a permit.
 
 ## Pin the artifact under review
 
-Settlement and recovery verification accept `--expect-digest` with an independently recorded SHA-256 base64url canonical bundle digest. A mismatch fails before signature acceptance. JSON verification output includes `bundle_digest` for reproducible recording. Object key order and insignificant whitespace do not change this digest; changed data does. A digest pin detects artifact substitution but does not establish signer trust.
+Settlement and recovery verification accept `--expect-digest` with an independently recorded SHA-256 base64url canonical bundle digest. A mismatch fails before signature acceptance. JSON verification output includes `bundle_digest` for reproducible recording. Object key order and insignificant whitespace do not change this digest; changed data does. A digest pin detects artifact substitution but does not establish signer trust. A digest that begins with `-` can be passed as the next argument or in the `--expect-digest=<digest>` form, which every value flag accepts.
 
 Offline artifact JSON also rejects repeated object members, including names written with equivalent Unicode escapes. This prevents different parsers from interpreting the same uploaded bytes differently. Batch output includes the local input filenames supplied by the caller; remove those filenames before sharing a report if they contain private directory information.

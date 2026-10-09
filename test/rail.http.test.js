@@ -181,6 +181,37 @@ test("HTTP sidecar completes the synthetic action lifecycle", async (context) =>
   assert.equal(typeof verified.trusted_connector_key_id, "string");
 });
 
+test("HTTP sidecar closes disputed when evidence omits a postcondition fact", async (context) => {
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const proposal = buildRefundProposal(runtime.clock);
+  proposal.postcondition.clauses.push({ path: "no_such_fact", op: "eq", value: 1 });
+
+  const proposed = await postJson(`${base}/v0/actions`, proposal, 201);
+  await postJson(`${base}/v0/actions/${proposed.action_id}/authorize`, {
+    allow: true,
+    policy_id: "demo-policy/v1",
+    policy_digest: digest({ allow: true }),
+  });
+  await postJson(
+    `${base}/v0/actions/${proposed.action_id}/recourse`,
+    buildRefundReservation(proposed.action_digest, proposal, runtime.clock),
+  );
+  await postJson(`${base}/v0/actions/${proposed.action_id}/permit`, {});
+  await postJson(`${base}/v0/actions/${proposed.action_id}/execute`, {});
+  const closed = await postJson(
+    `${base}/v0/actions/${proposed.action_id}/verify-outcome`,
+    {},
+  );
+  assert.equal(closed.state, "CLOSED");
+  assert.equal(closed.outcome, "disputed");
+  assert.equal(runtime.connector.remedyCalls, 0);
+});
+
 test("HTTP sidecar rejects unsafe requests before state mutation", async (context) => {
   const runtime = createDemoRuntime();
   const server = createReferenceServer({ runtime });
@@ -558,6 +589,71 @@ test("OpenAPI declares every boundary status the reference server can return", a
     );
   }
   assert.equal(runtime.rail.actions.size, 0, "a rejected request mutated rail state");
+});
+
+test("OpenAPI declares the 422 each action operation can return", async (context) => {
+  const openapi = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "api", "openapi.json"), "utf8"),
+  );
+  const declared = (route, status) =>
+    Object.hasOwn(openapi.paths[route].post.responses, String(status));
+  const start = async (options) => {
+    const runtime = createDemoRuntime(options);
+    const server = createReferenceServer({ runtime });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    context.after(() => server.close());
+    return { runtime, base: `http://127.0.0.1:${server.address().port}` };
+  };
+  const post = (url, body) => fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const decision = { allow: true, policy_id: "demo-policy/v1", policy_digest: digest({ allow: true }) };
+  const observed = [];
+  const expect422 = async (operation, response, code = "SCHEMA_INVALID") => {
+    const route = `/v0/actions/{action_id}/${operation}`;
+    assert.equal(response.status, 422, route);
+    assert.equal((await response.json()).code, code, route);
+    observed.push(route);
+    assert.ok(declared(route, 422), `POST ${route} returned undeclared 422`);
+  };
+
+  const plain = await start();
+  const proposal = buildRefundProposal(plain.runtime.clock);
+  const proposed = await postJson(`${plain.base}/v0/actions`, proposal, 201);
+  const action = `${plain.base}/v0/actions/${proposed.action_id}`;
+  await expect422("authorize", await post(`${action}/authorize`, { ...decision, extra: true }));
+  await postJson(`${action}/authorize`, decision);
+  await postJson(
+    `${action}/recourse`,
+    buildRefundReservation(proposed.action_digest, proposal, plain.runtime.clock),
+  );
+  await postJson(`${action}/permit`, {});
+  await expect422("execute", await post(`${action}/execute`, { proposalOverride: {} }));
+  assert.equal(plain.runtime.rail.get(proposed.action_id).state, "PERMITTED");
+  assert.equal(plain.runtime.connector.executeCalls, 0);
+  await expect422("verify-outcome", await post(`${action}/verify-outcome`, { fault: "nope" }));
+  await expect422("remediate", await post(`${action}/remediate`, { fault: "nope" }));
+  await expect422("reconcile-remedy", await post(`${action}/reconcile-remedy`, { evidenceFault: "nope" }));
+  assert.equal(plain.runtime.rail.get(proposed.action_id).state, "PERMITTED");
+
+  const gated = await start({ requireRecoveryPreflight: true });
+  const gatedProposal = buildRefundProposal(gated.runtime.clock);
+  const gatedAction = await postJson(`${gated.base}/v0/actions`, gatedProposal, 201);
+  const gatedBase = `${gated.base}/v0/actions/${gatedAction.action_id}`;
+  await postJson(`${gatedBase}/authorize`, decision);
+  await postJson(
+    `${gatedBase}/recourse`,
+    buildRefundReservation(gatedAction.action_digest, gatedProposal, gated.runtime.clock),
+  );
+  await expect422("permit", await post(`${gatedBase}/permit`, {}), "RECOVERY_PREFLIGHT_REQUIRED");
+  assert.equal(gated.runtime.rail.get(gatedAction.action_id).state, "RECOURSE_RESERVED");
+
+  assert.deepEqual(new Set(observed), new Set([
+    "authorize", "execute", "verify-outcome", "remediate", "reconcile-remedy", "permit",
+  ].map((operation) => `/v0/actions/{action_id}/${operation}`)));
 });
 
 test("HTTP sidecar still answers a valid proposal on the same route", async (context) => {

@@ -1,6 +1,6 @@
 # Release status
 
-Current public state: experimental v0.2.20 source release with Recovery
+Current public state: experimental v0.3.0 source release with Recovery
 Preflight and synthetic refund and inventory connectors. The source version is
 recorded in `package.json`; the source repository remains the release channel.
 
@@ -58,3 +58,13 @@ implementation directly from a reviewed source checkout.
 
 Every change to `main` must pass the repository integrity check and the
 deterministic test suite on each supported Node.js release line.
+
+- `package.json` is the single source of the implementation version. The
+  OpenAPI `info.version`, this page, the README and the top released
+  `CHANGELOG.md` heading must agree with it; `scripts/check.js` enforces that.
+- A release is an annotated `vX.Y.Z` tag on a commit on `main`.
+- Pushing the tag runs `.github/workflows/release.yml`. It reruns the
+  integrity check (which then also requires the tag to equal `v` plus the
+  package version) and the test suite on every supported platform, then
+  publishes a GitHub Release whose notes are that version's `CHANGELOG.md`
+  section. A tag that is not on `main` is not published.

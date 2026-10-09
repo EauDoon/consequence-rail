@@ -26,5 +26,5 @@ What actually happened.
 - OS:
 - Node version:
 - Browser (if applicable):
-- Package version:
+- Output of `node ./cmd/crctl.js --version`:
 - Any other relevant context:

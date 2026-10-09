@@ -3,13 +3,15 @@
 import { createSidecarClock, SIDECAR_CLOCKS } from "../src/clock.js";
 import { createDemoRuntime } from "../src/demo.js";
 import { createReferenceServer } from "../src/http-server.js";
+import { VERSION } from "../src/version.js";
 
 function printHelp() {
-  process.stdout.write(`Consequence Rail reference sidecar
+  process.stdout.write(`Consequence Rail reference sidecar ${VERSION}
 
 Usage:
   rail [--port <number>] [--clock <system|demo>]
   rail --help
+  rail --version
 
 Options:
   --port <number>         Loopback TCP port (default 8787, or CONSEQUENCE_RAIL_PORT).
@@ -17,13 +19,14 @@ Options:
   --clock <system|demo>   Time source (default system, or CONSEQUENCE_RAIL_CLOCK).
                           system uses the host clock; demo freezes 2035-01-01T00:00:00.000Z.
   -h, --help              Show this help
+  --version               Print the implementation version
 
 The sidecar listens on 127.0.0.1 only and is not an authenticated boundary.
 
 Exit status:
   0  the sidecar is bound to a loopback port
   1  invalid usage, or the port could not be bound
-'`);
+`);
 }
 
 function fail(code, message) {
@@ -45,8 +48,12 @@ function envValue(env, name) {
   return value;
 }
 
+// Plain decimal digits only: Number() would also accept hex, exponent,
+// padded, signed and fractional spellings such as 0x1F90, 1e3 or 8080.0.
+const PORT_PATTERN = /^(0|[1-9][0-9]{0,4})$/;
+
 function parsePort(value, label) {
-  const parsed = Number(value);
+  const parsed = PORT_PATTERN.test(value) ? Number(value) : Number.NaN;
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
     throw usageError(`${label} must be an integer between 0 and 65535.`);
   }
@@ -63,6 +70,9 @@ function parseClock(value, label) {
 function parseArgs(args, env = process.env) {
   if (args.includes("--help") || args.includes("-h")) {
     return { help: true };
+  }
+  if (args.includes("--version")) {
+    return { version: true };
   }
 
   let port;
@@ -114,6 +124,8 @@ try {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.help) {
     printHelp();
+  } else if (parsed.version) {
+    process.stdout.write(`consequence-rail ${VERSION}\n`);
   } else {
     const server = createReferenceServer({
       runtime: createDemoRuntime({ clock: createSidecarClock(parsed.clock) }),

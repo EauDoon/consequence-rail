@@ -1,9 +1,16 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { versionFindings } from "./release-metadata.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const excluded = new Set([".git", "node_modules", "coverage", ".consequence-rail"]);
+const excluded = new Set([
+  ".git",
+  "node_modules",
+  "coverage",
+  ".consequence-rail",
+  ".consequence-rail-evidence",
+]);
 const required = [
   "README.md",
   "SECURITY.md",
@@ -206,11 +213,30 @@ if (
   findings.push("the reference implementation must remain dependency-free");
 }
 
+// Every derived copy of the version must agree with package.json. In a tag
+// build, GitHub Actions sets GITHUB_REF_TYPE=tag and the tag must match too.
+const readText = (item) => (existsSync(join(root, item)) ? readFileSync(join(root, item), "utf8") : "");
+let openapiVersion = null;
+try {
+  openapiVersion = JSON.parse(readText("api/openapi.json")).info?.version ?? null;
+} catch {
+  // Invalid JSON is already reported by the file scan above.
+}
+const versionProblems = versionFindings({
+  packageVersion: packageJson.version,
+  openapiVersion,
+  readme: readText("README.md"),
+  releaseStatus: readText("docs/release-status.md"),
+  changelog: readText("CHANGELOG.md"),
+  tag: process.env.GITHUB_REF_TYPE === "tag" ? process.env.GITHUB_REF_NAME ?? "" : null,
+});
+findings.push(...versionProblems.map((item) => `version consistency: ${item}`));
+
 if (findings.length > 0) {
   process.stderr.write(`${findings.map((item) => `FAIL ${item}`).join("\n")}\n`);
   process.exitCode = 1;
 } else {
   process.stdout.write(
-    `repository_check: pass\nfiles_checked: ${files.length}\njson_valid: true\nrelative_links: pass\npublic_prose: pass\n`,
+    `repository_check: pass\nfiles_checked: ${files.length}\njson_valid: true\nrelative_links: pass\npublic_prose: pass\nversion_consistency: pass\n`,
   );
 }

@@ -108,6 +108,15 @@ A confirmed no-effect `FAILED` state releases reserved recourse. An expired
 or revoked permit path also finalizes the reservation without executing the
 connector.
 
+## Outcome verification
+
+From `VERIFYING`, accepted evidence that satisfies the configured postcondition
+transitions to `SATISFIED`, and accepted evidence that does not transitions to
+`BREACHED`. Evidence that is unavailable, stale, bound elsewhere, missing a
+fact named by a postcondition clause, or too large to sign within the
+canonical JSON limits once evaluated is invalid evidence. It transitions to
+`INCONCLUSIVE`, then closes as `disputed`, and no remedy starts.
+
 ## Remediation
 
 The rail may automatically invoke only the exact remedy reserved before
@@ -128,6 +137,12 @@ action can only leave `REVIEW_REQUIRED` by closing as `disputed`.
 An unanticipated or irreversible remedy becomes a new child action with its
 own proposal, authorization, reservation and permit.
 
+An `escalate` reservation never starts an automatic remedy. When an action
+with an `escalate` reservation is breached, the rail MUST take
+`REMEDY_DUE -> REVIEW_REQUIRED` with reason `REMEDY_REQUIRES_CHILD_ACTION` and
+close as `disputed`. It does not release the reservation, so the receipt
+records the recourse as still `active` for the operator's child action.
+
 ## Ambiguous remediation
 
 A remedy timeout has the same uncertainty problem as an action timeout. The
@@ -142,7 +157,9 @@ idempotency key:
 
 Fresh post-remedy evidence is still required after a confirmed effect. Stale,
 invalid or unsatisfied evidence transitions to `REMEDY_INCONCLUSIVE`, then
-closes as `disputed`.
+closes as `disputed`. Post-remedy evidence that omits a clause's fact, or that
+cannot be signed within the canonical JSON limits once evaluated, is invalid
+evidence.
 
 When a disputed outcome leaves the external effect unresolved, active recourse
 may remain reserved until its connector deadline. The receipt records that

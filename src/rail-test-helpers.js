@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { createConnection } from "node:net";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ManualClock } from "../src/clock.js";
 import { buildRefundProposal } from "../src/demo.js";
 import { MemoryEventStore } from "../src/event-store.js";
@@ -14,6 +15,13 @@ import { MockRefundConnector } from "../src/mock-refund-connector.js";
 import { ConsequenceRail } from "../src/rail.js";
 import { createDemoSigner, demoRecoveryTrustedKeys, signArtifact } from "../src/signing.js";
 import { digest } from "../src/canonical.js";
+
+// Resolve a repository file from this module's location so tests pass from
+// any working directory. import.meta.dirname is avoided because early Node 20
+// releases do not provide it.
+export function repoPath(...segments) {
+  return join(fileURLToPath(new URL("..", import.meta.url)), ...segments);
+}
 
 export function createRuntimeWithEventStore(createEventStore, options = {}) {
   const clock = new ManualClock();
@@ -145,7 +153,7 @@ export function rawHttpRequest({ port, path, method, headers, body }) {
 }
 
 export function assertRequiredFields(schemaPath, artifact) {
-  const schema = JSON.parse(readFileSync(join(process.cwd(), schemaPath), "utf8"));
+  const schema = JSON.parse(readFileSync(repoPath(schemaPath), "utf8"));
   for (const field of schema.required ?? []) {
     assert.equal(
       Object.hasOwn(artifact, field),

@@ -1,15 +1,111 @@
 # Changelog
 
-## Unreleased
+All notable changes to this project are documented in this file. The format
+is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
+and the package follows [Semantic Versioning](https://semver.org/). While the
+version is below 1.0.0, a minor release may change observable behavior.
 
-- Refund currency must be a string at both live proposal admission and offline
-  bundle-shape validation. A one-element array can no longer pass through regular
-  expression coercion. Existing string currencies and artifact bytes are unchanged.
+Protocol identifiers, such as the `schema_version` strings of the artifacts
+and the capability document's `protocol_version`, are versioned independently
+of the package version below.
+
+## [Unreleased]
+
+## [0.3.0] - 2026-10-09
+
+This release changes observable behavior, so the minor version moves. There is
+no `schema_version`, signature or canonical-byte change for artifacts this
+repository produces, and the pinned default artifact hashes are unchanged.
+
+### Added
+
+- `crctl --version` and `rail --version` print `consequence-rail <version>`, and
+  both help headers show the version. The version is read from `package.json`.
+- `GET /.well-known/consequence-rail` reports `implementation_version`, declared
+  in OpenAPI. `protocol_version` stays `v0.1`.
+- Every crctl value flag accepts the `--name=value` form, and `--expect-digest`
+  and `--expect-other-digest` accept a digest that begins with `-`.
+- `scripts/check.js` gates version consistency across `package.json`, the
+  OpenAPI `info.version`, README, `docs/release-status.md`, the top released
+  CHANGELOG heading and, in tag builds, the tag.
+- `scripts/release-notes.js` prints one release's CHANGELOG section, and
+  `.github/workflows/release.yml` verifies a pushed `vX.Y.Z` tag on every
+  supported platform and publishes a GitHub Release from that section.
+- Dependabot updates for GitHub Actions and CodeQL analysis of the JavaScript
+  sources and workflows.
+- A test that runs the README's expected-output examples against real crctl
+  output.
 - Portable proposal vectors cover types and closed fields in both proposal
   versions, with an HTTP refusal regression. Release and parser-boundary documents
   now describe the current source version, connectors, and duplicate-key handling.
+- Proposal vectors gain an optional live-boundary `code` field and `eq` value
+  rows.
 
-## Early refusals close a declared unread body (28-09-2026)
+### Changed
+
+- An `eq` postcondition value must be a string, finite number, boolean or
+  `null`. Arrays and objects, which strict equality can never match, are refused
+  with `POSTCONDITION_INVALID` at admission (HTTP 400) and `BUNDLE_TAMPERED`
+  offline, for both proposal versions.
+- A breach under an `escalate` reservation now closes `disputed` through
+  `REVIEW_REQUIRED` with reason `REMEDY_REQUIRES_CHILD_ACTION`, instead of
+  throwing from `remediate()` and waiting in `REMEDY_DUE` until the reservation
+  expired. HTTP `remediate` returns 200. The reservation stays `active` for the
+  operator's child action.
+- Integrity verification binds the receipt outcome and
+  `configured_postcondition_result` to the terminal `CLOSED` event for every
+  bundle profile, and binds a receipt-profile receipt's `closed_at` to that
+  event's recorded time: no earlier, and at most 1000 ms later. The window
+  keeps receipts from 0.2.20 and earlier verifying: they took `closed_at` from
+  a second clock read, so under the sidecar's system clock it can trail the
+  event by a millisecond or more. A contradicting receipt is
+  `BUNDLE_TAMPERED`. Audit bundles keep the exact `SEMANTIC_INVALID` close-time
+  check.
+- A malformed `--at` is `USAGE_INVALID` before any artifact is read. The library
+  reports `VERIFICATION_TIME_INVALID`, and `verifyRecoveryFiles` fails once
+  instead of marking every drill invalid.
+- HTTP `execute` accepts only `fault`. The library-only `proposalOverride` is
+  refused with `SCHEMA_INVALID` (422) before the rail is called.
+- `rail` accepts only plain decimal ports for `--port` and
+  `CONSEQUENCE_RAIL_PORT`, so hex, exponent, padded, signed, fractional and empty
+  values are refused.
+- OpenAPI declares 422 for authorize, permit, verify-outcome, remediate and
+  reconcile-remedy, and its `info.version` follows the package version.
+- crctl help lists the inventory demo faults.
+- CHANGELOG follows Keep a Changelog, with a version heading for every release
+  since 0.1.0.
+
+### Fixed
+
+- Evidence that omits a postcondition fact (`EVIDENCE_FACT_MISSING`), or that is
+  too large to sign once evaluated (`EVIDENCE_UNREPRESENTABLE`), closes
+  `disputed` instead of stranding the action in `VERIFYING` or
+  `REMEDY_VERIFYING` with no receipt. Offline semantic verification reports
+  such evidence as `SEMANTIC_INVALID`.
+- crctl no longer refuses a digest pin that begins with `-`, which about 1
+  digest in 64 does.
+- `rail --help` no longer ends with a stray quote and no final newline.
+- The test suite passes from any working directory.
+- SECURITY.md and `docs/architecture.md` no longer contradict the code on
+  duplicate JSON members, the synthetic connectors and unknown final recourse.
+  The pull request template no longer carries issue-template front matter, and
+  the recovery walkthrough output directory is ignored and excluded from the
+  integrity scan.
+- Refund currency must be a string at both live proposal admission and offline
+  bundle-shape validation. A one-element array can no longer pass through regular
+  expression coercion. Existing string currencies and artifact bytes are unchanged.
+- A settlement receipt's `closed_at` is now the `recorded_at` of the terminal
+  `CLOSED` event instead of a second clock read, so the two always agree even
+  when the clock advances while the receipt is built.
+
+### Security
+
+- Evidence evaluation fails closed: evidence the rail cannot evaluate or sign
+  closes the action `disputed` and never starts a remedy.
+
+## [0.2.20] - 2026-09-28
+
+### Early refusals close a declared unread body (28-09-2026)
 
 - A request that declares a body and is refused before that body is read now
   gets the response and then a socket close. That includes method-not-allowed,
@@ -21,7 +117,9 @@
 - A body that is fully read still leaves the socket reusable. No schema,
   signature, or canonical-byte change.
 
-## Insufficient inventory is a confirmed failure (28-09-2026)
+## [0.2.19] - 2026-09-28
+
+### Insufficient inventory is a confirmed failure (28-09-2026)
 
 - When the inventory connector refuses an allocation before creating one, the
   rail now records `FAILED`, releases the reservation, and rethrows
@@ -33,7 +131,9 @@
   raised it before an effect. A lost response remains ambiguous. No schema,
   signature, or canonical-byte change.
 
-## Inventory allocation rejects a non-positive quantity (28-09-2026)
+## [0.2.18] - 2026-09-28
+
+### Inventory allocation rejects a non-positive quantity (28-09-2026)
 
 - `createAllocation` now refuses a quantity that is not a positive safe integer,
   before it changes on-hand stock or records an allocation.
@@ -42,7 +142,9 @@
   `NaN` as the on-hand balance.
 - No schema, signature, or canonical-byte change.
 
-## Refund execution rejects a non-positive amount (28-09-2026)
+## [0.2.17] - 2026-09-28
+
+### Refund execution rejects a non-positive amount (28-09-2026)
 
 - The refund connector now refuses to create a refund unless `amount_minor`
   is a positive safe integer. The refusal happens before any refund is stored.
@@ -52,7 +154,9 @@
 - The measured connector digest changed, and the conformance recovery contract
   pins the new value. No schema, receipt format, or canonical-byte change.
 
-## Recovery contracts bound the attestation age (28-09-2026)
+## [0.2.16] - 2026-09-28
+
+### Recovery contracts bound the attestation age (28-09-2026)
 
 - `max_attestation_age_seconds` must now be a safe integer from 1 through the
   same duration limit as an evidence plan, `floor(Number.MAX_SAFE_INTEGER / 1000)`.
@@ -61,7 +165,9 @@
   count, so the derived attestation expiry was not the age the contract named.
 - No schema, signature, or canonical-byte change.
 
-## Semantic verification binds evidence currency and SKU to the proposal (28-09-2026)
+## [0.2.15] - 2026-09-28
+
+### Semantic verification binds evidence currency and SKU to the proposal (28-09-2026)
 
 - An audit bundle is now `SEMANTIC_INVALID` when refund evidence reports a
   different currency than the proposal, or when allocation evidence reports a
@@ -72,7 +178,9 @@
   allocation of `sku_demo_1` could be settled on another SKU.
 - No schema, signature, or canonical-byte change.
 
-## Semantic verification binds the receipt close time to the terminal event (28-09-2026)
+## [0.2.14] - 2026-09-28
+
+### Semantic verification binds the receipt close time to the terminal event (28-09-2026)
 
 - An audit bundle is now `SEMANTIC_INVALID` when `settlement_receipt.closed_at`
   is not the `recorded_at` of the terminal `CLOSED` event.
@@ -81,7 +189,9 @@
   re-signed receipt could claim the action closed a year later.
 - No schema, signature, or canonical-byte change.
 
-## Semantic verification binds the permit window to the proposal (28-09-2026)
+## [0.2.13] - 2026-09-28
+
+### Semantic verification binds the permit window to the proposal (28-09-2026)
 
 - An audit bundle is now `SEMANTIC_INVALID` when the permit expires at a
   different instant than the proposal, or when the permit was issued before
@@ -93,7 +203,9 @@
 - Execution at `issued_at` remains inside the window, and execution at
   `expires_at` remains outside it. No schema, signature, or canonical-byte change.
 
-## Semantic verification requires the reserved scope to cover the proposal (28-09-2026)
+## [0.2.12] - 2026-09-28
+
+### Semantic verification requires the reserved scope to cover the proposal (28-09-2026)
 
 - An audit bundle whose reservation or connector commitment is scoped below
   the proposed refund amount or allocation quantity is now `SEMANTIC_INVALID`.
@@ -102,7 +214,9 @@
   a re-signed bundle could settle a 12000 refund under a scope of 1.
 - No schema, signature, or canonical-byte change.
 
-## HTTP requests reject duplicate JSON members (28-09-2026)
+## [0.2.11] - 2026-09-28
+
+### HTTP requests reject duplicate JSON members (28-09-2026)
 
 - The reference server now parses request bodies with the same duplicate-member
   rejection artifact files already use. A repeated object key, including one
@@ -111,7 +225,9 @@
   the sidecar would admit whichever came last.
 - No schema, signature, or canonical-byte change.
 
-## Early HTTP refusals close the unread body candidate (28-09-2026)
+## [0.2.10] - 2026-09-28
+
+### Early HTTP refusals close the unread body candidate (28-09-2026)
 
 - A request refused before its body is read now gets the response and then
   a socket close. That covers an unsupported content encoding, an invalid
@@ -122,7 +238,9 @@
   the body the sidecar had already rejected.
 - No schema, signature, or canonical-byte change.
 
-## Recovery link checks the proposal scope candidate (28-09-2026)
+## [0.2.9] - 2026-09-28
+
+### Recovery link checks the proposal scope candidate (28-09-2026)
 
 - `linkRecovery` now compares a drill's scope with the audit proposal:
   connector, resource type, assurance mode, and the parameter, postcondition,
@@ -134,7 +252,9 @@
 - A receipt profile has no proposal, so those scope fields stay unchecked.
   No schema, signature, or canonical-byte change.
 
-## Execution at permit expiry is outside the window candidate (28-09-2026)
+## [0.2.8] - 2026-09-28
+
+### Execution at permit expiry is outside the window candidate (28-09-2026)
 
 - Semantic verification now rejects an execution whose recorded time is the
   permit's `expires_at`. The rail already treats that instant as expired
@@ -144,7 +264,9 @@
 - Execution at `issued_at` is still accepted. No schema, signature, or
   canonical-byte change.
 
-## Idempotency keys are bound to one action candidate (28-09-2026)
+## [0.2.7] - 2026-09-28
+
+### Idempotency keys are bound to one action candidate (28-09-2026)
 
 - Reusing an execution or remedy idempotency key for a different proposal is
   now `IDEMPOTENCY_CONFLICT`. The same proposal still replays the stored
@@ -158,7 +280,9 @@
   contract pins the new value. No schema, receipt format, or canonical-byte
   change.
 
-## Recovery trace notes must be an array candidate (28-09-2026)
+## [0.2.6] - 2026-09-28
+
+### Recovery trace notes must be an array candidate (28-09-2026)
 
 - `verifyRecoveryPreflight` now rejects a drill trace whose `notes` field is
   not an array of strings, with `RECOVERY_BUNDLE_INVALID`.
@@ -167,7 +291,9 @@
   internal failure instead of a rejected bundle.
 - No schema, signature, or canonical-byte change.
 
-## Refund recourse requires a refund action candidate (28-09-2026)
+## [0.2.5] - 2026-09-28
+
+### Refund recourse requires a refund action candidate (28-09-2026)
 
 - The refund connector now refuses to reserve `void-duplicate-refund` unless
   the proposal action type is `demo.refund.issue/v1` and both the requested
@@ -179,7 +305,9 @@
   contract pins the new value. No schema, receipt format, or canonical-byte
   change.
 
-## Refund remedy stays on its own action candidate (28-09-2026)
+## [0.2.4] - 2026-09-28
+
+### Refund remedy stays on its own action candidate (28-09-2026)
 
 - A refund remedy now voids only an active refund created for that action's
   proposal idempotency key. When the action has a duplicate, the later of
@@ -191,7 +319,9 @@
   conformance recovery contract now pins the new digest. No schema, receipt
   format, or canonical-byte change.
 
-## Inventory remedy consumes its reservation candidate (28-09-2026)
+## [0.2.3] - 2026-09-28
+
+### Inventory remedy consumes its reservation candidate (28-09-2026)
 
 - A successful inventory remedy now marks the connector reservation
   `consumed`, including when the remedy response is lost after the release
@@ -204,7 +334,9 @@
   Settled allocations that never start a remedy still release the reservation.
   No schema or canonical-byte change.
 
-## Receipt profile proposal exclusion candidate (28-09-2026)
+## [0.2.2] - 2026-09-28
+
+### Receipt profile proposal exclusion candidate (28-09-2026)
 
 - `verifyBundle` now rejects a `receipt` profile bundle that carries
   `action.proposal`, with `BUNDLE_TAMPERED`, the same way it already rejects one
@@ -217,7 +349,9 @@
 - Tightening only. No schema, receipt format or CLI flag change, so the version
   goes to 0.2.2.
 
-## Canonical key order candidate (28-09-2026)
+## [0.2.1] - 2026-09-28
+
+### Canonical key order candidate (28-09-2026)
 
 - `canonicalJson` now emits object keys in the UTF-16 code unit order that
   `spec/model.md` documents, instead of handing the sorted copy to
@@ -234,7 +368,7 @@
 - Leaf encoding is still delegated to `JSON.stringify`, so string escaping and
   number formatting are byte-identical. No validation rule is relaxed.
 
-## Irreversible scenario refusal cause candidate (28-09-2026)
+### Irreversible scenario refusal cause candidate (28-09-2026)
 
 - `runIrreversibleDemo` now sends a complete recourse request, so the refusal
   comes from the connector capability gate the scenario describes rather than
@@ -244,14 +378,14 @@
 - The refusal code stays `RECOURSE_INVALID`; the scenario catalogue, matrix and
   `admitted: false` expectation are unchanged. No schema or receipt change.
 
-## State machine spec sync check candidate (28-09-2026)
+### State machine spec sync check candidate (28-09-2026)
 
 - Add a conformance test that parses the fenced transition table in
   `spec/state-machine.md` and requires it to list exactly the transitions in
   `ALLOWED_TRANSITIONS`, with no edge in either direction and no duplicates.
 - Test only. No runtime, schema, receipt or CLI change.
 
-## OpenAPI boundary response coverage candidate (28-09-2026)
+### OpenAPI boundary response coverage candidate (28-09-2026)
 
 - Every operation in `api/openapi.json` now declares the boundary statuses the
   reference server can return before route-specific processing: 400, 403, 413,
@@ -263,7 +397,7 @@
   declared for that route.
 - Documentation and test only. No server, schema or CLI behaviour change.
 
-## Event chain action binding candidate (28-09-2026)
+### Event chain action binding candidate (28-09-2026)
 
 - `verifyEventChain` now requires every event in a chain to carry the same
   `action_id` and reports `BUNDLE_TAMPERED` when it does not.
@@ -272,7 +406,7 @@
 - No schema, receipt format or CLI change. Already-signed v0.1 event chains are
   unaffected because the rail always records one action per chain.
 
-## Action proposal version narrowing enforcement candidate (28-09-2026)
+### Action proposal version narrowing enforcement candidate (28-09-2026)
 
 - The rail and the offline bundle validator now enforce the published
   `ActionProposal.action_type` enum per schema version. Allocation is a
@@ -284,7 +418,7 @@
 - No schema, receipt format or CLI change. Existing v0.1 allocation artifacts are
   unaffected.
 
-## Remedy scope field single source candidate (28-09-2026)
+### Remedy scope field single source candidate (28-09-2026)
 
 - `validateSettlementBundle` and `verifySemantics` now call the existing
   `recourseScopeField` helper instead of repeating its action-type rule, so
@@ -292,7 +426,7 @@
   definition.
 - Internal refactor. No observable behaviour, schema, receipt or CLI change.
 
-## Sidecar bind failure reporting candidate (28-09-2026)
+### Sidecar bind failure reporting candidate (28-09-2026)
 
 - The sidecar now reports a listener that cannot bind through the same
   structured single-line error contract as a usage failure, with exit status 1,
@@ -300,7 +434,7 @@
 - Document the sidecar exit statuses in `rail --help`.
 - No protocol, schema, receipt or verification behaviour changes.
 
-## State machine spec sync candidate (28-09-2026)
+### State machine spec sync candidate (28-09-2026)
 
 - Record the `REMEDY_DUE -> REVIEW_REQUIRED` guard in the normative transition
   table and in the Remediation section of the artifact spec.
@@ -308,7 +442,7 @@
   longer reports the reservation as active, before any remedy invocation.
 - No runtime behaviour, schema, CLI surface or receipt bytes change.
 
-## Recovery evidence snapshot candidate (26-09-2026)
+### Recovery evidence snapshot candidate (26-09-2026)
 
 - Validate the complete recovery bundle's canonical JSON boundary before replay,
   including unsigned hints, hidden fields and aggregate resource limits.
@@ -320,7 +454,7 @@
 - Preserve signed artifact bytes, v0.1/v0.2 schemas, receipt/audit profiles and
   separately configured trust anchors. No live connectors are added.
 
-## Offline review triage candidate (11-09-2026)
+### Offline review triage candidate (11-09-2026)
 
 - Distinguish verified artifact integrity from settlement attention reasons.
 - Locate failed evidence clauses by index without disclosing paths or values.
@@ -336,7 +470,7 @@
   demonstration-key trust boundaries. Recovery batch CLI now returns exit 1 for
   differing signed attestations for the same action, even when both verify.
 
-## Offline review workflow candidate (10-09-2026)
+### Offline review workflow candidate (10-09-2026)
 
 - Project verified audit bundles into the existing receipt profile without raw
   proposal/evidence disclosure or changes to signed artifacts.
@@ -349,7 +483,7 @@
 - Preserve protocol versions, runtime gates, zero dependencies and synthetic-only
   examples. No production trust, admission or recovery guarantee is added.
 
-## Unreleased corrective candidate
+### Unreleased corrective candidate
 
 - Added verified metadata review, independently verified bundle comparison, bounded
   batch audit verification, and canonical digest pins for offline artifact review.
@@ -381,7 +515,8 @@
 
 - New bounded synthetic inventory-allocation domain (`demo.inventory.allocate/v1`): a synthetic order allocation of a declared SKU quantity with a pre-reserved remedy that reverses only the allocation bound to the action. Inventory never goes negative, an allocation is never restored twice, another order's allocation is never released, and unknown outcomes reconcile instead of retrying. Available as `crctl demo inventory` and `runInventoryDemo`.
 - The remedy scope field is now domain-specific: `max_quantity` for inventory allocations, `max_amount_minor` for refunds and email. Bundle validation, semantic verification, and the published schemas require exactly the scope field matching the action type, so no domain can pass as another.
-## Version 0.2.0 - 27 July 2026
+
+## [0.2.0] - 2026-07-27
 
 - Added Recovery Preflight contracts, trace-bound signed drill attestations
   and replayable drill bundles.
@@ -414,7 +549,7 @@
 
 Public source release on 27 July 2026.
 
-## Version 0.1.0
+## [0.1.0] - 2026-07-23
 
 - Defined five versioned protocol artifacts and a technical settlement bundle.
 - Implemented action-digest binding and signed single-use permits.
@@ -433,3 +568,28 @@ Public source release on 27 July 2026.
 - Added synthetic fault demos, JSON Schemas, OpenAPI and conformance tests.
 
 Initial public source release on 23 July 2026.
+
+[Unreleased]: https://github.com/EauDoon/consequence-rail/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/EauDoon/consequence-rail/compare/v0.2.20...v0.3.0
+[0.2.20]: https://github.com/EauDoon/consequence-rail/commit/418a212e8e7dfec8c158e99e0973bb22e3038e0a
+[0.2.19]: https://github.com/EauDoon/consequence-rail/commit/548fb22eece9644f4875ecb12e61fa031234016b
+[0.2.18]: https://github.com/EauDoon/consequence-rail/commit/40ba3c110cfbd41dafe4fec5327de6733e75ec47
+[0.2.17]: https://github.com/EauDoon/consequence-rail/commit/ac1e75174fb34ee11161763d2b4403fbdb02462c
+[0.2.16]: https://github.com/EauDoon/consequence-rail/commit/293a126bca7741245a91e99703a2865099f37e40
+[0.2.15]: https://github.com/EauDoon/consequence-rail/commit/6f5819c6c000e0c6f1eefa8b81ae5f27232bbfb1
+[0.2.14]: https://github.com/EauDoon/consequence-rail/commit/4716c3d899ee0d7e62f533e552a2735a70341378
+[0.2.13]: https://github.com/EauDoon/consequence-rail/commit/0652e77c5f9db7ec99605ab59d7ca695cb267366
+[0.2.12]: https://github.com/EauDoon/consequence-rail/commit/6bfad26b6cd362804254f2705ccd712c1f4320a4
+[0.2.11]: https://github.com/EauDoon/consequence-rail/commit/65c24df13bb0c01dca5bf072eb210ae00c4ee654
+[0.2.10]: https://github.com/EauDoon/consequence-rail/commit/645cbb591d727a58a3a33e63bc9bad47473a4909
+[0.2.9]: https://github.com/EauDoon/consequence-rail/commit/f83597153800b296b66b99480d5399a5e5ef2930
+[0.2.8]: https://github.com/EauDoon/consequence-rail/commit/bb48ec54b0d01a44f2d0e15403504f51ba9ca1a8
+[0.2.7]: https://github.com/EauDoon/consequence-rail/commit/2f8016b9a9d624280b6990a78f63dc1181320326
+[0.2.6]: https://github.com/EauDoon/consequence-rail/commit/98ee3f78252be23b2612e0415a0afc3ad1707468
+[0.2.5]: https://github.com/EauDoon/consequence-rail/commit/2c84fd0335688b1c21a10e0e677fd5f8ae517925
+[0.2.4]: https://github.com/EauDoon/consequence-rail/commit/72a07bd147228b24cf465e8c0341ca77d71a6d62
+[0.2.3]: https://github.com/EauDoon/consequence-rail/commit/2e3febeab1febc2d18ec53d63faceaed899796f0
+[0.2.2]: https://github.com/EauDoon/consequence-rail/commit/e70fcca50bd95862ad10a1a01c45b31f8da5dd1f
+[0.2.1]: https://github.com/EauDoon/consequence-rail/commit/585f46e45f81a4bbd91ca8c341b98e9cd8689b3e
+[0.2.0]: https://github.com/EauDoon/consequence-rail/releases/tag/v0.2.0
+[0.1.0]: https://github.com/EauDoon/consequence-rail/releases/tag/v0.1.0

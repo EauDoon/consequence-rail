@@ -28,6 +28,27 @@ Changes to artifact fields or lifecycle behavior must update the JSON Schemas,
 OpenAPI document, conformance fixtures and relevant documentation in the same
 change.
 
+## Releasing
+
+1. Bump `version` in `package.json`, `info.version` in `api/openapi.json`, and
+   the "experimental vX.Y.Z source release" line in `README.md` and
+   `docs/release-status.md`.
+2. Move the `## [Unreleased]` entries in `CHANGELOG.md` under a new
+   `## [X.Y.Z] - YYYY-MM-DD` heading (UTC merge date), leave an empty
+   `## [Unreleased]`, and update the link references.
+3. Run `npm run check`.
+4. Merge the pull request with a merge commit.
+5. Tag the merge commit and push the tag:
+
+   ```text
+   git tag -a vX.Y.Z -m "Consequence Rail X.Y.Z" <merge commit>
+   git push origin vX.Y.Z
+   ```
+
+The release workflow verifies the tagged tree and publishes the GitHub
+Release from the `CHANGELOG.md` section. `node scripts/release-notes.js vX.Y.Z`
+prints the same notes locally.
+
 ## Public prose
 
 Keep claims technical and reproducible. Do not claim guaranteed recovery,

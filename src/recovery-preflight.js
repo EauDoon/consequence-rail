@@ -553,10 +553,24 @@ export async function runRecoveryPreflight({ contract, adapter, signer, clock })
  * @param {boolean} [options.requireCurrent=false]
  * @returns {RecoveryPreflightVerification}
  */
+/**
+ * Validate a caller-supplied verification instant. A malformed instant is the
+ * caller's input error, so it is reported before any artifact is read rather
+ * than as an invalid bundle.
+ */
+export function assertVerificationTime(now) {
+  return timestamp(
+    now,
+    "Recovery verification timestamp",
+    "VERIFICATION_TIME_INVALID",
+  );
+}
+
 export function verifyRecoveryPreflight(
   bundle,
   { trustedKeys = new Map(), now = null, requireCurrent = false } = {},
 ) {
+  const nowMilliseconds = requireCurrent ? assertVerificationTime(now) : null;
   // Validate the entire JSON boundary, including unsigned hints, before any
   // property reads. Replay must use one detached, bounded evidence snapshot.
   bundle = deepClone(bundle);
@@ -681,11 +695,6 @@ export function verifyRecoveryPreflight(
   );
 
   if (requireCurrent) {
-    const nowMilliseconds = timestamp(
-      now,
-      "Recovery verification timestamp",
-      "RECOVERY_BUNDLE_INVALID",
-    );
     assert(
       nowMilliseconds >= new Date(attestation.drilled_at).getTime() &&
         nowMilliseconds < new Date(attestation.expires_at).getTime(),

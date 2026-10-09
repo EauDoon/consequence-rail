@@ -29,64 +29,8 @@ import { runScenarioMatrix } from "../src/scenario-matrix.js";
 import { digest } from "../src/canonical.js";
 import { reviewRecovery, compareRecovery, linkRecovery } from "../src/recovery-review.js";
 import { settlementMarkdown, recoveryMarkdown } from "../src/review-markdown.js";
-
-const VALUE_FLAGS = {
-  "--fault": "fault",
-  "--assurance": "assurance",
-  "--out": "out",
-  "--at": "at",
-  "--expect-digest": "expect-digest",
-  "--expect-other-digest": "expect-other-digest",
-  "--require-outcome": "require-outcome",
-};
-const BOOL_FLAGS = {
-  "--json": "json",
-  "--markdown": "markdown",
-  "--require-qualified": "require-qualified",
-};
-
-function usage(message) {
-  return new RailError("USAGE_INVALID", `${message} Run with --help.`);
-}
-
-function parseCliArgs(args) {
-  const positional = [];
-  const options = {};
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--") {
-      positional.push(...args.slice(index + 1));
-      break;
-    }
-    if (!arg.startsWith("-")) {
-      positional.push(arg);
-      continue;
-    }
-    const boolName = BOOL_FLAGS[arg];
-    if (boolName) {
-      if (Object.hasOwn(options, boolName)) {
-        throw usage(`Flag ${arg} was supplied more than once.`);
-      }
-      options[boolName] = true;
-      continue;
-    }
-    const valueName = VALUE_FLAGS[arg];
-    if (valueName) {
-      const value = args[index + 1];
-      if (value === undefined || value.startsWith("-")) {
-        throw usage(`${arg} requires a value.`);
-      }
-      if (Object.hasOwn(options, valueName)) {
-        throw usage(`Flag ${arg} was supplied more than once.`);
-      }
-      options[valueName] = value;
-      index += 1;
-      continue;
-    }
-    throw usage(`Unknown flag ${arg}.`);
-  }
-  return { positional, options };
-}
+import { parseCliArgs, usage } from "../src/cli-args.js";
+import { VERSION } from "../src/version.js";
 
 function assertFlags(options, allowed) {
   for (const name of Object.keys(options)) {
@@ -97,7 +41,7 @@ function assertFlags(options, allowed) {
 }
 
 function printHelp() {
-  process.stdout.write(`Consequence Rail CLI
+  process.stdout.write(`Consequence Rail CLI ${VERSION}
 
 Usage:
   crctl demo list [--json]
@@ -120,19 +64,23 @@ Usage:
   crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight verify-many <file>... [--at <ISO timestamp>] [--json]
   crctl --help
+  crctl --version
 
 Refund demo faults:
   ${DEMO_FAULTS.join(", ")}
+
+Inventory demo faults:
+  ${INVENTORY_DEMO_FAULTS.join(", ")}
 
 Recovery-preflight demo faults:
   ${RECOVERY_DEMO_FAULTS.join(", ")}
 
 Assurance modes:
-  ${ASSURANCE_MODES.join(", ")} (refund demo default: enforced)
+  ${ASSURANCE_MODES.join(", ")} (refund and inventory demo default: enforced)
 
 Flags:
   --fault <name>        Synthetic fault to inject
-  --assurance <mode>    Refund demo assurance mode
+  --assurance <mode>    Assurance mode for the refund and inventory demos
   --json                Print machine-readable JSON
   --markdown            Print a readable settlement or recovery review
   --out <file>          Write a demo bundle, receipt projection or review report (must not exist)
@@ -142,6 +90,10 @@ Flags:
   --require-outcome <outcome> Require settled, compensated or disputed (bundle verify/verify-many)
   --require-qualified   Require QUALIFIED_EXACT (recovery verify/verify-many; add --at for freshness)
   -h, --help            Show this help
+  --version             Print the implementation version
+
+  Every value flag also accepts the --name=value form, for example
+  --expect-digest=<digest>. A digest pin may begin with a dash.
 
 Examples:
   All single-artifact review, evidence, timing, timeline and receipt commands
@@ -267,8 +219,18 @@ async function main() {
     printHelp();
     return;
   }
+  if (args.includes("--version")) {
+    process.stdout.write(`consequence-rail ${VERSION}\n`);
+    return;
+  }
 
   const { positional, options } = parseCliArgs(args);
+  if (options.at !== undefined) {
+    const at = Date.parse(options.at);
+    if (!Number.isFinite(at) || new Date(at).toISOString() !== options.at) {
+      throw usage("--at must be an exact ISO UTC timestamp, for example 2035-01-01T00:00:00.000Z.");
+    }
+  }
   if (options["require-outcome"] !== undefined && !["settled", "compensated", "disputed"].includes(options["require-outcome"])) {
     throw usage("Expected outcome must be settled, compensated or disputed.");
   }

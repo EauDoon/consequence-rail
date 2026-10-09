@@ -6,6 +6,7 @@ import { RailError } from "./errors.js";
 import { parseUniqueJson } from "./json-input.js";
 import { demoConnectorTrustedKeys, demoTrustedKeys } from "./signing.js";
 import { verifyBundle } from "./verify.js";
+import { VERSION } from "./version.js";
 
 const MAX_BODY_BYTES = 65_536;
 const MAX_URL_BYTES = 2_048;
@@ -152,6 +153,22 @@ async function readEmptyJson(request) {
   ) {
     throw requestError("REQUEST_INVALID", "This route accepts only an empty JSON object.");
   }
+}
+
+// The library execute() also accepts proposalOverride for the action-mutation
+// demo. ExecutionFaultInput declares only fault, so the sidecar refuses any
+// other field before the rail sees it. Non-object bodies fall through to the
+// rail's own SCHEMA_INVALID check.
+function executeInput(body) {
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const unknown = Object.keys(body).filter((key) => key !== "fault");
+    if (unknown.length > 0) {
+      throw new RailError("SCHEMA_INVALID", "The execute route accepts only fault.", {
+        fields: unknown,
+      });
+    }
+  }
+  return body;
 }
 
 function send(response, status, body, extraHeaders = {}) {
@@ -339,6 +356,7 @@ export function createReferenceServer({
         send(response, 200, {
           protocol_version: "v0.1",
           implementation: "consequence-rail-node-reference",
+          implementation_version: VERSION,
           assurance_modes: ["enforced", "cooperative", "observed"],
           executable_modes: ["enforced", "cooperative"],
           optional_features: ["recovery-preflight/v0.1"],
@@ -435,7 +453,7 @@ export function createReferenceServer({
           return;
         }
         if (operation === "execute") {
-          send(response, 200, await rail.execute(actionId, await readJson(request)));
+          send(response, 200, await rail.execute(actionId, executeInput(await readJson(request))));
           return;
         }
         if (operation === "reconcile") {

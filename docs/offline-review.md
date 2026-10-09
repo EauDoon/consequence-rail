@@ -9,7 +9,12 @@ establish the truth of evidence. Library calls require explicit trusted keys.
 `crctl bundle receipt audit.json --out receipt.json` verifies the source before
 removing its proposal and raw evidence. Signed artifacts and their bindings
 remain unchanged. The output uses the existing receipt profile, whose review
-checks integrity only. This is data minimization, not anonymization: signed
+checks integrity only. Integrity still binds the receipt outcome and
+postcondition result to the bundle's terminal `CLOSED` event, and its close
+time to no earlier than that event and at most 1000 ms after it, so a re-signed
+receipt cannot claim a different settlement than its own event chain. The
+window accepts receipts from 0.2.20 and earlier, whose close time came from a
+second clock read. This is data minimization, not anonymization: signed
 event metadata and connector commitments remain. Existing output files are
 never overwritten. Keep the original audit file for semantic replay.
 Serialized artifacts, including their final newline, must fit the same 1 MiB
@@ -170,3 +175,5 @@ For either comparison or recovery linking, that flag pins the first input;
 `--expect-other-digest` pins the second. A mismatch emits no report and creates
 no receipt output. Both files still receive their normal signature/replay
 verification. Digest pins prevent substitution, not untrusted signer acceptance.
+About 1 digest in 64 begins with `-`; pass it as the next argument or as
+`--expect-digest=<digest>`. Every value flag accepts the `--name=value` form.

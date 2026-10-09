@@ -2,7 +2,7 @@ import { digest } from "./canonical.js";
 import { validateSettlementBundle } from "./bundle-validation.js";
 import { verifyEventChain } from "./event-store.js";
 import { RailError } from "./errors.js";
-import { evaluatePostcondition } from "./postconditions.js";
+import { evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
 import { ALLOWED_TRANSITIONS, recourseScopeField } from "./rail.js";
 import { verifyArtifact } from "./signing.js";
 
@@ -16,6 +16,11 @@ const SETTLEMENT_VERSION_BINDINGS = new Map([
     receipt: "consequence-rail/settlement-receipt/v0.2",
   }],
 ]);
+
+// Largest lag a receipt-profile closed_at may have behind the terminal CLOSED
+// event's recorded_at. Current receipts copy recorded_at exactly; the tolerance
+// exists only for receipts from releases that read the clock a second time.
+const LEGACY_CLOSE_TIME_LAG_MS = 1000;
 
 function integrityAssert(condition, message, details = {}) {
   if (!condition) {
@@ -178,6 +183,32 @@ export function verifyBundle(
       closed?.payload?.to_state === "CLOSED",
     "The event chain does not end in CLOSED.",
   );
+  // The rail signs the terminal CLOSED event with the outcome it settled on.
+  // A receipt that claims a different outcome contradicts the bundle's own
+  // signed history, whichever profile carries it.
+  integrityAssert(
+    closed.payload.reason_code === `SETTLEMENT_${receipt.outcome.toUpperCase()}` &&
+      closed.payload.details_digest === digest({ outcome: receipt.outcome }),
+    "Receipt outcome does not match the terminal CLOSED event.",
+  );
+  integrityAssert(
+    receipt.configured_postcondition_result ===
+      (receipt.outcome === "disputed" ? "unresolved" : "satisfied"),
+    "Receipt postcondition result does not match its outcome.",
+  );
+  if (bundle.profile === "receipt") {
+    // Audit bundles keep this as a semantic check; a receipt-profile bundle
+    // offers integrity only, so the binding is enforced here. Receipts written
+    // by 0.2.20 and earlier took closed_at from a second clock read after the
+    // CLOSED event was appended, so under a system clock it can trail that
+    // event by a millisecond or more. The bound accepts that legacy gap and
+    // still refuses a receipt that moves the close time.
+    const closeLagMs = Date.parse(receipt.closed_at) - Date.parse(closed.recorded_at);
+    integrityAssert(
+      closeLagMs >= 0 && closeLagMs <= LEGACY_CLOSE_TIME_LAG_MS,
+      "Receipt close time does not match the terminal CLOSED event.",
+    );
+  }
 
   const integrity = {
     valid: true,
@@ -589,6 +620,10 @@ function verifyEvidenceSemantics(evidence, proposal, events) {
       "Evidence SKU does not match the proposal.",
     );
   }
+  semanticAssert(
+    missingPostconditionPaths(proposal.postcondition, evidence.facts).length === 0,
+    "Evidence does not report every postcondition fact.",
+  );
   const evidenceDigest = digest(evidence);
   const acceptedEvent = events.find(
     (event) =>

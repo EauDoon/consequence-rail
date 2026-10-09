@@ -12,9 +12,9 @@
 // test/ so the test runner does not pick them up as a test file.
 
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { repoPath } from "../src/rail-test-helpers.js";
 
 const EXPECTED_FOCUS_FILES = [
   "test/rail.canonical.test.js",
@@ -27,7 +27,7 @@ const EXPECTED_FOCUS_FILES = [
 
 test("rail module test suite is split into focused files", () => {
   for (const focusFile of EXPECTED_FOCUS_FILES) {
-    const contents = readFileSync(join(process.cwd(), focusFile), "utf8");
+    const contents = readFileSync(repoPath(focusFile), "utf8");
     assert.match(contents, /import test from "node:test"/);
     assert.ok(/^test\(/m.test(contents));
   }

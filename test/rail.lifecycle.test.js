@@ -975,3 +975,173 @@ test("concurrent execution attempts consume a permit once", async () => {
   const rejected = results.find((item) => item.status === "rejected");
   assert.equal(rejected.reason.code, "PERMIT_USED");
 });
+
+function prepareRefundWithClauses(runtime, extraClauses) {
+  const proposal = buildRefundProposal(runtime.clock);
+  proposal.postcondition.clauses.push(...extraClauses);
+  const proposed = runtime.rail.propose(proposal);
+  runtime.rail.authorize(proposed.action_id, {
+    allow: true,
+    policy_id: "demo-refund-policy/v1",
+    policy_digest: digest({ allow: true }),
+  });
+  runtime.rail.reserveRecourse(
+    proposed.action_id,
+    buildRefundReservation(proposed.action_digest, proposal, runtime.clock),
+  );
+  runtime.rail.issuePermit(proposed.action_id);
+  return proposed.action_id;
+}
+
+function rejectionCodes(runtime, actionId, eventType) {
+  return runtime.rail.eventStore
+    .list(actionId)
+    .filter((event) => event.event_type === eventType)
+    .map((event) => event.payload.code);
+}
+
+test("evidence missing a postcondition fact closes disputed without a remedy", async () => {
+  const runtime = createDemoRuntime();
+  const actionId = prepareRefundWithClauses(runtime, [
+    { path: "no_such_fact", op: "eq", value: 1 },
+  ]);
+  await runtime.rail.execute(actionId);
+
+  const result = await runtime.rail.verifyOutcome(actionId);
+  assert.equal(result.state, "CLOSED");
+  assert.equal(result.outcome, "disputed");
+  assert.deepEqual(rejectionCodes(runtime, actionId, "EVIDENCE_REJECTED"), ["EVIDENCE_FACT_MISSING"]);
+  assert.equal(runtime.connector.remedyCalls, 0);
+  assert.equal(runtime.rail.get(actionId).evidence.length, 0);
+  const verification = verifyBundle(runtime.rail.exportBundle(actionId, { profile: "audit" }), {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+    requireSemantics: true,
+  });
+  assert.equal(verification.outcome, "disputed");
+  assert.equal(verification.semantics.status, "verified");
+});
+
+test("evidence too large to sign once evaluated closes disputed instead of stranding", async () => {
+  const runtime = createDemoRuntime();
+  const actionId = prepareRefundWithClauses(runtime, [
+    { path: "blob", op: "eq", value: 0 },
+    { path: "blob", op: "eq", value: 1 },
+  ]);
+  await runtime.rail.execute(actionId);
+  const observe = runtime.connector.observe.bind(runtime.connector);
+  runtime.connector.observe = async (...args) => {
+    const evidence = await observe(...args);
+    evidence.facts.blob = Array.from({ length: 45_000 }, (_, index) => index);
+    return evidence;
+  };
+
+  const result = await runtime.rail.verifyOutcome(actionId);
+  assert.equal(result.state, "CLOSED");
+  assert.equal(result.outcome, "disputed");
+  assert.deepEqual(rejectionCodes(runtime, actionId, "EVIDENCE_REJECTED"), ["EVIDENCE_UNREPRESENTABLE"]);
+  assert.equal(runtime.connector.remedyCalls, 0);
+  assert.equal(runtime.rail.get(actionId).receipt.outcome, "disputed");
+  await assert.rejects(
+    () => runtime.rail.verifyOutcome(actionId),
+    (error) => error.code === "ILLEGAL_TRANSITION",
+  );
+});
+
+test("post-remedy evidence missing a postcondition fact closes disputed", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  const breached = await runtime.rail.verifyOutcome(actionId);
+  assert.equal(breached.state, "REMEDY_DUE");
+  const observe = runtime.connector.observe.bind(runtime.connector);
+  runtime.connector.observe = async (...args) => {
+    const evidence = await observe(...args);
+    delete evidence.facts.net_refunded_minor;
+    return evidence;
+  };
+
+  const result = await runtime.rail.remediate(actionId);
+  assert.equal(result.state, "CLOSED");
+  assert.equal(result.outcome, "disputed");
+  assert.equal(runtime.connector.remedyCalls, 1);
+  assert.deepEqual(
+    rejectionCodes(runtime, actionId, "REMEDY_EVIDENCE_REJECTED"),
+    ["EVIDENCE_FACT_MISSING"],
+  );
+  const verification = verifyBundle(runtime.rail.exportBundle(actionId, { profile: "audit" }), {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+    requireSemantics: true,
+  });
+  assert.equal(verification.outcome, "disputed");
+});
+
+test("an escalate-only breach closes disputed through review without a remedy", async () => {
+  const runtime = createDemoRuntime();
+  const proposal = buildRefundProposal(runtime.clock);
+  const proposed = runtime.rail.propose(proposal);
+  runtime.rail.authorize(proposed.action_id, {
+    allow: true,
+    policy_id: "demo-refund-policy/v1",
+    policy_digest: digest({ allow: true }),
+  });
+  runtime.rail.reserveRecourse(proposed.action_id, {
+    ...buildRefundReservation(proposed.action_digest, proposal, runtime.clock),
+    kind: "escalate",
+  });
+  runtime.rail.issuePermit(proposed.action_id);
+  const actionId = proposed.action_id;
+  await runtime.rail.execute(actionId, { fault: "duplicate" });
+  const breached = await runtime.rail.verifyOutcome(actionId);
+  assert.equal(breached.state, "REMEDY_DUE");
+
+  const result = await runtime.rail.remediate(actionId);
+  assert.equal(result.state, "CLOSED");
+  assert.equal(result.outcome, "disputed");
+  assert.equal(runtime.connector.remedyCalls, 0);
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.remedy_attempts, 0);
+  assert.equal(record.receipt.recourse_final_status, "active");
+  const review = runtime.rail.eventStore
+    .list(actionId)
+    .find((event) => event.event_type === "STATE_TRANSITION" && event.payload.to_state === "REVIEW_REQUIRED");
+  assert.equal(review.payload.from_state, "REMEDY_DUE");
+  assert.equal(review.payload.reason_code, "REMEDY_REQUIRES_CHILD_ACTION");
+  assert.equal(review.payload.details_digest, digest({ kind: "escalate" }));
+  const verification = verifyBundle(runtime.rail.exportBundle(actionId, { profile: "audit" }), {
+    trustedKeys: demoTrustedKeys(),
+    trustedConnectorKeys: demoConnectorTrustedKeys(),
+    requireSemantics: true,
+  });
+  assert.equal(verification.outcome, "disputed");
+  await assert.rejects(
+    () => runtime.rail.remediate(actionId),
+    (error) => error.code === "ILLEGAL_TRANSITION",
+  );
+});
+
+test("unknown final recourse on the satisfied path refuses a receipt and stays SATISFIED", async () => {
+  const runtime = createDemoRuntime();
+  const { actionId } = prepareRefund(runtime);
+  await runtime.rail.execute(actionId);
+  const recourseStatus = runtime.connector.recourseStatus.bind(runtime.connector);
+  runtime.connector.recourseStatus = (token) => ({ ...recourseStatus(token), status: "unknown" });
+
+  await assert.rejects(
+    () => runtime.rail.verifyOutcome(actionId),
+    (error) => error.code === "RECEIPT_UNSUPPORTED",
+  );
+  const record = runtime.rail.get(actionId);
+  assert.equal(record.state, "SATISFIED");
+  assert.equal(record.receipt, null);
+  const finalized = runtime.rail.eventStore
+    .list(actionId)
+    .filter((event) => event.event_type === "RECOURSE_FINALIZED");
+  assert.equal(finalized.length, 1);
+  assert.equal(finalized[0].payload.status, "unknown");
+  assert.throws(
+    () => runtime.rail.exportBundle(actionId),
+    (error) => error.code === "RECEIPT_NOT_AVAILABLE",
+  );
+});

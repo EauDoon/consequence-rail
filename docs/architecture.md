@@ -65,8 +65,9 @@ Remediate(action, reservation, idempotency_key)
 RemedyStatus(idempotency_key)
 ```
 
-The v0.1 implementation includes only a synthetic refund connector. It does
-not provide an arbitrary URL executor.
+The implementation includes two synthetic connectors: refund and inventory
+allocation. The HTTP sidecar exposes only the refund connector. Neither
+provides an arbitrary URL executor.
 
 ### Evidence source
 
@@ -81,15 +82,23 @@ connector trusted-key sets. Recovery Preflight has a separate verifier and
 explicit recovery trusted-key set.
 
 Integrity verification checks signatures, event order, hash linkage, artifact
-digests, assurance disclosure and the final receipt.
+digests, assurance disclosure and the final receipt. The receipt outcome and
+postcondition result must agree with the terminal `CLOSED` event the rail
+signed. A receipt-profile bundle's close time must be no earlier than that
+event's recorded time and at most 1000 ms later. Current receipts copy the
+recorded time exactly; the window accepts receipts from 0.2.20 and earlier,
+which read the clock a second time after appending the event.
 
 A settlement receipt only represents a determined final recourse state
 (`active`, `expired`, `released`, or `consumed`). When the connector reports
 an `unknown` final recourse status, receipt generation is refused with
-`RECEIPT_UNSUPPORTED` and the action stays `REVIEW_REQUIRED` with its evidence
-preserved, instead of signing a value the receipt schema and verifiers cannot
-represent. A disputed record is therefore authentic without claiming that
-recovery succeeded.
+`RECEIPT_UNSUPPORTED`. The action stays in its pre-close state with its
+evidence preserved, no receipt, and a `RECOURSE_FINALIZED` event recording
+`unknown`, for out-of-band resolution. That state is `REVIEW_REQUIRED` on the
+review path, and otherwise `SATISFIED`, `REMEDIATED`, `INCONCLUSIVE`,
+`REMEDY_INCONCLUSIVE` or `REMEDY_FAILED`. The rail never signs a value the
+receipt schema and verifiers cannot represent. A disputed record is therefore
+authentic without claiming that recovery succeeded.
 
 Full semantic verification requires an `audit` bundle. It also replays legal
 state transitions, validates connector commitment bindings, checks evidence
@@ -136,7 +145,8 @@ reconciliation, outcome verification, and remediation.
   headers
 - rejection of unknown or repeated query parameters before request-body
   processing or route mutation
-- one synthetic connector
+- two synthetic connectors (refund and inventory allocation); the HTTP
+  sidecar exposes only the refund connector
 - one isolated synthetic recovery adapter
 - no external network calls
 

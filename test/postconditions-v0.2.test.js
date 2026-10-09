@@ -14,6 +14,7 @@ import { createReferenceServer } from "../src/http-server.js";
 import { evaluatePostcondition } from "../src/postconditions.js";
 import { demoConnectorTrustedKeys, demoTrustedKeys } from "../src/signing.js";
 import { verifyBundle } from "../src/verify.js";
+import { repoPath } from "../src/rail-test-helpers.js";
 
 const ORDERED_OPERATORS = ["gte", "lte"];
 const PROPOSAL_VERSIONS = [
@@ -79,7 +80,7 @@ function snapshotProposal(proposal) {
 async function createV2AuditBundle() {
   const runtime = createDemoRuntime();
   const proposal = JSON.parse(readFileSync(
-    join(process.cwd(), "conformance", "refund-action-v0.2.json"),
+    repoPath("conformance", "refund-action-v0.2.json"),
     "utf8",
   ));
   const proposed = runtime.rail.propose(proposal);
@@ -212,7 +213,7 @@ test("strict eq behavior remains compatible across proposal versions", () => {
 });
 
 test("v0.1 remains immutable while v0.2 schemas bind bounds and receipt versions", () => {
-  const schemas = join(process.cwd(), "spec", "schemas");
+  const schemas = repoPath("spec", "schemas");
   const v1 = JSON.parse(readFileSync(join(schemas, "action-proposal.schema.json"), "utf8"));
   const v2 = JSON.parse(readFileSync(
     join(schemas, "action-proposal-v0.2.schema.json"),
@@ -230,7 +231,7 @@ test("v0.1 remains immutable while v0.2 schemas bind bounds and receipt versions
     join(schemas, "settlement-receipt-v0.2.schema.json"),
     "utf8",
   ));
-  const openapi = JSON.parse(readFileSync(join(process.cwd(), "api", "openapi.json"), "utf8"));
+  const openapi = JSON.parse(readFileSync(repoPath("api", "openapi.json"), "utf8"));
   const v1Clause = v1.$defs.postcondition.properties.clauses.items;
   const v2Clause = v2.$defs.postcondition.properties.clauses.items;
 
@@ -352,6 +353,46 @@ test("raw JSON overflow thresholds are rejected before action admission", async 
     assert.equal((await response.json()).code, "POSTCONDITION_INVALID");
     assert.equal(runtime.rail.actions.size, 0);
   }
+});
+
+test("compound eq values are refused at evaluation, admission and HTTP", async (context) => {
+  for (const value of [[1], { n: 1 }, [], {}, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => evaluatePostcondition({
+        op: "all",
+        clauses: [{ path: "active_refund_count", op: "eq", value }],
+      }, { facts: { active_refund_count: value } }),
+      (error) => error.code === "POSTCONDITION_INVALID"
+        && error.message === "Postcondition eq values must be a string, finite number, boolean or null.",
+    );
+    for (const version of PROPOSAL_VERSIONS) {
+      const runtime = createDemoRuntime();
+      const proposal = buildRefundProposal(runtime.clock);
+      proposal.schema_version = version;
+      proposal.postcondition.clauses[0].value = value;
+      assert.throws(
+        () => runtime.rail.propose(proposal),
+        (error) => error.code === "POSTCONDITION_INVALID",
+      );
+      assert.equal(runtime.rail.actions.size, 0);
+    }
+  }
+
+  const runtime = createDemoRuntime();
+  const server = createReferenceServer({ runtime });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const proposal = buildRefundProposal(runtime.clock);
+  proposal.postcondition.clauses[0].value = [1];
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/v0/actions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(proposal),
+  });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "POSTCONDITION_INVALID");
+  assert.equal(runtime.rail.actions.size, 0);
 });
 
 test("version-aligned bundle validation accepts v0.2 and rejects the full matrix", async () => {

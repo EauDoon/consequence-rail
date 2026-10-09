@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import test from "node:test";
 import { deepClone, digest } from "../src/canonical.js";
 import {
@@ -24,6 +23,7 @@ import {
   createDemoRecoverySigner,
   demoRecoveryTrustedKeys,
 } from "../src/signing.js";
+import { repoPath } from "../src/rail-test-helpers.js";
 
 test("recovery verification rejects a trace whose notes are not an array", async () => {
   const { bundle } = await runRecoveryPreflightDemo();
@@ -617,7 +617,7 @@ test("RecoveryContract rejects unknown fields", () => {
 test("conformance RecoveryContract matches the deterministic demo", () => {
   const fixture = JSON.parse(
     readFileSync(
-      join(process.cwd(), "conformance/refund-recovery-contract.json"),
+      repoPath("conformance", "refund-recovery-contract.json"),
       "utf8",
     ),
   );
@@ -681,7 +681,7 @@ async function boundRecoveryDrill(runtime, actionId, mutate) {
 }
 
 function assertRequiredFields(schemaPath, artifact) {
-  const schema = JSON.parse(readFileSync(join(process.cwd(), schemaPath), "utf8"));
+  const schema = JSON.parse(readFileSync(repoPath(schemaPath), "utf8"));
   for (const field of schema.required ?? []) {
     assert.equal(
       Object.hasOwn(artifact, field),
@@ -722,3 +722,36 @@ function assertCanonicalEncodings(value, path = "") {
     assertCanonicalEncodings(item, next);
   }
 }
+
+test("a malformed verification instant is VERIFICATION_TIME_INVALID, not an invalid bundle", async () => {
+  const { bundle } = await runRecoveryPreflightDemo();
+  for (const now of ["yesterday", "2035-01-01", "2035-01-01T00:00:00Z", null, 0]) {
+    assert.throws(
+      () => verifyRecoveryPreflight(bundle, {
+        trustedKeys: demoRecoveryTrustedKeys(),
+        requireCurrent: true,
+        now,
+      }),
+      (error) => error.code === "VERIFICATION_TIME_INVALID",
+      `now ${JSON.stringify(now)}`,
+    );
+  }
+  // The instant is checked before the artifact, so even a malformed bundle
+  // reports the caller's time error first.
+  assert.throws(
+    () => verifyRecoveryPreflight({}, { requireCurrent: true, now: "x" }),
+    (error) => error.code === "VERIFICATION_TIME_INVALID",
+  );
+  assert.equal(
+    verifyRecoveryPreflight(bundle, {
+      trustedKeys: demoRecoveryTrustedKeys(),
+      requireCurrent: true,
+      now: bundle.drill_attestation.drilled_at,
+    }).current,
+    true,
+  );
+  assert.equal(
+    verifyRecoveryPreflight(bundle, { trustedKeys: demoRecoveryTrustedKeys(), now: "x" }).freshness_checked,
+    false,
+  );
+});
