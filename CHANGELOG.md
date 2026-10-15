@@ -11,6 +11,12 @@ of the package version below.
 
 ## [Unreleased]
 
+### Fixed
+
+- CLI artifact and report output is staged before atomic, no-overwrite
+  publication. A partial write failure no longer leaves a truncated destination
+  that blocks retrying the export. Existing files and symlinks are still refused.
+
 ## [0.3.0] - 2026-10-09
 
 This release changes observable behavior, so the minor version moves. There is

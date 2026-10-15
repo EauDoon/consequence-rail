@@ -376,6 +376,12 @@ Public identity: EauDoon.
 
 CLI verification reads regular files only, caps each input at 1 MiB, requires valid UTF-8 JSON, and applies the canonical JSON structural limits before verification. Oversized files, invalid encodings, prototype-sensitive fields, and excessive nesting fail before signatures or lifecycle semantics are evaluated.
 
+CLI `--out` exports stage the complete bounded result in the destination directory
+and publish it without overwriting any existing file or symlink. This requires
+a writable parent directory and a filesystem that supports hard links; an
+unsupported filesystem fails without publishing partial output. This guarantees
+atomic visibility, not crash durability or an `fsync` guarantee.
+
 ## Review a saved settlement
 
 Offline reviewers can diagnose failed evidence clauses, inspect recorded state

@@ -1,5 +1,5 @@
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
-import { resolve } from "node:path";
+import { closeSync, constants, fstatSync, linkSync, mkdtempSync, openSync, readSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { deepClone, digest } from "./canonical.js";
 import { RailError } from "./errors.js";
 import { parseUniqueJson } from "./json-input.js";
@@ -64,4 +64,29 @@ export function assertArtifactDigest(value, expected) {
   const actual = digest(value);
   if (actual !== expected) throw new RailError("DIGEST_PIN_MISMATCH", "Artifact does not match the expected canonical digest.");
   return actual;
+}
+
+
+/** Publish a complete bounded output without replacing an existing destination. */
+export function writeExclusiveArtifactText(path, text) {
+  if (Buffer.byteLength(text, "utf8") > MAX_ARTIFACT_BYTES) {
+    throw new RailError("ARTIFACT_TOO_LARGE", "Serialized output exceeds the 1 MiB output limit.");
+  }
+  let stagingDirectory;
+  try {
+    const destination = resolve(path);
+    stagingDirectory = mkdtempSync(join(dirname(destination), ".crctl-output-"));
+    const staged = join(stagingDirectory, "output");
+    writeFileSync(staged, text, { encoding: "utf8", flag: "wx" });
+    // Same-directory hard-link publication is atomic and fails if any entry
+    // already occupies the destination. rename would silently overwrite it.
+    linkSync(staged, destination);
+  } catch (error) {
+    const message = error.code === "EEXIST"
+      ? `Refusing to overwrite existing file: ${path}.`
+      : `Could not write file: ${path}.`;
+    throw new RailError("USAGE_INVALID", `${message} Run with --help.`);
+  } finally {
+    if (stagingDirectory !== undefined) rmSync(stagingDirectory, { recursive: true, force: true });
+  }
 }
