@@ -3,14 +3,14 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { MAX_ARTIFACT_BYTES, writeExclusiveArtifactText } from "../src/artifact-files.js";
 
 const cli = fileURLToPath(new URL("../cmd/crctl.js", import.meta.url));
 
 test("CLI partial output failure leaves no destination and can be retried", () => {
-  const dir = mkdtempSync(join(tmpdir(), "rail-atomic-output-"));
+  const dir = mkdtempSync(join(tmpdir(), "rail atomic # output-"));
   try {
     const output = join(dir, "result.json"), injection = join(dir, "fail-write.mjs");
     writeFileSync(injection, `
@@ -23,7 +23,7 @@ test("CLI partial output failure leaves no destination and can be retried", () =
       };
       syncBuiltinESMExports();
     `);
-    const failed = spawnSync(process.execPath, ["--import", injection, cli, "demo", "refund", "--out", output, "--json"], { encoding: "utf8", timeout: 5000 });
+    const failed = spawnSync(process.execPath, ["--import", pathToFileURL(injection).href, cli, "demo", "refund", "--out", output, "--json"], { encoding: "utf8", timeout: 5000 });
     assert.equal(failed.status, 1, failed.stderr);
     assert.match(failed.stderr, /Could not write file/);
     assert.equal(existsSync(output), false);
