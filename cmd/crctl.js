@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-import { writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { DEMO_FAULTS, runIrreversibleDemo, runRefundDemo } from "../src/demo.js";
 import {
   INVENTORY_DEMO_FAULTS,
@@ -21,7 +19,7 @@ import {
 } from "../src/signing.js";
 import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
 
-import { assertArtifactDigest, readArtifactFile, serializeArtifact, MAX_ARTIFACT_BYTES } from "../src/artifact-files.js";
+import { assertArtifactDigest, readArtifactFile, serializeArtifact, writeExclusiveArtifactText as writeExclusiveText } from "../src/artifact-files.js";
 import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
 import { verifyArtifactFiles, verifyRecoveryFiles } from "../src/batch.js";
 import { scenarioCatalog } from "../src/scenarios.js";
@@ -163,23 +161,6 @@ function printRecoveryPreflight(summary, asJson) {
 
 function writeExclusiveJson(path, value) {
   writeExclusiveText(path, serializeArtifact(value));
-}
-
-function writeExclusiveText(path, text) {
-  if (Buffer.byteLength(text, "utf8") > MAX_ARTIFACT_BYTES) {
-    throw new RailError("ARTIFACT_TOO_LARGE", "Serialized output exceeds the 1 MiB output limit.");
-  }
-  try {
-    writeFileSync(resolve(path), text, {
-      encoding: "utf8",
-      flag: "wx",
-    });
-  } catch (error) {
-    if (error.code === "EEXIST") {
-      throw usage(`Refusing to overwrite existing file: ${path}.`);
-    }
-    throw usage(`Could not write file: ${path}.`);
-  }
 }
 
 function printReport(text, path) {
