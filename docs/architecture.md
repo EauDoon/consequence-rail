@@ -109,6 +109,14 @@ receipt outcome.
 
 An embedded public key is never trusted automatically.
 
+The sidecar's `POST /v0/bundles/verify` uses the same verifier. It trusts the
+public demonstration keys unless `rail --trusted-keys <file>` names a
+trusted-keys file, whose rail and connector roles then replace them for that
+endpoint only; the sidecar still signs its own lifecycle artifacts with the
+demonstration keys. With `?allow_receipt_profile=true` the endpoint accepts a
+receipt-profile bundle, such as the sidecar's own default export, with
+integrity-only verification and reports the profile, scope and limitations.
+
 ## Trust boundaries
 
 In `enforced` mode, the rail must be the only component able to use the

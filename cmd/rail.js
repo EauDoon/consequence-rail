@@ -2,14 +2,16 @@
 
 import { createSidecarClock, SIDECAR_CLOCKS } from "../src/clock.js";
 import { createDemoRuntime } from "../src/demo.js";
+import { RailError } from "../src/errors.js";
 import { createReferenceServer } from "../src/http-server.js";
+import { loadTrustedKeysFile } from "../src/trust-config.js";
 import { VERSION } from "../src/version.js";
 
 function printHelp() {
   process.stdout.write(`Consequence Rail reference sidecar ${VERSION}
 
 Usage:
-  rail [--port <number>] [--clock <system|demo>]
+  rail [--port <number>] [--clock <system|demo>] [--trusted-keys <file>]
   rail --help
   rail --version
 
@@ -18,10 +20,17 @@ Options:
                           Use 0 to bind an ephemeral port.
   --clock <system|demo>   Time source (default system, or CONSEQUENCE_RAIL_CLOCK).
                           system uses the host clock; demo freezes 2035-01-01T00:00:00.000Z.
+  --trusted-keys <file>   Keys that POST /v0/bundles/verify trusts, from a
+                          consequence-rail/trusted-keys/v0.1 file with at least one rail
+                          and one connector key (default: the public demonstration keys).
+                          The sidecar itself still signs with the demonstration keys.
   -h, --help              Show this help
   --version               Print the implementation version
 
 The sidecar listens on 127.0.0.1 only and is not an authenticated boundary.
+With --trusted-keys, a second stdout line, printed after the bound address,
+names the file's trust_config_digest; an invalid file exits 1 before anything
+is bound.
 
 Exit status:
   0  the sidecar is bound to a loopback port
@@ -77,6 +86,7 @@ function parseArgs(args, env = process.env) {
 
   let port;
   let clock;
+  let trustedKeys;
   let sawPort = false;
   let sawClock = false;
   for (let index = 0; index < args.length; index += 1) {
@@ -107,6 +117,18 @@ function parseArgs(args, env = process.env) {
       index += 1;
       continue;
     }
+    if (arg === "--trusted-keys") {
+      if (trustedKeys !== undefined) {
+        throw usageError("Flag --trusted-keys was supplied more than once.");
+      }
+      const value = args[index + 1];
+      if (value === undefined || value === "" || value.startsWith("-")) {
+        throw usageError("--trusted-keys requires a trusted-keys file path.");
+      }
+      trustedKeys = value;
+      index += 1;
+      continue;
+    }
     throw usageError(`Unknown argument ${arg}.`);
   }
   if (!sawPort) {
@@ -117,7 +139,23 @@ function parseArgs(args, env = process.env) {
     const envClock = envValue(env, "CONSEQUENCE_RAIL_CLOCK");
     clock = envClock === undefined ? "system" : parseClock(envClock, "CONSEQUENCE_RAIL_CLOCK");
   }
-  return { help: false, port, clock };
+  return { help: false, port, clock, trustedKeys };
+}
+
+// Loaded before the server exists, so a bad file never binds a port.
+function loadBundleTrust(path) {
+  if (path === undefined) return undefined;
+  const config = loadTrustedKeysFile(path);
+  if (config.rail.size === 0 || config.connector.size === 0) {
+    throw new RailError(
+      "TRUST_CONFIG_INVALID",
+      "The sidecar's trusted-keys file must list at least one rail key and one connector key.",
+    );
+  }
+  return {
+    trust: { trustedKeys: config.rail, trustedConnectorKeys: config.connector },
+    digest: config.trust_config_digest,
+  };
 }
 
 try {
@@ -127,8 +165,10 @@ try {
   } else if (parsed.version) {
     process.stdout.write(`consequence-rail ${VERSION}\n`);
   } else {
+    const bundleTrust = loadBundleTrust(parsed.trustedKeys);
     const server = createReferenceServer({
       runtime: createDemoRuntime({ clock: createSidecarClock(parsed.clock) }),
+      ...(bundleTrust ? { bundleTrust: bundleTrust.trust } : {}),
     });
     // Binding is asynchronous, so a busy port surfaces as an "error" event
     // rather than a throw from listen(). Without this listener Node reports an
@@ -142,8 +182,17 @@ try {
       process.stdout.write(
         `Consequence Rail reference sidecar listening on http://127.0.0.1:${address.port}\n`,
       );
+      if (bundleTrust) {
+        process.stdout.write(
+          `Bundle verification trusts caller-supplied keys, trust_config_digest ${bundleTrust.digest}\n`,
+        );
+      }
     });
   }
 } catch (error) {
-  fail(error.code === "USAGE_INVALID" ? "USAGE_INVALID" : "INTERNAL_ERROR", error.message);
+  // RailError messages never include key material.
+  fail(
+    error.code === "USAGE_INVALID" ? "USAGE_INVALID" : error instanceof RailError ? error.code : "INTERNAL_ERROR",
+    error.message,
+  );
 }

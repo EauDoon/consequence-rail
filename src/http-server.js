@@ -5,7 +5,7 @@ import { createDemoRuntime } from "./demo.js";
 import { RailError } from "./errors.js";
 import { parseUniqueJson } from "./json-input.js";
 import { demoConnectorTrustedKeys, demoTrustedKeys } from "./signing.js";
-import { verifyBundle } from "./verify.js";
+import { verifyBundle, verifySettlementArtifact } from "./verify.js";
 import { VERSION } from "./version.js";
 
 const MAX_BODY_BYTES = 65_536;
@@ -313,10 +313,40 @@ function assertQueryParameters(url, allowed = []) {
   }
 }
 
+function assertBundleTrust(bundleTrust) {
+  const maps = [bundleTrust?.trustedKeys, bundleTrust?.trustedConnectorKeys];
+  if (!maps.every((map) => map instanceof Map && map.size > 0)) {
+    throw new RailError(
+      "CONFIG_INVALID",
+      "bundleTrust needs non-empty trustedKeys and trustedConnectorKeys maps.",
+    );
+  }
+  // Copies, so a caller changing its own maps later cannot change the trust.
+  return { trustedKeys: new Map(maps[0]), trustedConnectorKeys: new Map(maps[1]) };
+}
+
+// The only query parameter POST /v0/bundles/verify accepts. Any value other
+// than exactly "true" is refused, like an unknown parameter, before the body
+// is read.
+function allowsReceiptProfile(url) {
+  if (!url.searchParams.has("allow_receipt_profile")) return false;
+  if (url.searchParams.get("allow_receipt_profile") !== "true") {
+    throw requestError("REQUEST_INVALID", "Query parameter allow_receipt_profile must be true when supplied.");
+  }
+  return true;
+}
+
+/**
+ * The loopback reference sidecar. bundleTrust sets the keys that
+ * POST /v0/bundles/verify trusts and defaults to the public demonstration
+ * keys; it does not change the runtime's own signing or connector trust.
+ */
 export function createReferenceServer({
   runtime = createDemoRuntime({ clock: new SystemClock() }),
+  bundleTrust = { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() },
 } = {}) {
   const { rail } = runtime;
+  const verifierTrust = assertBundleTrust(bundleTrust);
   let activeRequests = 0;
   const rateByAddress = new Map();
 
@@ -379,16 +409,16 @@ export function createReferenceServer({
       }
 
       if (path === "/v0/bundles/verify") {
-        assertQueryParameters(url);
+        assertQueryParameters(url, ["allow_receipt_profile"]);
+        const allowReceiptProfile = allowsReceiptProfile(url);
         if (request.method !== "POST") {
           methodNotAllowed(response, ["POST"], requestId);
           return;
         }
-        send(response, 200, verifyBundle(await readJson(request, { required: true }), {
-          trustedKeys: demoTrustedKeys(),
-          trustedConnectorKeys: demoConnectorTrustedKeys(),
-          requireSemantics: true,
-        }));
+        const bundle = await readJson(request, { required: true });
+        send(response, 200, allowReceiptProfile
+          ? verifySettlementArtifact(bundle, { ...verifierTrust, allowReceiptProfile: true })
+          : verifyBundle(bundle, { ...verifierTrust, requireSemantics: true }));
         return;
       }
 

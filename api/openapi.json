@@ -722,7 +722,19 @@
     "/v0/bundles/verify": {
       "post": {
         "operationId": "verifySettlementBundle",
-        "summary": "Verify integrity and semantics of an audit bundle against configured trusted keys",
+        "summary": "Verify a settlement bundle against the sidecar's trusted keys: the public demonstration keys, or the keys of rail --trusted-keys",
+        "description": "Without allow_receipt_profile, the bundle must be an audit profile and gets integrity and lifecycle-semantic verification. With allow_receipt_profile=true, an audit bundle still gets both, a receipt-profile bundle gets integrity verification only, and the response adds profile and verification_scope, plus limitations for a receipt.",
+        "parameters": [
+          {
+            "name": "allow_receipt_profile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": ["true"]
+            },
+            "description": "Accept a receipt-profile bundle with integrity-only verification. Any other value is refused with REQUEST_INVALID before the body is read."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -779,8 +791,8 @@
                       "additionalProperties": false,
                       "required": ["status", "valid"],
                       "properties": {
-                        "status": { "const": "verified" },
-                        "valid": { "const": true },
+                        "status": { "enum": ["verified", "not_requested"] },
+                        "valid": { "enum": [true, null] },
                         "final_state": { "const": "CLOSED" },
                         "derived_outcome": {
                           "enum": ["settled", "compensated", "disputed"]
@@ -819,6 +831,19 @@
                     "trusted_connector_key_id": {
                       "type": "string",
                       "minLength": 1
+                    },
+                    "profile": {
+                      "enum": ["audit", "receipt"],
+                      "description": "Present only with allow_receipt_profile=true."
+                    },
+                    "verification_scope": {
+                      "enum": ["integrity_and_lifecycle_semantics", "integrity_only"],
+                      "description": "Present only with allow_receipt_profile=true."
+                    },
+                    "limitations": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "Present only for a receipt-profile bundle verified with allow_receipt_profile=true."
                     }
                   }
                 }

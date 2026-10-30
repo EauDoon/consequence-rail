@@ -62,6 +62,21 @@ of the package version below.
   unchanged. `src/verify.js` exports `verifySettlementArtifact`,
   `settlementProfileFields` and `RECEIPT_PROFILE_LIMITATIONS`, and
   `verifyArtifactFiles` accepts `allowReceiptProfile`.
+- The sidecar can verify the bundle it exports by default.
+  `POST /v0/bundles/verify?allow_receipt_profile=true` accepts a
+  receipt-profile bundle, such as the default `GET /v0/actions/{id}/bundle`
+  export that the endpoint previously refused with `SEMANTIC_INVALID`, with
+  integrity-only verification, and adds `profile`, `verification_scope` and
+  receipt `limitations` to the response. Any other value or a repeated
+  parameter is refused with `REQUEST_INVALID` before the body is read.
+  `rail --trusted-keys <file>` makes that endpoint trust a trusted-keys file's
+  rail and connector keys instead of the demo keys, as its OpenAPI summary
+  promised; the file is checked before the sidecar binds, and a second stdout
+  line after the listening line names its `trust_config_digest`. The sidecar
+  still signs its own lifecycle artifacts with the demo keys.
+  `createReferenceServer` accepts the same trust as `bundleTrust`. The OpenAPI
+  document declares the parameter and the opt-in response fields. Without the
+  flag and the parameter every response, error and startup line is unchanged.
 
 ### Fixed
 

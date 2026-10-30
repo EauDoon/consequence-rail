@@ -228,6 +228,28 @@ encodings, bounds headers, request time, concurrency, and requests per socket,
 and emits restrictive response headers. It is still not an authenticated or
 production deployment boundary.
 
+`POST /v0/bundles/verify` demands an audit bundle, so it refuses the receipt
+profile that `GET /v0/actions/{id}/bundle` returns by default. Add
+`?allow_receipt_profile=true` to verify a receipt with integrity-only
+verification; the response then adds `profile`, `verification_scope` and, for
+a receipt, `limitations`. Any other value for that parameter is refused with
+`REQUEST_INVALID` before the body is read. The endpoint trusts the public
+demonstration keys unless you start the sidecar with a trusted-keys file:
+
+```text
+node ./cmd/rail.js --port 0 --trusted-keys trusted-keys.json
+```
+
+The file needs at least one rail key and one connector key, and is checked
+before the sidecar binds; an unusable file exits 1 with a structured error.
+A second stdout line after the listening line then names its
+`trust_config_digest`. These keys apply to bundle verification only. The
+sidecar still signs its own lifecycle artifacts with the public demonstration
+keys, so a file that omits them makes the endpoint refuse the sidecar's own
+exports with `UNTRUSTED_KEY`. Library callers pass the same maps as
+`createReferenceServer({ bundleTrust })`. Without the flag and the parameter
+every response and startup line is unchanged.
+
 ## Assurance modes
 
 | Mode | Meaning | May issue a permit |
