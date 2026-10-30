@@ -114,6 +114,31 @@ test("a rewritten, re-signed history verifies but fails the checkpoint recorded 
   assert.equal(verifyChainCheckpoint(forged, checkpoints[0], trust()).extends, true);
 });
 
+test("a checkpoint covers only events up to its position; one recorded at close pins the outcome", async () => {
+  const { checkpoints, receipt } = await checkpointedRun();
+  // Rewrite only the terminal CLOSED event to another outcome and re-sign.
+  const forged = deepClone(receipt);
+  const closed = forged.events.at(-1);
+  closed.payload.reason_code = "SETTLEMENT_COMPENSATED";
+  closed.payload.details_digest = digest({ outcome: "compensated" });
+  forged.events = resignEventChain(forged.events, createDemoSigner(), forged.action.action_id);
+  forged.settlement_receipt = signArtifact({
+    ...without(forged.settlement_receipt, ["signature"]),
+    outcome: "compensated",
+    event_chain_head: forged.events.at(-1).event_hash,
+  }, createDemoSigner());
+  assert.equal(verifyBundle(forged, { ...trust(), requireSemantics: false }).outcome, "compensated");
+  // Every checkpoint before the terminal event still matches: the documented limit.
+  for (const checkpoint of checkpoints.slice(0, -1)) {
+    assert.equal(verifyChainCheckpoint(forged, checkpoint, trust()).extends, true, checkpoint);
+  }
+  // The checkpoint from the final lifecycle response covers the outcome.
+  assert.throws(
+    () => verifyChainCheckpoint(forged, checkpoints.at(-1), trust()),
+    (error) => error.code === "CHECKPOINT_MISMATCH",
+  );
+});
+
 test("checkpoint text is strictly parsed", async () => {
   const { audit } = await checkpointedRun();
   const head = audit.events[1].event_hash;

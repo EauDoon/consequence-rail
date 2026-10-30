@@ -134,11 +134,14 @@ Control: events are signed and hash-linked; receipts bind the chain head.
 Every lifecycle response returns the current `event_count` and
 `event_chain_head`, and `crctl --expect-checkpoint <count>:<head>` (or
 `verifyChainCheckpoint`) refuses a bundle whose event chain does not extend a
-checkpoint recorded that way with `CHECKPOINT_MISMATCH`. A history rewritten
-and re-signed after the checkpoint therefore fails even when its signatures
-and lifecycle semantics verify.
+checkpoint recorded that way with `CHECKPOINT_MISMATCH`. A rewrite of any of
+the first `event_count` events therefore fails even when its signatures and
+lifecycle semantics verify.
 
-Residual risk: the check helps only while the checkpoint is held outside the
+Residual risk: events after the checkpoint position are not covered. A
+checkpoint recorded at authorization leaves the execution, outcome and receipt
+rewritable; only a checkpoint from the final lifecycle response pins the
+outcome. The check helps only while the checkpoint is held outside the
 rail operator's control. No checkpoint service or transparency log is
 implemented, and an operator controlling the signing key and every retained
 checkpoint can rewrite local history.

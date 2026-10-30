@@ -35,8 +35,10 @@ Record `event_count` and `event_chain_head` from any lifecycle response or
 rail operator cannot change them. `crctl bundle verify audit.json
 --expect-checkpoint <event_count>:<event_chain_head>` then requires the
 bundle's event at that position to have exactly that hash, which proves the
-recorded history is a prefix of the bundle's chain. A rewritten and re-signed
-history fails with `CHECKPOINT_MISMATCH` even though its signatures verify.
+recorded history is a prefix of the bundle's chain. A history rewritten and
+re-signed at or before that position fails with `CHECKPOINT_MISMATCH` even
+though its signatures verify. Later events are not covered, so record the
+checkpoint from the final lifecycle response to pin the outcome.
 `timeline`, `review`, `receipt`, `evidence` and `timing` accept the same flag
 and report a `checkpoint` object (or line); `bundle receipt` writes no output
 on a mismatch. No checkpoint service is provided; the check is only as strong

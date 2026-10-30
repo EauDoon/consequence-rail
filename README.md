@@ -383,25 +383,35 @@ rewriting a whole history and signing it again. Only a chain head kept outside
 the rail operator's control can expose that. Every lifecycle response and
 `GET /v0/actions/{id}` already returns `event_count` and `event_chain_head`, so
 a policy system can record `<event_count>:<event_chain_head>` while the action
-is in progress, for example right after it authorizes the action. Later, check
-the exported bundle against it:
+is in progress. Later, check the exported bundle against it:
 
 ```text
-node ./cmd/crctl.js bundle verify settlement-bundle.json --expect-checkpoint 2:<event_chain_head>
+node ./cmd/crctl.js bundle verify settlement-bundle.json --expect-checkpoint 11:<event_chain_head>
 ```
 
 The bundle passes only if its event number `event_count` has exactly that
 hash. The chain's links and hashes are verified first, so a match proves that
 the first `event_count` events are the history that was recorded; later events
 may follow. Otherwise the command fails with `CHECKPOINT_MISMATCH` and exit
-status 1. `bundle verify`, `timeline`, `review`, `receipt`, `evidence` and
-`timing` accept the flag; JSON output gains a `checkpoint` object with
+status 1.
+
+A checkpoint protects only the events at or before its position. One recorded
+right after authorization, `2:<event_chain_head>`, covers the proposal and the
+authorization decision; the execution, the outcome and the receipt can still
+be rewritten and re-signed after it and pass. To pin the outcome, record the
+`event_count` and `event_chain_head` from the lifecycle response that closes
+the action, or from `GET /v0/actions/{id}` once its state is `CLOSED`, and
+check against that.
+
+`bundle verify`, `timeline`, `review`, `receipt`, `evidence` and `timing`
+accept the flag; JSON output gains a `checkpoint` object with
 `events_after_checkpoint`, and text output a `checkpoint:` line. A malformed
 value is a usage error raised before any file is read, and `bundle receipt`
 writes nothing when the checkpoint does not match. The flag combines with
-`--expect-digest` and `--trusted-keys`, and works on bundles from every
-release since 0.1.0. Library callers can use `parseChainCheckpoint` and
-`verifyChainCheckpoint` from [`src/verify.js`](src/verify.js).
+`--expect-digest` and `--trusted-keys`, and works on every bundle from any
+release since 0.1.0 that the same command accepts without it. Library callers
+can use `parseChainCheckpoint` and `verifyChainCheckpoint` from
+[`src/verify.js`](src/verify.js).
 
 A checkpoint helps only while it stays outside the rail operator's control.
 This project runs no checkpoint service or transparency log, and someone who

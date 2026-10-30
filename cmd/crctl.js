@@ -125,7 +125,9 @@ Checkpoints:
   event_chain_head. Record them as <event_count>:<event_chain_head> somewhere
   the rail operator does not control. --expect-checkpoint then fails with
   CHECKPOINT_MISMATCH unless event number <event_count> of the bundle has that
-  hash, so a history rewritten and re-signed after the checkpoint is refused.
+  hash, so a rewrite of any of the first <event_count> events is refused.
+  Later events are not covered: record the checkpoint from the final lifecycle
+  response to pin the outcome.
 
 Examples:
   All single-artifact review, evidence, timing, timeline and receipt commands

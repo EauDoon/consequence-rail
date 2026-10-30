@@ -40,7 +40,9 @@ of the package version below.
   that position has exactly that hash; otherwise the command fails with
   `CHECKPOINT_MISMATCH`. A history rewritten and re-signed with the rail key
   previously passed `bundle verify`, lifecycle semantics included; it now fails
-  against any checkpoint recorded before the rewrite. `bundle verify`,
+  when the rewrite touches any of the first `event_count` events. Events after
+  the checkpoint are not covered, so only a checkpoint recorded from the final
+  lifecycle response pins the outcome. `bundle verify`,
   `timeline`, `review`, `receipt`, `evidence` and `timing` accept the flag;
   JSON output gains a `checkpoint` object and text output a `checkpoint:` line,
   a malformed value is a usage error raised before any file is read, and
