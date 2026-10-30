@@ -511,7 +511,7 @@ Read:
 
 ## Project status
 
-This checkout contains the experimental v0.3.0 source release. It is a
+This checkout contains the experimental v0.4.0 source release. It is a
 reference implementation, not a production deployment or hosted service.
 The public release status and maintenance boundaries are recorded in
 [`docs/release-status.md`](docs/release-status.md).

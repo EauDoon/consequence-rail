@@ -11,6 +11,14 @@ of the package version below.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-30
+
+This release adds capabilities without changing artifacts. There is no
+`schema_version`, signature or canonical-byte change, the pinned default
+artifact hashes are unchanged, and bundles and drills written by 0.3.0 still
+verify. One new, independently versioned identifier is added:
+`consequence-rail/trusted-keys/v0.1`.
+
 ### Added
 
 - `createSigner({ keyId, privateKey })` builds a frozen rail or recovery signer
@@ -676,7 +684,8 @@ Public source release on 27 July 2026.
 
 Initial public source release on 23 July 2026.
 
-[Unreleased]: https://github.com/EauDoon/consequence-rail/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/EauDoon/consequence-rail/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/EauDoon/consequence-rail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/EauDoon/consequence-rail/compare/v0.2.20...v0.3.0
 [0.2.20]: https://github.com/EauDoon/consequence-rail/commit/418a212e8e7dfec8c158e99e0973bb22e3038e0a
 [0.2.19]: https://github.com/EauDoon/consequence-rail/commit/548fb22eece9644f4875ecb12e61fa031234016b
