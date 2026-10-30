@@ -19,6 +19,7 @@ export const BOOL_FLAGS = Object.freeze({
   "--json": "json",
   "--markdown": "markdown",
   "--require-qualified": "require-qualified",
+  "--allow-receipt-profile": "allow-receipt-profile",
 });
 
 // An unpadded base64url SHA-256 digest starts with "-" about 1 time in 64.

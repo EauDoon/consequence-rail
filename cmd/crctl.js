@@ -17,7 +17,7 @@ import {
   demoRecoveryTrustedKeys,
   demoTrustedKeys,
 } from "../src/signing.js";
-import { parseChainCheckpoint, verifyBundle, verifyBundleTimeline, verifyChainCheckpoint } from "../src/verify.js";
+import { parseChainCheckpoint, verifyBundleTimeline, verifyChainCheckpoint, verifySettlementArtifact } from "../src/verify.js";
 
 import { assertArtifactDigest, readArtifactFile, serializeArtifact, writeExclusiveArtifactText as writeExclusiveText } from "../src/artifact-files.js";
 import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
@@ -49,8 +49,9 @@ Usage:
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo irreversible [--json]
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
-  crctl bundle verify <file> [--expect-digest <digest>] [--expect-checkpoint <count>:<head>] [--json]
-  crctl bundle verify-many <file>... [--json]
+  crctl bundle verify <file> [--expect-digest <digest>] [--expect-checkpoint <count>:<head>]
+                       [--allow-receipt-profile] [--json]
+  crctl bundle verify-many <file>... [--allow-receipt-profile] [--json]
   crctl bundle timeline <file> [--expect-checkpoint <count>:<head>] [--json]
   crctl bundle review <file> [--expect-checkpoint <count>:<head>] [--json|--markdown] [--out <new-report>]
   crctl bundle receipt <file> --out <new-file> [--expect-checkpoint <count>:<head>] [--json]
@@ -89,6 +90,9 @@ Flags:
   --expect-digest <digest> Require the recorded canonical artifact digest
   --expect-other-digest <digest> Pin the second input of compare or link
   --require-outcome <outcome> Require settled, compensated or disputed (bundle verify/verify-many)
+  --allow-receipt-profile Let bundle verify and verify-many accept receipt-profile bundles
+                        with integrity-only verification (audit bundles still get full
+                        lifecycle semantics)
   --require-qualified   Require QUALIFIED_EXACT (recovery verify/verify-many; add --at for freshness)
   --trusted-keys <file> Trust only the keys in this trusted-keys file (every bundle and
                         recovery-preflight command)
@@ -108,6 +112,13 @@ Trust:
   caller_supplied_keys with the file's trust_config_digest. The file format is
   consequence-rail/trusted-keys/v0.1. crctl trust demo prints the demonstration
   keys in that format, as a template.
+
+Receipt profiles:
+  bundle verify and verify-many demand the audit profile and refuse a receipt
+  with SEMANTIC_INVALID. --allow-receipt-profile accepts receipts with
+  integrity-only verification (signatures, chain, and the outcome, close-time
+  and action-type bindings) and adds profile, verification_scope and
+  limitations to the result. --require-outcome applies to both profiles.
 
 Checkpoints:
   Every lifecycle response and GET /v0/actions/{id} returns event_count and
@@ -429,9 +440,12 @@ async function main() {
       return;
     }
     if (subcommand === "verify-many") {
-      assertFlags(options, new Set(["json", "require-outcome", "trusted-keys"]));
+      assertFlags(options, new Set(["json", "require-outcome", "trusted-keys", "allow-receipt-profile"]));
       const trust = loadTrust(options);
-      const result = verifyArtifactFiles(positional.slice(2), settlementTrust(trust));
+      const result = verifyArtifactFiles(positional.slice(2), {
+        ...settlementTrust(trust),
+        allowReceiptProfile: options["allow-receipt-profile"] === true,
+      });
       applyOutcomeExpectation(result, options["require-outcome"]);
       process.stdout.write(`${JSON.stringify({ ...result, ...trust.profile }, null, 2)}\n`);
       if (!result.valid || result.review_required) process.exitCode = 1;
@@ -454,7 +468,7 @@ async function main() {
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
     assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest", "out", "trusted-keys", "expect-checkpoint"] :
-      subcommand === "verify" ? ["json", "expect-digest", "require-outcome", "trusted-keys", "expect-checkpoint"] : ["json", "expect-digest", "trusted-keys", "expect-checkpoint"]));
+      subcommand === "verify" ? ["json", "expect-digest", "require-outcome", "trusted-keys", "expect-checkpoint", "allow-receipt-profile"] : ["json", "expect-digest", "trusted-keys", "expect-checkpoint"]));
     const trust = loadTrust(options);
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
@@ -476,10 +490,9 @@ async function main() {
       return;
     }
     if (subcommand === "verify") {
-      const result = verifyBundle(bundle, {
-        ...settlementTrust(trust),
-        requireSemantics: true,
-      });
+      // Without --allow-receipt-profile this is the strict verifyBundle result.
+      const allowReceiptProfile = options["allow-receipt-profile"] === true;
+      const result = verifySettlementArtifact(bundle, { ...settlementTrust(trust), allowReceiptProfile });
       result.bundle_digest = digest(bundle);
       const checked = checkCheckpoint(bundle, checkpoint, trust);
       Object.assign(result, suppliedProfile(trust), checkpointFields(checked));
@@ -495,6 +508,11 @@ async function main() {
             `assurance: ${result.assurance_mode}`,
             `events: ${result.event_count}`,
             `semantics: ${result.semantics.status}`,
+            ...(allowReceiptProfile ? [
+              `profile: ${result.profile}`,
+              `verification_scope: ${result.verification_scope}`,
+              ...(result.limitations ?? []).map((limitation) => `limitation: ${limitation}`),
+            ] : []),
             `trusted_key: ${result.trusted_key_id}`,
             ...suppliedProfileLines(trust),
             ...checkpointLines(checked),

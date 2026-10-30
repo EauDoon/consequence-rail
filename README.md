@@ -258,6 +258,28 @@ verification then:
 The CLI demo uses the `audit` profile. An embedded key is never trusted
 automatically.
 
+`crctl bundle verify` and `bundle verify-many` demand the audit profile, so
+they refuse a receipt with `SEMANTIC_INVALID`. The sidecar and the library
+export the receipt profile by default, and it is the profile meant for
+sharing. To batch-verify receipts or gate on their outcome, add
+`--allow-receipt-profile`:
+
+```text
+node ./cmd/crctl.js bundle verify-many receipt-one.json receipt-two.json audit.json --allow-receipt-profile --require-outcome settled
+```
+
+Audit bundles still get full lifecycle semantics. Receipt bundles get the
+whole integrity path: signatures, the event chain, the receipt outcome and
+postcondition result bound to the terminal `CLOSED` event, the close-time
+window and the signed action class. Each result then reports `profile`,
+`verification_scope` (`integrity_only` or
+`integrity_and_lifecycle_semantics`) and, for receipts, `limitations` that
+state that lifecycle semantics were not replayed and that
+`action.resource_id_digest` is not bound to any signed artifact in this
+profile. `verify-many` adds `profile_counts`. Without the flag both commands
+behave exactly as before. Library callers can use `verifySettlementArtifact`
+from [`src/verify.js`](src/verify.js) with `allowReceiptProfile: true`.
+
 The conformance suite checks runtime presence of schema-required fields and
 runs portable proposal accept/reject vectors through live admission and offline
 bundle-shape validation for both proposal versions. These cover currency and
@@ -490,7 +512,7 @@ Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata,
 
 Compare two saved artifacts with `node ./cmd/crctl.js bundle compare left.json right.json --json`. Both must pass verification. The report distinguishes the same action, the same signed receipt, and the same canonical bundle, so an audit/receipt profile change is distinguishable from a different settlement. A comparison never selects an authoritative receipt.
 
-Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.json two.json --json`. Files are checked sequentially with independent results. Every file must pass full semantic verification; receipt-only profiles fail this strict command. Any failure produces a nonzero exit status after all files have been checked.
+Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.json two.json --json`. Files are checked sequentially with independent results. Every file must pass full semantic verification; receipt-only profiles fail this strict command unless you add `--allow-receipt-profile`. Any failure produces a nonzero exit status after all files have been checked.
 
 ## Discover synthetic exercises
 

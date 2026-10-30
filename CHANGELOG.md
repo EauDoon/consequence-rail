@@ -48,6 +48,20 @@ of the package version below.
   `parseChainCheckpoint` and `verifyChainCheckpoint`. No checkpoint service is
   provided, and the check is only as strong as the place the checkpoint is
   kept.
+- `crctl bundle verify` and `bundle verify-many` accept
+  `--allow-receipt-profile`. Both commands demand the audit profile, so the
+  receipt profile that the sidecar and library export by default, and that is
+  meant for sharing, could not be batch-verified or gated with
+  `--require-outcome`. Under the flag, receipt bundles get the full integrity
+  path (signatures, chain, the outcome, close-time and signed action-type
+  bindings) and audit bundles keep full lifecycle semantics. Results add
+  `profile` and `verification_scope`; receipt results add `limitations`
+  stating that lifecycle semantics were not replayed and that
+  `action.resource_id_digest` is not bound to signed data in that profile;
+  `verify-many` adds `profile_counts`. Without the flag both commands are
+  unchanged. `src/verify.js` exports `verifySettlementArtifact`,
+  `settlementProfileFields` and `RECEIPT_PROFILE_LIMITATIONS`, and
+  `verifyArtifactFiles` accepts `allowReceiptProfile`.
 
 ### Fixed
 

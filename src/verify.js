@@ -309,6 +309,49 @@ export function verifyBundleTimeline(
   };
 }
 
+/** What integrity-only verification of a receipt-profile bundle does not cover. */
+export const RECEIPT_PROFILE_LIMITATIONS = Object.freeze([
+  "Lifecycle semantics were not replayed: the receipt profile omits the proposal and raw outcome evidence.",
+  "action.resource_id_digest is not bound to any signed artifact in the receipt profile.",
+]);
+
+/**
+ * The profile, verification scope and, for receipts, the limitations that
+ * accompany a result verified with receipt profiles allowed.
+ *
+ * @param {"audit"|"receipt"} profile
+ */
+export function settlementProfileFields(profile) {
+  return profile === "receipt"
+    ? { profile, verification_scope: "integrity_only", limitations: [...RECEIPT_PROFILE_LIMITATIONS] }
+    : { profile, verification_scope: "integrity_and_lifecycle_semantics" };
+}
+
+/**
+ * Verify a settlement bundle for a strict verifier. Audit bundles always get
+ * full lifecycle semantics. Receipt bundles are refused with SEMANTIC_INVALID
+ * unless allowReceiptProfile is true; they then get the full integrity path,
+ * including the outcome, close-time and action-type bindings, and the result
+ * names its scope and limitations. Without the option the result is exactly
+ * verifyBundle's with requireSemantics.
+ *
+ * @param {object} bundle
+ * @param {object} [options]
+ * @param {Map<string, unknown>} [options.trustedKeys]
+ * @param {Map<string, unknown>} [options.trustedConnectorKeys]
+ * @param {boolean} [options.allowReceiptProfile=false]
+ * @returns {object}
+ */
+export function verifySettlementArtifact(bundle, options = {}) {
+  const allowReceiptProfile = options.allowReceiptProfile === true;
+  const verification = verifyBundle(bundle, {
+    trustedKeys: options.trustedKeys,
+    trustedConnectorKeys: options.trustedConnectorKeys,
+    requireSemantics: !(allowReceiptProfile && bundle?.profile === "receipt"),
+  });
+  return allowReceiptProfile ? { ...verification, ...settlementProfileFields(bundle.profile) } : verification;
+}
+
 const CHECKPOINT_PATTERN = /^([1-9][0-9]*):([A-Za-z0-9_-]{43})$/;
 const CHECKPOINT_FORMAT =
   "Checkpoint must be <event_count>:<event_chain_head>, a positive decimal count without leading zeros and an unpadded canonical SHA-256 base64url digest.";

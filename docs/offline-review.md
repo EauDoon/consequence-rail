@@ -21,6 +21,8 @@ window accepts receipts from 0.2.20 and earlier, whose close time came from a
 second clock read. This is data minimization, not anonymization: signed
 event metadata and connector commitments remain. Existing output files are
 never overwritten. Keep the original audit file for semantic replay.
+`bundle verify` and `verify-many` accept the projection only with
+`--allow-receipt-profile`.
 Serialized artifacts, including their final newline, must fit the same 1 MiB
 loader cap. Large exports use compact JSON when indentation would exceed it;
 if compact output is still too large, export fails before creating or changing
@@ -159,6 +161,16 @@ and `outcome_expectation_met: false`, while `valid` still describes artifact
 verification. Supported expectations are `settled`, `compensated`, and `disputed`.
 Batch expectations require every input to verify and match; they never suppress
 differing-receipt review. Without the flag, existing verification behavior remains.
+
+Both commands demand the audit profile. Add `--allow-receipt-profile` to accept
+receipt-profile files with integrity-only verification, for example
+`bundle verify-many *.receipt.json --allow-receipt-profile --require-outcome settled`.
+The receipt outcome is signed and bound to the terminal `CLOSED` event, so the
+outcome gate means the same for both profiles. Each result names its `profile`
+and `verification_scope`; receipt results list `limitations`, including that
+`action.resource_id_digest` is not bound to signed data in that profile, and
+`verify-many` adds `profile_counts`. Audit bundles keep mandatory lifecycle
+semantics under the flag.
 
 Use `recovery-preflight verify drill.json --require-qualified --json` to require
 `QUALIFIED_EXACT`; `verify-many` supports the same flag. Authentic failed,
