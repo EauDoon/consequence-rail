@@ -11,7 +11,26 @@ of the package version below.
 
 ## [Unreleased]
 
+### Added
+
+- `createSigner({ keyId, privateKey })` builds a frozen rail or recovery signer
+  from an operator's own Ed25519 private `KeyObject` or unencrypted PKCS#8 PEM,
+  with the derived public key and SPKI PEM. The demo signer factories remain
+  for reproducible tests.
+
 ### Fixed
+
+- `ConsequenceRail` and `runRecoveryPreflight` now check the signer when they
+  are constructed or called. A signer without `publicKeyPem`, such as one built
+  directly from `node:crypto`, closed an action with a signed receipt and then
+  failed `exportBundle` with `CANONICALIZATION_FAILED`, so that settlement could
+  never be exported. Missing public halves are now derived. A signer whose
+  public key contradicts its private key, a non-Ed25519 key, or a `kid` that is
+  empty or contains control characters is refused with `CONFIG_INVALID` (or
+  `RECOVERY_CONFIG_INVALID`) before any event is appended or any drill runs;
+  a mismatched signer previously failed only at execute, after a reservation
+  and permit existed. Errors never include key material. Demo signers and the
+  pinned default artifact hashes are unchanged.
 
 - CLI artifact and report output is staged before atomic, no-overwrite
   publication. A partial write failure no longer leaves a truncated destination

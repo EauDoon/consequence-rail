@@ -8,7 +8,7 @@ import { MemoryEventStore } from "./event-store.js";
 import { RailError } from "./errors.js";
 import { evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
 import { verifyRecoveryPreflight } from "./recovery-preflight.js";
-import { signArtifact, verifyArtifact } from "./signing.js";
+import { normalizeSigner, signArtifact, verifyArtifact } from "./signing.js";
 import {
   assert,
   assertConnectorResult,
@@ -94,6 +94,10 @@ export class ConsequenceRail {
     eventStore,
   } = {}) {
     assert(signer && clock && connector, "CONFIG_INVALID", "Signer, clock and connector are required.");
+    // Check the whole signer contract now. A signer without publicKeyPem used
+    // to close an action and then fail at export; a mismatched public half
+    // failed only at execute, after a reservation and permit existed.
+    signer = normalizeSigner(signer, "CONFIG_INVALID");
     assert(
       typeof requireRecoveryPreflight === "boolean",
       "CONFIG_INVALID",

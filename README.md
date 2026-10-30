@@ -271,6 +271,24 @@ status check and execution. A production connector therefore needs an atomic
 lease-consume or execute-with-reservation operation. The in-process mock makes
 that boundary atomic only for this demonstration.
 
+## Sign with your own keys
+
+Library adopters can sign with their own Ed25519 keys instead of the public
+demonstration keys. `createSigner({ keyId, privateKey })` from
+[`src/signing.js`](src/signing.js) accepts an Ed25519 private `KeyObject` or an
+unencrypted PKCS#8 PEM string and returns a frozen signer with the derived
+public key and SPKI PEM. Pass it as the `ConsequenceRail` `signer` or the
+`runRecoveryPreflight` `signer`.
+
+Both check any signer when they are constructed or called: the `kid` must be a
+non-empty string without control characters, the private key must be Ed25519,
+and a supplied `publicKey` or `publicKeyPem` must match the private key. A
+missing public half is derived. A contradictory signer is refused with
+`CONFIG_INVALID` (or `RECOVERY_CONFIG_INVALID`) before any event is recorded or
+any drill runs, and the error never includes key material. Storing and
+protecting the private key remains the operator's job; this project does not
+provide key management.
+
 ## Deterministic fault matrix
 
 ```text

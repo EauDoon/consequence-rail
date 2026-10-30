@@ -237,6 +237,16 @@ and MUST NOT become trusted automatically.
 The demo keys are deterministic and public. They are suitable only for
 reproducible tests.
 
+A rail or recovery signer is `{ kid, privateKey, publicKey, publicKeyPem }`.
+`kid` MUST be a non-empty string without control characters; it becomes the
+signature `key_id`. `privateKey` MUST be an Ed25519 private key. `publicKey`
+and `publicKeyPem` MAY be omitted and are then derived from `privateKey`; when
+supplied they MUST encode the same public key, and `publicKeyPem` MUST be
+exactly one SPKI `PUBLIC KEY` PEM block. The reference implementation checks
+this contract when a `ConsequenceRail` is constructed and before
+`runRecoveryPreflight` invokes an adapter. `publicKeyPem` is copied into the
+unsigned trust hint of exported bundles.
+
 ## Bundle profiles
 
 The `receipt` profile omits the full proposal and raw evidence. It supports

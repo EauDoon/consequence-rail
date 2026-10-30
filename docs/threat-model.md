@@ -139,10 +139,14 @@ can rewrite local history. External checkpointing is deferred.
 
 Threat: an attacker signs false events or receipts.
 
-Control: offline verification requires an explicit trusted-key set.
+Control: offline verification requires an explicit trusted-key set. An
+operator can sign with their own Ed25519 key through `createSigner`; the rail
+and the recovery runner check that a signer's public half matches its private
+key before any event is recorded or any drill runs.
 
 Residual risk: the deterministic demo rail and connector keys are public and
-offer no production security. Production key management and rotation are not
+offer no production security. Storing and protecting an operator key is the
+operator's responsibility. Production key management and rotation are not
 implemented.
 
 ### Sensitive logs
