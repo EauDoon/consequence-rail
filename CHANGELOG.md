@@ -91,7 +91,6 @@ of the package version below.
   a mismatched signer previously failed only at execute, after a reservation
   and permit existed. Errors never include key material. Demo signers and the
   pinned default artifact hashes are unchanged.
-
 - CLI artifact and report output is staged before atomic, no-overwrite
   publication. A partial write failure no longer leaves a truncated destination
   that blocks retrying the export. Existing files and symlinks are still refused.
