@@ -1,8 +1,12 @@
 # Offline artifact review
 
-These commands read local artifacts under the public demonstration keys. They
-do not execute actions, admit permits, authenticate production identities or
-establish the truth of evidence. Library calls require explicit trusted keys.
+These commands read local artifacts under the public demonstration keys,
+unless `--trusted-keys <file>` names a trusted-keys file; then they trust
+exactly the keys that file lists for each role and report `trust_profile:
+caller_supplied_keys` with its `trust_config_digest`. `crctl trust demo`
+prints a template. They do not execute actions, admit permits, authenticate
+production identities or establish the truth of evidence. Library calls
+require explicit trusted keys.
 
 ## Share a receipt profile
 
@@ -17,10 +21,28 @@ window accepts receipts from 0.2.20 and earlier, whose close time came from a
 second clock read. This is data minimization, not anonymization: signed
 event metadata and connector commitments remain. Existing output files are
 never overwritten. Keep the original audit file for semantic replay.
+`bundle verify` and `verify-many` accept the projection only with
+`--allow-receipt-profile`.
 Serialized artifacts, including their final newline, must fit the same 1 MiB
 loader cap. Large exports use compact JSON when indentation would exceed it;
 if compact output is still too large, export fails before creating or changing
 the destination. Signed data is unchanged by whitespace selection.
+
+## Check a bundle against a recorded checkpoint
+
+Record `event_count` and `event_chain_head` from any lifecycle response or
+`GET /v0/actions/{id}` while the action is in progress, and keep them where the
+rail operator cannot change them. `crctl bundle verify audit.json
+--expect-checkpoint <event_count>:<event_chain_head>` then requires the
+bundle's event at that position to have exactly that hash, which proves the
+recorded history is a prefix of the bundle's chain. A history rewritten and
+re-signed at or before that position fails with `CHECKPOINT_MISMATCH` even
+though its signatures verify. Later events are not covered, so record the
+checkpoint from the final lifecycle response to pin the outcome.
+`timeline`, `review`, `receipt`, `evidence` and `timing` accept the same flag
+and report a `checkpoint` object (or line); `bundle receipt` writes no output
+on a mismatch. No checkpoint service is provided; the check is only as strong
+as the place the checkpoint is kept.
 
 ## Triage a verified settlement
 
@@ -141,6 +163,16 @@ and `outcome_expectation_met: false`, while `valid` still describes artifact
 verification. Supported expectations are `settled`, `compensated`, and `disputed`.
 Batch expectations require every input to verify and match; they never suppress
 differing-receipt review. Without the flag, existing verification behavior remains.
+
+Both commands demand the audit profile. Add `--allow-receipt-profile` to accept
+receipt-profile files with integrity-only verification, for example
+`bundle verify-many *.receipt.json --allow-receipt-profile --require-outcome settled`.
+The receipt outcome is signed and bound to the terminal `CLOSED` event, so the
+outcome gate means the same for both profiles. Each result names its `profile`
+and `verification_scope`; receipt results list `limitations`, including that
+`action.resource_id_digest` is not bound to signed data in that profile, and
+`verify-many` adds `profile_counts`. Audit bundles keep mandatory lifecycle
+semantics under the flag.
 
 Use `recovery-preflight verify drill.json --require-qualified --json` to require
 `QUALIFIED_EXACT`; `verify-many` supports the same flag. Authentic failed,

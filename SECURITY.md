@@ -29,10 +29,12 @@ issue.
 
 ## Known limitations
 
-The deterministic rail and connector signing keys are public. State is
+The deterministic rail and connector signing keys are public. The CLI trusts
+them by default; `--trusted-keys` replaces them with a verifier-side
+trusted-keys file, which is a trust set, not key management. State is
 process-local and in-memory. The bounded loopback API accepts an unauthenticated
 policy decision. It is not an Internet-facing security boundary. No external
-checkpoint, production key management, persistent transaction boundary, or
+checkpoint service, production key management, persistent transaction boundary, or
 independent evidence trust adapter is implemented. HTTP request bodies and
 artifact files reject duplicate JSON object members before interpretation.
 Library callers that pass already-parsed objects bypass that check, because a

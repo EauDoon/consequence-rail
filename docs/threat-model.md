@@ -131,18 +131,37 @@ Unanticipated or irreversible responses require a new action.
 Threat: a local operator deletes, reorders or modifies event history.
 
 Control: events are signed and hash-linked; receipts bind the chain head.
+Every lifecycle response returns the current `event_count` and
+`event_chain_head`, and `crctl --expect-checkpoint <count>:<head>` (or
+`verifyChainCheckpoint`) refuses a bundle whose event chain does not extend a
+checkpoint recorded that way with `CHECKPOINT_MISMATCH`. A rewrite of any of
+the first `event_count` events therefore fails even when its signatures and
+lifecycle semantics verify.
 
-Residual risk: an operator controlling the signing key and every checkpoint
-can rewrite local history. External checkpointing is deferred.
+Residual risk: events after the checkpoint position are not covered. A
+checkpoint recorded at authorization leaves the execution, outcome and receipt
+rewritable; only a checkpoint from the final lifecycle response pins the
+outcome. The check helps only while the checkpoint is held outside the
+rail operator's control. No checkpoint service or transparency log is
+implemented, and an operator controlling the signing key and every retained
+checkpoint can rewrite local history.
 
 ### Key compromise
 
 Threat: an attacker signs false events or receipts.
 
-Control: offline verification requires an explicit trusted-key set.
+Control: offline verification requires an explicit trusted-key set. An
+operator can sign with their own Ed25519 key through `createSigner`; the rail
+and the recovery runner check that a signer's public half matches its private
+key before any event is recorded or any drill runs. `crctl --trusted-keys`
+verifies artifacts against a closed, versioned trusted-keys file instead of
+the demo keys; it refuses private-key PEMs and non-Ed25519 keys and never
+trusts an embedded key hint. That file is a verifier-side trust set, not key
+management: it has no validity windows or revocation.
 
 Residual risk: the deterministic demo rail and connector keys are public and
-offer no production security. Production key management and rotation are not
+offer no production security. Storing and protecting an operator key is the
+operator's responsibility. Production key management and rotation are not
 implemented.
 
 ### Sensitive logs
@@ -183,7 +202,7 @@ Do not describe the reference as production-ready while any of these remain:
 
 - deterministic demo keys
 - in-memory permit state
-- no external checkpoint
+- no external checkpoint service or transparency log
 - no production connector isolation
 - no independent evidence trust adapter
 - incomplete cross-language canonicalization vectors

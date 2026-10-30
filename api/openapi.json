@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Consequence Rail Reference API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Experimental loopback-only reference API for recourse-gated execution and optional recovery preflight. The server keeps runtime state in memory, accepts JSON bodies up to 65,536 bytes, enforces same-origin loopback Host and Origin values, rejects unknown or repeated query parameters before route mutation, and may return 400, 403, 405, 413, 415, 429, 500, or 503 boundary errors before route-specific processing. Failure bodies include a request_id for correlation; unexpected exceptions are logged to stderr and returned as INTERNAL_ERROR without leaking the cause."
   },
   "servers": [
@@ -722,7 +722,19 @@
     "/v0/bundles/verify": {
       "post": {
         "operationId": "verifySettlementBundle",
-        "summary": "Verify integrity and semantics of an audit bundle against configured trusted keys",
+        "summary": "Verify a settlement bundle against the sidecar's trusted keys: the public demonstration keys, or the keys of rail --trusted-keys",
+        "description": "Without allow_receipt_profile, the bundle must be an audit profile and gets integrity and lifecycle-semantic verification. With allow_receipt_profile=true, an audit bundle still gets both, a receipt-profile bundle gets integrity verification only, and the response adds profile and verification_scope, plus limitations for a receipt.",
+        "parameters": [
+          {
+            "name": "allow_receipt_profile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": ["true"]
+            },
+            "description": "Accept a receipt-profile bundle with integrity-only verification. Any other value is refused with REQUEST_INVALID before the body is read."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -779,8 +791,8 @@
                       "additionalProperties": false,
                       "required": ["status", "valid"],
                       "properties": {
-                        "status": { "const": "verified" },
-                        "valid": { "const": true },
+                        "status": { "enum": ["verified", "not_requested"] },
+                        "valid": { "enum": [true, null] },
                         "final_state": { "const": "CLOSED" },
                         "derived_outcome": {
                           "enum": ["settled", "compensated", "disputed"]
@@ -819,6 +831,19 @@
                     "trusted_connector_key_id": {
                       "type": "string",
                       "minLength": 1
+                    },
+                    "profile": {
+                      "enum": ["audit", "receipt"],
+                      "description": "Present only with allow_receipt_profile=true."
+                    },
+                    "verification_scope": {
+                      "enum": ["integrity_and_lifecycle_semantics", "integrity_only"],
+                      "description": "Present only with allow_receipt_profile=true."
+                    },
+                    "limitations": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "Present only for a receipt-profile bundle verified with allow_receipt_profile=true."
                     }
                   }
                 }

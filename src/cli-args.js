@@ -11,12 +11,15 @@ export const VALUE_FLAGS = Object.freeze({
   "--expect-digest": "expect-digest",
   "--expect-other-digest": "expect-other-digest",
   "--require-outcome": "require-outcome",
+  "--trusted-keys": "trusted-keys",
+  "--expect-checkpoint": "expect-checkpoint",
 });
 
 export const BOOL_FLAGS = Object.freeze({
   "--json": "json",
   "--markdown": "markdown",
   "--require-qualified": "require-qualified",
+  "--allow-receipt-profile": "allow-receipt-profile",
 });
 
 // An unpadded base64url SHA-256 digest starts with "-" about 1 time in 64.

@@ -1,6 +1,6 @@
 {
   "name": "consequence-rail",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Recourse-gated execution and settlement receipts for autonomous actions.",
   "type": "module",

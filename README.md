@@ -228,6 +228,28 @@ encodings, bounds headers, request time, concurrency, and requests per socket,
 and emits restrictive response headers. It is still not an authenticated or
 production deployment boundary.
 
+`POST /v0/bundles/verify` demands an audit bundle, so it refuses the receipt
+profile that `GET /v0/actions/{id}/bundle` returns by default. Add
+`?allow_receipt_profile=true` to verify a receipt with integrity-only
+verification; the response then adds `profile`, `verification_scope` and, for
+a receipt, `limitations`. Any other value for that parameter is refused with
+`REQUEST_INVALID` before the body is read. The endpoint trusts the public
+demonstration keys unless you start the sidecar with a trusted-keys file:
+
+```text
+node ./cmd/rail.js --port 0 --trusted-keys trusted-keys.json
+```
+
+The file needs at least one rail key and one connector key, and is checked
+before the sidecar binds; an unusable file exits 1 with a structured error.
+A second stdout line after the listening line then names its
+`trust_config_digest`. These keys apply to bundle verification only. The
+sidecar still signs its own lifecycle artifacts with the public demonstration
+keys, so a file that omits them makes the endpoint refuse the sidecar's own
+exports with `UNTRUSTED_KEY`. Library callers pass the same maps as
+`createReferenceServer({ bundleTrust })`. Without the flag and the parameter
+every response and startup line is unchanged.
+
 ## Assurance modes
 
 | Mode | Meaning | May issue a permit |
@@ -258,6 +280,28 @@ verification then:
 The CLI demo uses the `audit` profile. An embedded key is never trusted
 automatically.
 
+`crctl bundle verify` and `bundle verify-many` demand the audit profile, so
+they refuse a receipt with `SEMANTIC_INVALID`. The sidecar and the library
+export the receipt profile by default, and it is the profile meant for
+sharing. To batch-verify receipts or gate on their outcome, add
+`--allow-receipt-profile`:
+
+```text
+node ./cmd/crctl.js bundle verify-many receipt-one.json receipt-two.json audit.json --allow-receipt-profile --require-outcome settled
+```
+
+Audit bundles still get full lifecycle semantics. Receipt bundles get the
+whole integrity path: signatures, the event chain, the receipt outcome and
+postcondition result bound to the terminal `CLOSED` event, the close-time
+window and the signed action class. Each result then reports `profile`,
+`verification_scope` (`integrity_only` or
+`integrity_and_lifecycle_semantics`) and, for receipts, `limitations` that
+state that lifecycle semantics were not replayed and that
+`action.resource_id_digest` is not bound to any signed artifact in this
+profile. `verify-many` adds `profile_counts`. Without the flag both commands
+behave exactly as before. Library callers can use `verifySettlementArtifact`
+from [`src/verify.js`](src/verify.js) with `allowReceiptProfile: true`.
+
 The conformance suite checks runtime presence of schema-required fields and
 runs portable proposal accept/reject vectors through live admission and offline
 bundle-shape validation for both proposal versions. These cover currency and
@@ -270,6 +314,108 @@ A remote connector can still change reservation state between the final
 status check and execution. A production connector therefore needs an atomic
 lease-consume or execute-with-reservation operation. The in-process mock makes
 that boundary atomic only for this demonstration.
+
+## Sign with your own keys
+
+Library adopters can sign with their own Ed25519 keys instead of the public
+demonstration keys. `createSigner({ keyId, privateKey })` from
+[`src/signing.js`](src/signing.js) accepts an Ed25519 private `KeyObject` or an
+unencrypted PKCS#8 PEM string and returns a frozen signer with the derived
+public key and SPKI PEM. Pass it as the `ConsequenceRail` `signer` or the
+`runRecoveryPreflight` `signer`.
+
+Both check any signer when they are constructed or called: the `kid` must be a
+non-empty string, the private key must be Ed25519, and a supplied `publicKey`
+or `publicKeyPem` must match the private key. `publicKey` may be any key input
+`node:crypto` accepts, as in 0.3.0; `publicKeyPem` must be one SPKI
+`PUBLIC KEY` block. A missing public half is derived. `createSigner` also
+refuses a `keyId` with control characters, which a trusted-keys file cannot
+list. A contradictory signer is refused with
+`CONFIG_INVALID` (or `RECOVERY_CONFIG_INVALID`) before any event is recorded or
+any drill runs, and the error never includes key material. Storing and
+protecting the private key remains the operator's job; this project does not
+provide key management.
+
+## Verify artifacts signed by your own keys
+
+By default every `crctl bundle` and `crctl recovery-preflight` command trusts
+only the public demonstration keys, so it refuses an artifact signed by your
+own key with `UNTRUSTED_KEY`. Pass `--trusted-keys <file>` to trust exactly the
+public keys a trusted-keys file lists instead:
+
+```text
+node ./cmd/crctl.js trust demo --out trusted-keys.json
+node ./cmd/crctl.js bundle verify settlement-bundle.json --trusted-keys trusted-keys.json
+node ./cmd/crctl.js recovery-preflight verify drill.json --trusted-keys trusted-keys.json --json
+```
+
+`crctl trust demo` prints the demonstration keys in the trusted-keys format
+and is the template for your own file. The format,
+`consequence-rail/trusted-keys/v0.1`
+([schema](spec/schemas/trusted-keys.schema.json)), is a closed JSON object
+with a `schema_version` and optional `rail`, `connector` and `recovery`
+arrays of `{ "key_id", "public_key_pem" }` entries, each an Ed25519 SPKI
+`PUBLIC KEY` PEM. A role holds at most 32 keys and needs at least one key
+overall. Settlement commands use the rail and connector roles, recovery
+commands use the recovery role, and `recovery-preflight link` uses all three.
+Several keys in one role let a verifier accept an outgoing and an incoming key
+during a rotation.
+
+The file is read through the same bounded loader as artifacts and is checked
+before any artifact is read. Private-key PEMs, non-Ed25519 keys, repeated
+`key_id` values and unknown fields are refused with `TRUST_CONFIG_INVALID`,
+and errors never include key material. When the flag is present the demo keys
+are trusted only if the file lists them. Outputs then report `trust_profile:
+caller_supplied_keys` and a `trust_config_digest` of the normalized key set,
+which does not change with member order, entry order, whitespace or PEM line
+endings. Without the flag every output is unchanged.
+
+Library callers can pass the maps returned by `loadTrustedKeysFile` or
+`parseTrustedKeys` from [`src/trust-config.js`](src/trust-config.js) as the
+verifier key maps, or as a `ConsequenceRail`'s `connectorTrustedKeys` and
+`recoveryTrustedKeys`. A trusted-keys file is a verifier-side trust set, not
+key management, and it carries no validity windows.
+
+## Check a bundle against a recorded checkpoint
+
+Signatures and the hash chain cannot stop the holder of the rail key from
+rewriting a whole history and signing it again. Only a chain head kept outside
+the rail operator's control can expose that. Every lifecycle response and
+`GET /v0/actions/{id}` already returns `event_count` and `event_chain_head`, so
+a policy system can record `<event_count>:<event_chain_head>` while the action
+is in progress. Later, check the exported bundle against it:
+
+```text
+node ./cmd/crctl.js bundle verify settlement-bundle.json --expect-checkpoint 11:<event_chain_head>
+```
+
+The bundle passes only if its event number `event_count` has exactly that
+hash. The chain's links and hashes are verified first, so a match proves that
+the first `event_count` events are the history that was recorded; later events
+may follow. Otherwise the command fails with `CHECKPOINT_MISMATCH` and exit
+status 1.
+
+A checkpoint protects only the events at or before its position. One recorded
+right after authorization, `2:<event_chain_head>`, covers the proposal and the
+authorization decision; the execution, the outcome and the receipt can still
+be rewritten and re-signed after it and pass. To pin the outcome, record the
+`event_count` and `event_chain_head` from the lifecycle response that closes
+the action, or from `GET /v0/actions/{id}` once its state is `CLOSED`, and
+check against that.
+
+`bundle verify`, `timeline`, `review`, `receipt`, `evidence` and `timing`
+accept the flag; JSON output gains a `checkpoint` object with
+`events_after_checkpoint`, and text output a `checkpoint:` line. A malformed
+value is a usage error raised before any file is read, and `bundle receipt`
+writes nothing when the checkpoint does not match. The flag combines with
+`--expect-digest` and `--trusted-keys`, and works on every bundle from any
+release since 0.1.0 that the same command accepts without it. Library callers
+can use `parseChainCheckpoint` and `verifyChainCheckpoint` from
+[`src/verify.js`](src/verify.js).
+
+A checkpoint helps only while it stays outside the rail operator's control.
+This project runs no checkpoint service or transparency log, and someone who
+holds the rail key and every retained checkpoint can still rewrite history.
 
 ## Deterministic fault matrix
 
@@ -314,12 +460,14 @@ or change settlement semantics.
 
 The demo rail and connector signing keys are deterministically derived from
 public labels and are not secret. They must never be used for production
-trust.
+trust. The CLI trusts them by default only so the synthetic demos verify; use
+`--trusted-keys` to verify against keys you choose.
 
 Signatures establish integrity and provenance under a trusted key. They do not
 establish that evidence is true, complete, independent, or causally connected
 to an action. Hash chains detect mutation only while a trustworthy checkpoint
-or chain head remains outside an attacker's control.
+or chain head remains outside an attacker's control; `--expect-checkpoint`
+checks a bundle against one.
 
 Only a pre-authorized, bounded, reversible remedy may run automatically. An
 unanticipated or irreversible response must become a new consequential
@@ -363,7 +511,7 @@ Read:
 
 ## Project status
 
-This checkout contains the experimental v0.3.0 source release. It is a
+This checkout contains the experimental v0.4.0 source release. It is a
 reference implementation, not a production deployment or hosted service.
 The public release status and maintenance boundaries are recorded in
 [`docs/release-status.md`](docs/release-status.md).
@@ -395,11 +543,11 @@ coverage comparison, settlement/drill linking, collection checks and Markdown
 reports. All operate on saved artifacts; none issues a permit or invokes a live
 connector. Every single-artifact inspection accepts an independent digest pin.
 
-Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata, the state path, outcome, recourse status, evidence count and bound digests. Audit profiles replay lifecycle semantics. Receipt profiles report integrity only and disclose omitted evidence. Reports omit raw proposals and evidence. The CLI explicitly uses public demonstration keys; this is a synthetic integrity check, not a production trust claim.
+Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata, the state path, outcome, recourse status, evidence count and bound digests. Audit profiles replay lifecycle semantics. Receipt profiles report integrity only and disclose omitted evidence. Reports omit raw proposals and evidence. Without `--trusted-keys`, the CLI explicitly uses public demonstration keys; this is a synthetic integrity check, not a production trust claim.
 
 Compare two saved artifacts with `node ./cmd/crctl.js bundle compare left.json right.json --json`. Both must pass verification. The report distinguishes the same action, the same signed receipt, and the same canonical bundle, so an audit/receipt profile change is distinguishable from a different settlement. A comparison never selects an authoritative receipt.
 
-Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.json two.json --json`. Files are checked sequentially with independent results. Every file must pass full semantic verification; receipt-only profiles fail this strict command. Any failure produces a nonzero exit status after all files have been checked.
+Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.json two.json --json`. Files are checked sequentially with independent results. Every file must pass full semantic verification; receipt-only profiles fail this strict command unless you add `--allow-receipt-profile`. Any failure produces a nonzero exit status after all files have been checked.
 
 ## Discover synthetic exercises
 

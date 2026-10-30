@@ -2,7 +2,7 @@ import { deepClone, deepFreeze, digest } from "./canonical.js";
 import { RailError } from "./errors.js";
 import { measureMockRefundRecoveryAdapterImplementation } from "./mock-refund-recovery-adapter.js";
 import { MAX_DURATION_SECONDS } from "./rail-schema.js";
-import { signArtifact, verifyArtifact } from "./signing.js";
+import { normalizeSigner, signArtifact, verifyArtifact } from "./signing.js";
 
 export const RECOVERY_QUALIFICATIONS = [
   "QUALIFIED_EXACT",
@@ -443,6 +443,9 @@ export async function runRecoveryPreflight({ contract, adapter, signer, clock })
     "RECOVERY_CONFIG_INVALID",
     "Recovery adapter, signer and clock are required.",
   );
+  // The signer's public half goes into the exported trust hint. Check it
+  // before the adapter runs, so a bad signer cannot cost a drill.
+  signer = normalizeSigner(signer, "RECOVERY_CONFIG_INVALID");
   const adapterMeasurer = adapterId === "mock-refund-recovery"
     ? measureMockRefundRecoveryAdapterImplementation
     : null;

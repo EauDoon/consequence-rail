@@ -11,8 +11,100 @@ of the package version below.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-30
+
+This release adds capabilities without changing artifacts. There is no
+`schema_version`, signature or canonical-byte change, the pinned default
+artifact hashes are unchanged, and bundles and drills written by 0.3.0 still
+verify. One new, independently versioned identifier is added:
+`consequence-rail/trusted-keys/v0.1`.
+
+### Added
+
+- `createSigner({ keyId, privateKey })` builds a frozen rail or recovery signer
+  from an operator's own Ed25519 private `KeyObject` or unencrypted PKCS#8 PEM,
+  with the derived public key and SPKI PEM. The demo signer factories remain
+  for reproducible tests.
+- `crctl --trusted-keys <file>` verifies artifacts signed by your own keys. It
+  is accepted by `bundle verify`, `verify-many`, `timeline`, `review`,
+  `receipt`, `evidence`, `timing` and `compare`, and by `recovery-preflight
+  verify`, `review`, `compare`, `link` and `verify-many`. The file uses the new,
+  independently versioned `consequence-rail/trusted-keys/v0.1` format
+  (`spec/schemas/trusted-keys.schema.json`) with optional `rail`, `connector`
+  and `recovery` roles of up to 32 Ed25519 public keys each. It is loaded
+  through the bounded artifact loader and validated before any artifact is
+  read; private-key PEMs, non-Ed25519 keys, repeated key IDs and unknown fields
+  are refused with `TRUST_CONFIG_INVALID`. Under the flag only the listed keys
+  are trusted, and outputs report `trust_profile: caller_supplied_keys` with a
+  `trust_config_digest` that is stable across member order, entry order,
+  whitespace and PEM line endings. Without the flag every output is unchanged.
+- `crctl trust demo [--out <new-file>]` prints the public demonstration keys as
+  a trusted-keys file, as a template and as the explicit way to trust them.
+- `src/trust-config.js` exports `parseTrustedKeys`, `loadTrustedKeysFile` and
+  `demoTrustConfig` for library callers.
+- `crctl --expect-checkpoint <event_count>:<event_chain_head>` checks a bundle
+  against a chain head recorded during the lifecycle, from any lifecycle
+  response or `GET /v0/actions/{id}`. The bundle passes only if its event at
+  that position has exactly that hash; otherwise the command fails with
+  `CHECKPOINT_MISMATCH`. A history rewritten and re-signed with the rail key
+  previously passed `bundle verify`, lifecycle semantics included; it now fails
+  when the rewrite touches any of the first `event_count` events. Events after
+  the checkpoint are not covered, so only a checkpoint recorded from the final
+  lifecycle response pins the outcome. `bundle verify`,
+  `timeline`, `review`, `receipt`, `evidence` and `timing` accept the flag;
+  JSON output gains a `checkpoint` object and text output a `checkpoint:` line,
+  a malformed value is a usage error raised before any file is read, and
+  `bundle receipt` writes nothing on a mismatch. `src/verify.js` exports
+  `parseChainCheckpoint` and `verifyChainCheckpoint`. No checkpoint service is
+  provided, and the check is only as strong as the place the checkpoint is
+  kept.
+- `crctl bundle verify` and `bundle verify-many` accept
+  `--allow-receipt-profile`. Both commands demand the audit profile, so the
+  receipt profile that the sidecar and library export by default, and that is
+  meant for sharing, could not be batch-verified or gated with
+  `--require-outcome`. Under the flag, receipt bundles get the full integrity
+  path (signatures, chain, the outcome, close-time and signed action-type
+  bindings) and audit bundles keep full lifecycle semantics. Results add
+  `profile` and `verification_scope`; receipt results add `limitations`
+  stating that lifecycle semantics were not replayed and that
+  `action.resource_id_digest` is not bound to signed data in that profile;
+  `verify-many` adds `profile_counts`. Without the flag both commands are
+  unchanged. `src/verify.js` exports `verifySettlementArtifact`,
+  `settlementProfileFields` and `RECEIPT_PROFILE_LIMITATIONS`, and
+  `verifyArtifactFiles` accepts `allowReceiptProfile`.
+- The sidecar can verify the bundle it exports by default.
+  `POST /v0/bundles/verify?allow_receipt_profile=true` accepts a
+  receipt-profile bundle, such as the default `GET /v0/actions/{id}/bundle`
+  export that the endpoint previously refused with `SEMANTIC_INVALID`, with
+  integrity-only verification, and adds `profile`, `verification_scope` and
+  receipt `limitations` to the response. Any other value or a repeated
+  parameter is refused with `REQUEST_INVALID` before the body is read.
+  `rail --trusted-keys <file>` makes that endpoint trust a trusted-keys file's
+  rail and connector keys instead of the demo keys, as its OpenAPI summary
+  promised; the file is checked before the sidecar binds, and a second stdout
+  line after the listening line names its `trust_config_digest`. The sidecar
+  still signs its own lifecycle artifacts with the demo keys.
+  `createReferenceServer` accepts the same trust as `bundleTrust`. The OpenAPI
+  document declares the parameter and the opt-in response fields. Without the
+  flag and the parameter every response, error and startup line is unchanged.
+
 ### Fixed
 
+- `ConsequenceRail` and `runRecoveryPreflight` now check the signer when they
+  are constructed or called. A signer without `publicKeyPem`, such as one built
+  directly from `node:crypto`, closed an action with a signed receipt and then
+  failed `exportBundle` with `CANONICALIZATION_FAILED`, so that settlement could
+  never be exported. Missing public halves are now derived. A signer whose
+  public key contradicts its private key, a non-Ed25519 key, or an empty or
+  non-string `kid` is refused with `CONFIG_INVALID` (or
+  `RECOVERY_CONFIG_INVALID`) before any event is appended or any drill runs;
+  a mismatched signer previously failed only at execute, after a reservation
+  and permit existed. Every matching signer that 0.3.0 accepted still works:
+  `publicKey` may be any `node:crypto` key input, including DER, JWK, a PEM
+  `Buffer` or the private key, a `kid` may contain control characters, and
+  `publicKeyPem` may carry surrounding whitespace and is still exported
+  verbatim. Errors never include key material. Demo signers and the pinned
+  default artifact hashes are unchanged.
 - CLI artifact and report output is staged before atomic, no-overwrite
   publication. A partial write failure no longer leaves a truncated destination
   that blocks retrying the export. Existing files and symlinks are still refused.
@@ -592,7 +684,8 @@ Public source release on 27 July 2026.
 
 Initial public source release on 23 July 2026.
 
-[Unreleased]: https://github.com/EauDoon/consequence-rail/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/EauDoon/consequence-rail/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/EauDoon/consequence-rail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/EauDoon/consequence-rail/compare/v0.2.20...v0.3.0
 [0.2.20]: https://github.com/EauDoon/consequence-rail/commit/418a212e8e7dfec8c158e99e0973bb22e3038e0a
 [0.2.19]: https://github.com/EauDoon/consequence-rail/commit/548fb22eece9644f4875ecb12e61fa031234016b
