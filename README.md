@@ -289,6 +289,46 @@ any drill runs, and the error never includes key material. Storing and
 protecting the private key remains the operator's job; this project does not
 provide key management.
 
+## Verify artifacts signed by your own keys
+
+By default every `crctl bundle` and `crctl recovery-preflight` command trusts
+only the public demonstration keys, so it refuses an artifact signed by your
+own key with `UNTRUSTED_KEY`. Pass `--trusted-keys <file>` to trust exactly the
+public keys a trusted-keys file lists instead:
+
+```text
+node ./cmd/crctl.js trust demo --out trusted-keys.json
+node ./cmd/crctl.js bundle verify settlement-bundle.json --trusted-keys trusted-keys.json
+node ./cmd/crctl.js recovery-preflight verify drill.json --trusted-keys trusted-keys.json --json
+```
+
+`crctl trust demo` prints the demonstration keys in the trusted-keys format
+and is the template for your own file. The format,
+`consequence-rail/trusted-keys/v0.1`
+([schema](spec/schemas/trusted-keys.schema.json)), is a closed JSON object
+with a `schema_version` and optional `rail`, `connector` and `recovery`
+arrays of `{ "key_id", "public_key_pem" }` entries, each an Ed25519 SPKI
+`PUBLIC KEY` PEM. A role holds at most 32 keys and needs at least one key
+overall. Settlement commands use the rail and connector roles, recovery
+commands use the recovery role, and `recovery-preflight link` uses all three.
+Several keys in one role let a verifier accept an outgoing and an incoming key
+during a rotation.
+
+The file is read through the same bounded loader as artifacts and is checked
+before any artifact is read. Private-key PEMs, non-Ed25519 keys, repeated
+`key_id` values and unknown fields are refused with `TRUST_CONFIG_INVALID`,
+and errors never include key material. When the flag is present the demo keys
+are trusted only if the file lists them. Outputs then report `trust_profile:
+caller_supplied_keys` and a `trust_config_digest` of the normalized key set,
+which does not change with member order, entry order, whitespace or PEM line
+endings. Without the flag every output is unchanged.
+
+Library callers can pass the maps returned by `loadTrustedKeysFile` or
+`parseTrustedKeys` from [`src/trust-config.js`](src/trust-config.js) as the
+verifier key maps, or as a `ConsequenceRail`'s `connectorTrustedKeys` and
+`recoveryTrustedKeys`. A trusted-keys file is a verifier-side trust set, not
+key management, and it carries no validity windows.
+
 ## Deterministic fault matrix
 
 ```text
@@ -332,7 +372,8 @@ or change settlement semantics.
 
 The demo rail and connector signing keys are deterministically derived from
 public labels and are not secret. They must never be used for production
-trust.
+trust. The CLI trusts them by default only so the synthetic demos verify; use
+`--trusted-keys` to verify against keys you choose.
 
 Signatures establish integrity and provenance under a trusted key. They do not
 establish that evidence is true, complete, independent, or causally connected
@@ -413,7 +454,7 @@ coverage comparison, settlement/drill linking, collection checks and Markdown
 reports. All operate on saved artifacts; none issues a permit or invokes a live
 connector. Every single-artifact inspection accepts an independent digest pin.
 
-Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata, the state path, outcome, recourse status, evidence count and bound digests. Audit profiles replay lifecycle semantics. Receipt profiles report integrity only and disclose omitted evidence. Reports omit raw proposals and evidence. The CLI explicitly uses public demonstration keys; this is a synthetic integrity check, not a production trust claim.
+Run `node ./cmd/crctl.js bundle review audit.json --json` for verified metadata, the state path, outcome, recourse status, evidence count and bound digests. Audit profiles replay lifecycle semantics. Receipt profiles report integrity only and disclose omitted evidence. Reports omit raw proposals and evidence. Without `--trusted-keys`, the CLI explicitly uses public demonstration keys; this is a synthetic integrity check, not a production trust claim.
 
 Compare two saved artifacts with `node ./cmd/crctl.js bundle compare left.json right.json --json`. Both must pass verification. The report distinguishes the same action, the same signed receipt, and the same canonical bundle, so an audit/receipt profile change is distinguishable from a different settlement. A comparison never selects an authoritative receipt.
 

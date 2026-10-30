@@ -142,7 +142,11 @@ Threat: an attacker signs false events or receipts.
 Control: offline verification requires an explicit trusted-key set. An
 operator can sign with their own Ed25519 key through `createSigner`; the rail
 and the recovery runner check that a signer's public half matches its private
-key before any event is recorded or any drill runs.
+key before any event is recorded or any drill runs. `crctl --trusted-keys`
+verifies artifacts against a closed, versioned trusted-keys file instead of
+the demo keys; it refuses private-key PEMs and non-Ed25519 keys and never
+trusts an embedded key hint. That file is a verifier-side trust set, not key
+management: it has no validity windows or revocation.
 
 Residual risk: the deterministic demo rail and connector keys are public and
 offer no production security. Storing and protecting an operator key is the

@@ -28,6 +28,7 @@ import { digest } from "../src/canonical.js";
 import { reviewRecovery, compareRecovery, linkRecovery } from "../src/recovery-review.js";
 import { settlementMarkdown, recoveryMarkdown } from "../src/review-markdown.js";
 import { parseCliArgs, usage } from "../src/cli-args.js";
+import { demoTrustConfig, loadTrustedKeysFile } from "../src/trust-config.js";
 import { VERSION } from "../src/version.js";
 
 function assertFlags(options, allowed) {
@@ -61,6 +62,7 @@ Usage:
   crctl recovery-preflight compare <left> <right> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight link <settlement> <drill> [--at <ISO timestamp>] [--json]
   crctl recovery-preflight verify-many <file>... [--at <ISO timestamp>] [--json]
+  crctl trust demo [--out <new-file>]
   crctl --help
   crctl --version
 
@@ -81,17 +83,28 @@ Flags:
   --assurance <mode>    Assurance mode for the refund and inventory demos
   --json                Print machine-readable JSON
   --markdown            Print a readable settlement or recovery review
-  --out <file>          Write a demo bundle, receipt projection or review report (must not exist)
+  --out <file>          Write a demo bundle, receipt projection, review report or trust file
+                        (must not exist)
   --at <ISO timestamp>  Require recovery qualification to be current at this instant
   --expect-digest <digest> Require the recorded canonical artifact digest
   --expect-other-digest <digest> Pin the second input of compare or link
   --require-outcome <outcome> Require settled, compensated or disputed (bundle verify/verify-many)
   --require-qualified   Require QUALIFIED_EXACT (recovery verify/verify-many; add --at for freshness)
+  --trusted-keys <file> Trust only the keys in this trusted-keys file (every bundle and
+                        recovery-preflight command)
   -h, --help            Show this help
   --version             Print the implementation version
 
   Every value flag also accepts the --name=value form, for example
   --expect-digest=<digest>. A digest pin may begin with a dash.
+
+Trust:
+  Without --trusted-keys, bundle and recovery-preflight commands trust only the
+  public demonstration keys. With it, they trust only the keys the file lists
+  for each role (rail, connector, recovery), and report trust_profile
+  caller_supplied_keys with the file's trust_config_digest. The file format is
+  consequence-rail/trusted-keys/v0.1. crctl trust demo prints the demonstration
+  keys in that format, as a template.
 
 Examples:
   All single-artifact review, evidence, timing, timeline and receipt commands
@@ -172,6 +185,44 @@ function readPinnedArtifact(path, expected) {
   const bundle = readArtifactFile(path);
   if (expected !== undefined) assertArtifactDigest(bundle, expected);
   return bundle;
+}
+
+// Without --trusted-keys every command trusts the public demonstration keys,
+// exactly as before. With it, only the listed keys are trusted, and the file
+// is loaded and validated before any artifact is read.
+function loadTrust(options) {
+  if (options["trusted-keys"] === undefined) {
+    return {
+      supplied: false,
+      rail: demoTrustedKeys(),
+      connector: demoConnectorTrustedKeys(),
+      recovery: demoRecoveryTrustedKeys(),
+      profile: { trust_profile: "public_demo_keys_only" },
+    };
+  }
+  const config = loadTrustedKeysFile(options["trusted-keys"]);
+  return {
+    supplied: true,
+    rail: config.rail,
+    connector: config.connector,
+    recovery: config.recovery,
+    profile: { trust_profile: "caller_supplied_keys", trust_config_digest: config.trust_config_digest },
+  };
+}
+
+function settlementTrust(trust) {
+  return { trustedKeys: trust.rail, trustedConnectorKeys: trust.connector };
+}
+
+// Outputs that never reported a trust profile gain one only under the flag.
+function suppliedProfile(trust) {
+  return trust.supplied ? trust.profile : {};
+}
+
+function suppliedProfileLines(trust) {
+  return trust.supplied
+    ? [`trust_profile: ${trust.profile.trust_profile}`, `trust_config_digest: ${trust.profile.trust_config_digest}`]
+    : [];
 }
 
 function requireNoExtra(positional, count, command) {
@@ -333,33 +384,30 @@ async function main() {
   if (command === "bundle") {
     if (subcommand === "receipt") {
       requireNoExtra(positional, 3, "bundle receipt");
-      assertFlags(options, new Set(["json", "out", "expect-digest"]));
+      assertFlags(options, new Set(["json", "out", "expect-digest", "trusted-keys"]));
       if (!target || !options.out) throw usage("Receipt export requires input and --out.");
-      const bundle = receiptBundle(readPinnedArtifact(target, options["expect-digest"]), {
-        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
-      });
+      const trust = loadTrust(options);
+      const bundle = receiptBundle(readPinnedArtifact(target, options["expect-digest"]), settlementTrust(trust));
       writeExclusiveJson(options.out, bundle);
-      process.stdout.write(`${JSON.stringify({ valid: true, profile: "receipt", bundle_digest: digest(bundle), trust_profile: "public_demo_keys_only", semantics: "not_checked_in_exported_profile" }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ valid: true, profile: "receipt", bundle_digest: digest(bundle), ...trust.profile, semantics: "not_checked_in_exported_profile" }, null, 2)}\n`);
       return;
     }
     if (subcommand === "verify-many") {
-      assertFlags(options, new Set(["json", "require-outcome"]));
-      const result = verifyArtifactFiles(positional.slice(2), {
-        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
-      });
+      assertFlags(options, new Set(["json", "require-outcome", "trusted-keys"]));
+      const trust = loadTrust(options);
+      const result = verifyArtifactFiles(positional.slice(2), settlementTrust(trust));
       applyOutcomeExpectation(result, options["require-outcome"]);
-      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ ...result, ...trust.profile }, null, 2)}\n`);
       if (!result.valid || result.review_required) process.exitCode = 1;
       return;
     }
     if (subcommand === "compare") {
       requireNoExtra(positional, 4, "bundle compare");
-      assertFlags(options, new Set(["json", "expect-digest", "expect-other-digest"]));
+      assertFlags(options, new Set(["json", "expect-digest", "expect-other-digest", "trusted-keys"]));
       if (!target || !positional[3]) throw usage("Bundle comparison requires two files.");
-      const result = compareBundles(readPinnedArtifact(target, options["expect-digest"]), readPinnedArtifact(positional[3], options["expect-other-digest"]), {
-        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
-      });
-      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      const trust = loadTrust(options);
+      const result = compareBundles(readPinnedArtifact(target, options["expect-digest"]), readPinnedArtifact(positional[3], options["expect-other-digest"]), settlementTrust(trust));
+      process.stdout.write(`${JSON.stringify({ ...result, ...trust.profile }, null, 2)}\n`);
       return;
     }
     if (!["verify", "timeline", "review", "evidence", "timing"].includes(subcommand)) {
@@ -369,29 +417,31 @@ async function main() {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest", "out"] :
-      subcommand === "verify" ? ["json", "expect-digest", "require-outcome"] : ["json", "expect-digest"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest", "out", "trusted-keys"] :
+      subcommand === "verify" ? ["json", "expect-digest", "require-outcome", "trusted-keys"] : ["json", "expect-digest", "trusted-keys"]));
+    const trust = loadTrust(options);
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
-      printReport(settlementMarkdown(bundle, { trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys() }), options.out);
+      printReport(settlementMarkdown(bundle, {
+        ...settlementTrust(trust),
+        ...(trust.supplied ? { trustConfigDigest: trust.profile.trust_config_digest } : {}),
+      }), options.out);
       return;
     }
     if (["review", "evidence", "timing"].includes(subcommand)) {
       const report = { review: reviewBundle, evidence: evidenceInventory, timing: lifecycleTiming }[subcommand];
-      const result = report(bundle, {
-        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
-      });
-      result.trust_profile = "public_demo_keys_only";
+      const result = report(bundle, settlementTrust(trust));
+      Object.assign(result, trust.profile);
       printReport(serializeArtifact(result), options.out);
       return;
     }
     if (subcommand === "verify") {
       const result = verifyBundle(bundle, {
-        trustedKeys: demoTrustedKeys(),
-        trustedConnectorKeys: demoConnectorTrustedKeys(),
+        ...settlementTrust(trust),
         requireSemantics: true,
       });
       result.bundle_digest = digest(bundle);
+      Object.assign(result, suppliedProfile(trust));
       applyOutcomeExpectation(result, options["require-outcome"]);
       if (options.json) {
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -405,16 +455,15 @@ async function main() {
             `events: ${result.event_count}`,
             `semantics: ${result.semantics.status}`,
             `trusted_key: ${result.trusted_key_id}`,
+            ...suppliedProfileLines(trust),
             ...(options["require-outcome"] ? [`outcome_expectation_met: ${result.outcome_expectation_met}`] : []),
           ].join("\n") + "\n",
         );
       }
       return;
     }
-    const result = verifyBundleTimeline(bundle, {
-      trustedKeys: demoTrustedKeys(),
-      trustedConnectorKeys: demoConnectorTrustedKeys(),
-    });
+    const result = verifyBundleTimeline(bundle, settlementTrust(trust));
+    Object.assign(result, suppliedProfile(trust));
     if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -425,6 +474,7 @@ async function main() {
           `outcome: ${result.outcome}`,
           `events: ${result.event_count}`,
           `event_chain_head: ${result.event_chain_head}`,
+          ...suppliedProfileLines(trust),
           "timeline:",
           ...result.events.map((event) =>
             `${event.sequence} ${event.event_type} ${event.recorded_at}` +
@@ -438,35 +488,38 @@ async function main() {
 
   if (command === "recovery-preflight") {
     if (subcommand === "verify-many") {
-      assertFlags(options, new Set(["json", "at", "require-qualified"]));
+      assertFlags(options, new Set(["json", "at", "require-qualified", "trusted-keys"]));
+      const trust = loadTrust(options);
       const result = verifyRecoveryFiles(positional.slice(2), {
-        trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+        trustedKeys: trust.recovery, requireCurrent: options.at !== undefined, now: options.at ?? null,
       });
       applyQualificationExpectation(result, options["require-qualified"]);
-      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ ...result, ...trust.profile }, null, 2)}\n`);
       if (!result.valid || result.review_required) process.exitCode = 1;
       return;
     }
     if (subcommand === "link") {
       requireNoExtra(positional, 4, "recovery-preflight link");
-      assertFlags(options, new Set(["json", "at", "expect-digest", "expect-other-digest"]));
+      assertFlags(options, new Set(["json", "at", "expect-digest", "expect-other-digest", "trusted-keys"]));
       if (!target || !positional[3]) throw usage("Recovery link requires a settlement and drill file.");
+      const trust = loadTrust(options);
       const result = linkRecovery(readPinnedArtifact(target, options["expect-digest"]), readPinnedArtifact(positional[3], options["expect-other-digest"]), {
-        trustedKeys: demoTrustedKeys(), trustedConnectorKeys: demoConnectorTrustedKeys(),
-        trustedRecoveryKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+        ...settlementTrust(trust),
+        trustedRecoveryKeys: trust.recovery, requireCurrent: options.at !== undefined, now: options.at ?? null,
       });
-      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ ...result, ...trust.profile }, null, 2)}\n`);
       if (!result.bindings_match) process.exitCode = 1;
       return;
     }
     if (subcommand === "compare") {
       requireNoExtra(positional, 4, "recovery-preflight compare");
-      assertFlags(options, new Set(["json", "at", "expect-digest", "expect-other-digest"]));
+      assertFlags(options, new Set(["json", "at", "expect-digest", "expect-other-digest", "trusted-keys"]));
       if (!target || !positional[3]) throw usage("Recovery comparison requires two files.");
+      const trust = loadTrust(options);
       const result = compareRecovery(readPinnedArtifact(target, options["expect-digest"]), readPinnedArtifact(positional[3], options["expect-other-digest"]), {
-        trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null,
+        trustedKeys: trust.recovery, requireCurrent: options.at !== undefined, now: options.at ?? null,
       });
-      process.stdout.write(`${JSON.stringify({ ...result, trust_profile: "public_demo_keys_only" }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ ...result, ...trust.profile }, null, 2)}\n`);
       return;
     }
     if (!["verify", "review"].includes(subcommand)) {
@@ -476,18 +529,23 @@ async function main() {
       throw usage(`Missing recovery-preflight file. Usage: crctl recovery-preflight ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `recovery-preflight ${subcommand}`);
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown", "out"] : ["json", "at", "expect-digest", "require-qualified"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown", "out", "trusted-keys"] : ["json", "at", "expect-digest", "require-qualified", "trusted-keys"]));
+    const trust = loadTrust(options);
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
-      printReport(recoveryMarkdown(bundle, { trustedKeys: demoRecoveryTrustedKeys(), requireCurrent: options.at !== undefined, now: options.at ?? null }), options.out);
+      printReport(recoveryMarkdown(bundle, {
+        trustedKeys: trust.recovery, requireCurrent: options.at !== undefined, now: options.at ?? null,
+        ...(trust.supplied ? { trustConfigDigest: trust.profile.trust_config_digest } : {}),
+      }), options.out);
       return;
     }
     const result = (subcommand === "review" ? reviewRecovery : verifyRecoveryPreflight)(bundle, {
-      trustedKeys: demoRecoveryTrustedKeys(),
+      trustedKeys: trust.recovery,
       requireCurrent: options.at !== undefined,
       now: options.at ?? null,
     });
     result.bundle_digest = digest(bundle);
+    Object.assign(result, suppliedProfile(trust));
     applyQualificationExpectation(result, options["require-qualified"]);
     if (options.json || subcommand === "review") {
       printReport(serializeArtifact(result), options.out);
@@ -499,10 +557,21 @@ async function main() {
           `freshness: ${result.freshness_checked ? "current" : "not_checked"}`,
           `attestation: ${result.attestation_digest}`,
           `trusted_key: ${result.trusted_key_id}`,
+          ...suppliedProfileLines(trust),
           ...(options["require-qualified"] ? [`qualification_expectation_met: ${result.qualification_expectation_met}`] : []),
         ].join("\n") + "\n",
       );
     }
+    return;
+  }
+
+  if (command === "trust") {
+    if (subcommand !== "demo") {
+      throw usage("Missing or unknown trust command. Expected demo.");
+    }
+    requireNoExtra(positional, 2, "trust demo");
+    assertFlags(options, new Set(["json", "out"]));
+    printReport(serializeArtifact(demoTrustConfig()), options.out);
     return;
   }
 

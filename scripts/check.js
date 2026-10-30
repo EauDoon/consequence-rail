@@ -28,6 +28,7 @@ const required = [
   "spec/schemas/recovery-drill-bundle.schema.json",
   "spec/schemas/settlement-bundle-v0.2.schema.json",
   "spec/schemas/settlement-receipt-v0.2.schema.json",
+  "spec/schemas/trusted-keys.schema.json",
   "docs/threat-model.md",
   "conformance/refund-action.json",
   "conformance/refund-action-v0.2.json",

@@ -237,6 +237,18 @@ and MUST NOT become trusted automatically.
 The demo keys are deterministic and public. They are suitable only for
 reproducible tests.
 
+The reference CLI reads explicit trust configuration from a trusted-keys
+document, `consequence-rail/trusted-keys/v0.1`
+([schema](schemas/trusted-keys.schema.json)): a closed object with a
+`schema_version` and optional `rail`, `connector` and `recovery` arrays of
+`{ "key_id", "public_key_pem" }` entries. Each `public_key_pem` MUST be exactly
+one Ed25519 SPKI `PUBLIC KEY` PEM block; a private-key PEM MUST be refused,
+not reduced to its public half. A role holds at most 32 entries with unique
+`key_id` values, and the document MUST contain at least one key. Its
+`trust_config_digest` is the canonical digest of the document normalized with
+every role present, each role sorted by `key_id`, and each PEM re-exported as
+SPKI PEM. The trusted-keys version is independent of artifact versions.
+
 A rail or recovery signer is `{ kid, privateKey, publicKey, publicKeyPem }`.
 `kid` MUST be a non-empty string without control characters; it becomes the
 signature `key_id`. `privateKey` MUST be an Ed25519 private key. `publicKey`

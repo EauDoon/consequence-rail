@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:trusted-keys:v0.1",
+  "title": "TrustedKeys",
+  "description": "Verifier-side trust configuration: the Ed25519 public keys a verifier accepts for each signing role. Embedded artifact trust hints never become trusted. This is not key management. The reference loader also requires at least one key overall, a unique key_id within each role, and a public_key_pem that is exactly one Ed25519 SPKI PUBLIC KEY block.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/trusted-keys/v0.1"
+    },
+    "rail": { "$ref": "#/$defs/role" },
+    "connector": { "$ref": "#/$defs/role" },
+    "recovery": { "$ref": "#/$defs/role" }
+  },
+  "$defs": {
+    "role": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/key" }
+    },
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key_id", "public_key_pem"],
+      "properties": {
+        "key_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "public_key_pem": {
+          "type": "string",
+          "maxLength": 4096,
+          "pattern": "^\\s*-----BEGIN PUBLIC KEY-----\\r?\\n[A-Za-z0-9+/=\\r\\n]+-----END PUBLIC KEY-----\\s*$"
+        }
+      }
+    }
+  }
+}

@@ -25,7 +25,9 @@ public demonstration recovery key from local configuration, never the artifact's
 `trust_hint`. The example also uses a separately configured trusted key map and
 includes an empty-map refusal. Demo keys are public and cannot authenticate a
 production operator. A library adopter must configure its own trusted recovery
-keys independently of the submitted bundle.
+keys independently of the submitted bundle. On the command line, add
+`--trusted-keys <file>` with a trusted-keys file whose `recovery` role lists
+the drill signer's public key; `crctl trust demo` prints the format.
 
 The demo clock starts at `2035-01-01T00:00:00.000Z`. `--at` checks the instant you
 supply; it does not attest to the current wall clock. The valid interval includes

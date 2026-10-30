@@ -1,8 +1,12 @@
 # Offline artifact review
 
-These commands read local artifacts under the public demonstration keys. They
-do not execute actions, admit permits, authenticate production identities or
-establish the truth of evidence. Library calls require explicit trusted keys.
+These commands read local artifacts under the public demonstration keys,
+unless `--trusted-keys <file>` names a trusted-keys file; then they trust
+exactly the keys that file lists for each role and report `trust_profile:
+caller_supplied_keys` with its `trust_config_digest`. `crctl trust demo`
+prints a template. They do not execute actions, admit permits, authenticate
+production identities or establish the truth of evidence. Library calls
+require explicit trusted keys.
 
 ## Share a receipt profile
 

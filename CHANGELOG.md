@@ -17,6 +17,23 @@ of the package version below.
   from an operator's own Ed25519 private `KeyObject` or unencrypted PKCS#8 PEM,
   with the derived public key and SPKI PEM. The demo signer factories remain
   for reproducible tests.
+- `crctl --trusted-keys <file>` verifies artifacts signed by your own keys. It
+  is accepted by `bundle verify`, `verify-many`, `timeline`, `review`,
+  `receipt`, `evidence`, `timing` and `compare`, and by `recovery-preflight
+  verify`, `review`, `compare`, `link` and `verify-many`. The file uses the new,
+  independently versioned `consequence-rail/trusted-keys/v0.1` format
+  (`spec/schemas/trusted-keys.schema.json`) with optional `rail`, `connector`
+  and `recovery` roles of up to 32 Ed25519 public keys each. It is loaded
+  through the bounded artifact loader and validated before any artifact is
+  read; private-key PEMs, non-Ed25519 keys, repeated key IDs and unknown fields
+  are refused with `TRUST_CONFIG_INVALID`. Under the flag only the listed keys
+  are trusted, and outputs report `trust_profile: caller_supplied_keys` with a
+  `trust_config_digest` that is stable across member order, entry order,
+  whitespace and PEM line endings. Without the flag every output is unchanged.
+- `crctl trust demo [--out <new-file>]` prints the public demonstration keys as
+  a trusted-keys file, as a template and as the explicit way to trust them.
+- `src/trust-config.js` exports `parseTrustedKeys`, `loadTrustedKeysFile` and
+  `demoTrustConfig` for library callers.
 
 ### Fixed
 
