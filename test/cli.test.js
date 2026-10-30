@@ -428,3 +428,20 @@ test("crctl verifies --help, -h and --version after -- as files instead of exiti
   assert.equal(runCli("crctl.js", ["-h"]).status, 0);
   assert.match(runCli("crctl.js", ["--version", "--"]).stdout, /^consequence-rail \d/);
 });
+
+test("crctl recovery-preflight review usage errors name the review command", () => {
+  const missing = runCli("crctl.js", ["recovery-preflight", "review"]);
+  assert.equal(missing.status, 1);
+  assert.deepEqual(stderrJson(missing), {
+    code: "USAGE_INVALID",
+    message: "Missing recovery-preflight file. Usage: crctl recovery-preflight review <file> [--json]. Run with --help.",
+  });
+  const extra = runCli("crctl.js", ["recovery-preflight", "review", "a.json", "b.json"]);
+  assert.equal(extra.status, 1);
+  assert.deepEqual(stderrJson(extra), {
+    code: "USAGE_INVALID",
+    message: "Unexpected extra argument for recovery-preflight review. Run with --help.",
+  });
+  const verifyExtra = runCli("crctl.js", ["recovery-preflight", "verify", "a.json", "b.json"]);
+  assert.equal(stderrJson(verifyExtra).message, "Unexpected extra argument for recovery-preflight verify. Run with --help.");
+});

@@ -31,6 +31,8 @@ of the package version below.
   the version and exit status 0, so `crctl bundle verify -- "$file"` passed
   without reading a file with one of those names. Arguments after `--` are now
   always positional.
+- `crctl recovery-preflight review` usage errors for a missing or extra file
+  argument named the `verify` command.
 
 ## [0.3.0] - 2026-10-09
 

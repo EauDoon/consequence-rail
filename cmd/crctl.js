@@ -473,9 +473,9 @@ async function main() {
       throw usage("Missing or unknown recovery-preflight command. Expected verify, verify-many, review, compare, or link.");
     }
     if (!target) {
-      throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
+      throw usage(`Missing recovery-preflight file. Usage: crctl recovery-preflight ${subcommand} <file> [--json].`);
     }
-    requireNoExtra(positional, 3, "recovery-preflight verify");
+    requireNoExtra(positional, 3, `recovery-preflight ${subcommand}`);
     assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown", "out"] : ["json", "at", "expect-digest", "require-qualified"]));
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
