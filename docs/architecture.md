@@ -87,7 +87,9 @@ postcondition result must agree with the terminal `CLOSED` event the rail
 signed. A receipt-profile bundle's close time must be no earlier than that
 event's recorded time and at most 1000 ms later. Current receipts copy the
 recorded time exactly; the window accepts receipts from 0.2.20 and earlier,
-which read the clock a second time after appending the event.
+which read the clock a second time after appending the event. The unsigned
+action summary's `action_type` must match the signed `ACTION_PROPOSED` event,
+so review and comparison never report an action class the rail did not sign.
 
 A settlement receipt only represents a determined final recourse state
 (`active`, `expired`, `released`, or `consumed`). When the connector reports

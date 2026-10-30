@@ -16,6 +16,13 @@ of the package version below.
 - CLI artifact and report output is staged before atomic, no-overwrite
   publication. A partial write failure no longer leaves a truncated destination
   that blocks retrying the export. Existing files and symlinks are still refused.
+- Integrity verification binds a settlement bundle's unsigned
+  `action.action_type` to the signed `ACTION_PROPOSED` event, for every profile.
+  A receipt-profile bundle relabeled with another action type that uses the
+  same remedy scope field previously verified, and `bundle review` and
+  `bundle compare` reported the substituted action class. It is now
+  `BUNDLE_TAMPERED`. Every bundle produced by 0.1.0 through 0.3.0 already
+  satisfies the binding; there is no signature or canonical-byte change.
 
 ## [0.3.0] - 2026-10-09
 

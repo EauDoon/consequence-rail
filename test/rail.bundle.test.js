@@ -443,6 +443,40 @@ test("a receipt profile bundle cannot re-attach the full proposal", async () => 
   assert.equal(verifyBundle(honest, trust).integrity.valid, true);
 });
 
+test("integrity binds the unsigned action class to the signed ACTION_PROPOSED event", async () => {
+  // A receipt profile carries no proposal, so action.action_type has no other
+  // signed counterpart. Review and compare report it as the action class.
+  const integrityOnly = { ...trust(), requireSemantics: false };
+  const refund = await runRefundDemo();
+  const inventory = await runInventoryDemo();
+  for (const { bundle, runtime, summary } of [refund, inventory]) {
+    const receipt = runtime.rail.exportBundle(summary.action_id);
+    assert.equal(receipt.action.action_type, receipt.events[0].payload.action_type);
+    assert.equal(verifyBundle(receipt, integrityOnly).integrity.valid, true);
+    assert.equal(verifyBundle(bundle, trust()).semantics.status, "verified");
+  }
+
+  const receipt = refund.runtime.rail.exportBundle(refund.summary.action_id);
+  // demo.email.send/v1 uses the same remedy scope field as a refund, so the
+  // closed bundle schema alone accepts the substitution.
+  const relabeled = deepClone(receipt);
+  relabeled.action.action_type = "demo.email.send/v1";
+  const relabeledAudit = deepClone(refund.bundle);
+  relabeledAudit.action.action_type = "demo.email.send/v1";
+  for (const [label, candidate, options] of [
+    ["receipt", relabeled, integrityOnly],
+    ["audit", relabeledAudit, trust()],
+  ]) {
+    assert.throws(
+      () => verifyBundle(candidate, options),
+      (error) => error.code === "BUNDLE_TAMPERED"
+        && error.message === "Action summary does not match the signed ACTION_PROPOSED event.",
+      label,
+    );
+    assert.throws(() => reviewBundle(candidate, options), (error) => error.code === "BUNDLE_TAMPERED", label);
+  }
+});
+
 test("mutating an exported bundle cannot corrupt stored evidence", async () => {
   const result = await runRefundDemo();
   result.bundle.events[0].payload.state = "CORRUPTED";
