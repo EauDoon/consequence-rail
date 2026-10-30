@@ -196,11 +196,15 @@ function applyQualificationExpectation(result, required) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+  // Arguments after "--" are positional. A file named --help, -h or
+  // --version must be read, not answered with help and exit status 0.
+  const end = args.indexOf("--");
+  const flags = end === -1 ? args : args.slice(0, end);
+  if (args.length === 0 || flags.includes("--help") || flags.includes("-h")) {
     printHelp();
     return;
   }
-  if (args.includes("--version")) {
+  if (flags.includes("--version")) {
     process.stdout.write(`consequence-rail ${VERSION}\n`);
     return;
   }

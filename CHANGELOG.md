@@ -27,6 +27,10 @@ of the package version below.
   the default port, so neither `Host: 127.0.0.1` nor `Host: 127.0.0.1:80`
   matched the bound port. A Host without a port now means port 80; every other
   Host check is unchanged.
+- `crctl` answered `--help`, `-h` or `--version` found after `--` with help or
+  the version and exit status 0, so `crctl bundle verify -- "$file"` passed
+  without reading a file with one of those names. Arguments after `--` are now
+  always positional.
 
 ## [0.3.0] - 2026-10-09
 
