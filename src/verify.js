@@ -166,6 +166,17 @@ export function verifyBundle(
     "Receipt assurance disclosure does not match the permit.",
   );
 
+  // The action summary is unsigned. A receipt profile has no proposal to
+  // check it against, but the rail signs the action class into the first
+  // event, so the class reported by review and compare is bound here.
+  const proposed = (bundle.events ?? [])[0];
+  integrityAssert(
+    proposed?.event_type === "ACTION_PROPOSED" &&
+      proposed?.payload?.action_digest === action.action_digest &&
+      proposed?.payload?.action_type === action.action_type,
+    "Action summary does not match the signed ACTION_PROPOSED event.",
+  );
+
   if (action.proposal) {
     integrityAssert(
       action.proposal.schema_version === versionBinding.proposal,

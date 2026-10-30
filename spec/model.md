@@ -254,6 +254,12 @@ window accepts receipts written by 0.2.20 and earlier, which took `closed_at`
 from a second clock read after the `CLOSED` event was appended. An `audit`
 bundle requires the two to be equal during semantic verification.
 
+The bundle's `action` summary is not signed. For every profile, integrity
+verification binds its `action_type` to the signed first event, which MUST be
+`ACTION_PROPOSED` and carry the same `action_digest` and `action_type`. No
+signed artifact in a `receipt` profile carries `action.resource_id_digest`;
+only `audit` verification checks it against the included proposal.
+
 The `audit` profile includes the proposal and outcome evidence. Full semantic
 verification additionally replays the state machine, validates every
 cross-binding, reevaluates postconditions, checks evidence freshness and

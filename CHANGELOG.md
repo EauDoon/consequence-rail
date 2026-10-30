@@ -16,6 +16,23 @@ of the package version below.
 - CLI artifact and report output is staged before atomic, no-overwrite
   publication. A partial write failure no longer leaves a truncated destination
   that blocks retrying the export. Existing files and symlinks are still refused.
+- Integrity verification binds a settlement bundle's unsigned
+  `action.action_type` to the signed `ACTION_PROPOSED` event, for every profile.
+  A receipt-profile bundle relabeled with another action type that uses the
+  same remedy scope field previously verified, and `bundle review` and
+  `bundle compare` reported the substituted action class. It is now
+  `BUNDLE_TAMPERED`. Every bundle produced by 0.1.0 through 0.3.0 already
+  satisfies the binding; there is no signature or canonical-byte change.
+- `rail --port 80` refused every request with `HOST_INVALID`. URL parsing drops
+  the default port, so neither `Host: 127.0.0.1` nor `Host: 127.0.0.1:80`
+  matched the bound port. A Host without a port now means port 80; every other
+  Host check is unchanged.
+- `crctl` answered `--help`, `-h` or `--version` found after `--` with help or
+  the version and exit status 0, so `crctl bundle verify -- "$file"` passed
+  without reading a file with one of those names. Arguments after `--` are now
+  always positional.
+- `crctl recovery-preflight review` usage errors for a missing or extra file
+  argument named the `verify` command.
 
 ## [0.3.0] - 2026-10-09
 

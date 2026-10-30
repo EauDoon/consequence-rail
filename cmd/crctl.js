@@ -196,11 +196,15 @@ function applyQualificationExpectation(result, required) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+  // Arguments after "--" are positional. A file named --help, -h or
+  // --version must be read, not answered with help and exit status 0.
+  const end = args.indexOf("--");
+  const flags = end === -1 ? args : args.slice(0, end);
+  if (args.length === 0 || flags.includes("--help") || flags.includes("-h")) {
     printHelp();
     return;
   }
-  if (args.includes("--version")) {
+  if (flags.includes("--version")) {
     process.stdout.write(`consequence-rail ${VERSION}\n`);
     return;
   }
@@ -469,9 +473,9 @@ async function main() {
       throw usage("Missing or unknown recovery-preflight command. Expected verify, verify-many, review, compare, or link.");
     }
     if (!target) {
-      throw usage("Missing recovery-preflight file. Usage: crctl recovery-preflight verify <file> [--json].");
+      throw usage(`Missing recovery-preflight file. Usage: crctl recovery-preflight ${subcommand} <file> [--json].`);
     }
-    requireNoExtra(positional, 3, "recovery-preflight verify");
+    requireNoExtra(positional, 3, `recovery-preflight ${subcommand}`);
     assertFlags(options, new Set(subcommand === "review" ? ["json", "at", "expect-digest", "markdown", "out"] : ["json", "at", "expect-digest", "require-qualified"]));
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {

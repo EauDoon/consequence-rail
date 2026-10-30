@@ -400,3 +400,48 @@ test("crctl reports a malformed --at as usage before reading any artifact", asyn
     assert.equal(JSON.parse(current.stdout).passed, 1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("crctl verifies --help, -h and --version after -- as files instead of exiting 0", async () => {
+  // Automation such as `crctl bundle verify -- "$file" && accept` must not
+  // pass because a file name matched a help or version flag.
+  for (const name of ["--help", "-h", "--version"]) {
+    const missing = runCli("crctl.js", ["bundle", "verify", "--", name]);
+    assert.equal(missing.status, 1, name);
+    assert.equal(missing.stdout, "", name);
+    assert.deepEqual(stderrJson(missing), {
+      code: "USAGE_INVALID",
+      message: `File not found: ${name}. Run with --help.`,
+    });
+  }
+  const dir = mkdtempSync(join(tmpdir(), "crctl-end-of-options-"));
+  try {
+    writeFileSync(join(dir, "--help"), JSON.stringify((await runRefundDemo()).bundle));
+    const verified = spawnSync(
+      process.execPath,
+      [join(root, "cmd", "crctl.js"), "bundle", "verify", "--", "--help"],
+      { cwd: dir, encoding: "utf8", timeout: 5_000 },
+    );
+    assert.equal(verified.status, 0, verified.stderr);
+    assert.match(verified.stdout, /^bundle_verification: pass\n/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  assert.match(runCli("crctl.js", ["bundle", "verify", "--help", "--", "f"]).stdout, /^Consequence Rail CLI /);
+  assert.equal(runCli("crctl.js", ["-h"]).status, 0);
+  assert.match(runCli("crctl.js", ["--version", "--"]).stdout, /^consequence-rail \d/);
+});
+
+test("crctl recovery-preflight review usage errors name the review command", () => {
+  const missing = runCli("crctl.js", ["recovery-preflight", "review"]);
+  assert.equal(missing.status, 1);
+  assert.deepEqual(stderrJson(missing), {
+    code: "USAGE_INVALID",
+    message: "Missing recovery-preflight file. Usage: crctl recovery-preflight review <file> [--json]. Run with --help.",
+  });
+  const extra = runCli("crctl.js", ["recovery-preflight", "review", "a.json", "b.json"]);
+  assert.equal(extra.status, 1);
+  assert.deepEqual(stderrJson(extra), {
+    code: "USAGE_INVALID",
+    message: "Unexpected extra argument for recovery-preflight review. Run with --help.",
+  });
+  const verifyExtra = runCli("crctl.js", ["recovery-preflight", "verify", "a.json", "b.json"]);
+  assert.equal(stderrJson(verifyExtra).message, "Unexpected extra argument for recovery-preflight verify. Run with --help.");
+});
