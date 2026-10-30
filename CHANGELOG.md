@@ -34,6 +34,20 @@ of the package version below.
   a trusted-keys file, as a template and as the explicit way to trust them.
 - `src/trust-config.js` exports `parseTrustedKeys`, `loadTrustedKeysFile` and
   `demoTrustConfig` for library callers.
+- `crctl --expect-checkpoint <event_count>:<event_chain_head>` checks a bundle
+  against a chain head recorded during the lifecycle, from any lifecycle
+  response or `GET /v0/actions/{id}`. The bundle passes only if its event at
+  that position has exactly that hash; otherwise the command fails with
+  `CHECKPOINT_MISMATCH`. A history rewritten and re-signed with the rail key
+  previously passed `bundle verify`, lifecycle semantics included; it now fails
+  against any checkpoint recorded before the rewrite. `bundle verify`,
+  `timeline`, `review`, `receipt`, `evidence` and `timing` accept the flag;
+  JSON output gains a `checkpoint` object and text output a `checkpoint:` line,
+  a malformed value is a usage error raised before any file is read, and
+  `bundle receipt` writes nothing on a mismatch. `src/verify.js` exports
+  `parseChainCheckpoint` and `verifyChainCheckpoint`. No checkpoint service is
+  provided, and the check is only as strong as the place the checkpoint is
+  kept.
 
 ### Fixed
 

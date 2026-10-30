@@ -14,8 +14,9 @@ Consequence Rail is not:
 - a production security product
 - a hosted service, support contract or service-level agreement
 
-Deferred work includes persistent transactional storage, external
-checkpointing, key rotation, independent evidence adapters, multiple
+Deferred work includes persistent transactional storage, an external
+checkpoint service or transparency log (verifiers can already check a bundle
+against a caller-held checkpoint), key rotation, independent evidence adapters, multiple
 connectors, multi-organization federation, hardware attestation and
 cross-language implementations.
 

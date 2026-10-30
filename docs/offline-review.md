@@ -26,6 +26,20 @@ loader cap. Large exports use compact JSON when indentation would exceed it;
 if compact output is still too large, export fails before creating or changing
 the destination. Signed data is unchanged by whitespace selection.
 
+## Check a bundle against a recorded checkpoint
+
+Record `event_count` and `event_chain_head` from any lifecycle response or
+`GET /v0/actions/{id}` while the action is in progress, and keep them where the
+rail operator cannot change them. `crctl bundle verify audit.json
+--expect-checkpoint <event_count>:<event_chain_head>` then requires the
+bundle's event at that position to have exactly that hash, which proves the
+recorded history is a prefix of the bundle's chain. A rewritten and re-signed
+history fails with `CHECKPOINT_MISMATCH` even though its signatures verify.
+`timeline`, `review`, `receipt`, `evidence` and `timing` accept the same flag
+and report a `checkpoint` object (or line); `bundle receipt` writes no output
+on a mismatch. No checkpoint service is provided; the check is only as strong
+as the place the checkpoint is kept.
+
 ## Triage a verified settlement
 
 Settlement review JSON and Markdown distinguish artifact validity from attention:

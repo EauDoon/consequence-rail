@@ -182,5 +182,9 @@ The event hash covers the signed event. The next event binds that hash through
 `previous_hash`.
 
 The chain is tamper-evident under the trusted key and retained chain head. A
-privileged operator who controls the key and every checkpoint can rewrite
-local history. The reference implementation does not claim otherwise.
+verifier that holds a checkpoint `<event_count>:<event_chain_head>` from a
+lifecycle response accepts a later bundle as extending it only when the
+bundle's event at position `event_count` (counting from 1) has that
+`event_hash`. A privileged operator who controls the key and every checkpoint
+can rewrite local history. The reference implementation does not claim
+otherwise.

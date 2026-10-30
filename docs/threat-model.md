@@ -131,9 +131,17 @@ Unanticipated or irreversible responses require a new action.
 Threat: a local operator deletes, reorders or modifies event history.
 
 Control: events are signed and hash-linked; receipts bind the chain head.
+Every lifecycle response returns the current `event_count` and
+`event_chain_head`, and `crctl --expect-checkpoint <count>:<head>` (or
+`verifyChainCheckpoint`) refuses a bundle whose event chain does not extend a
+checkpoint recorded that way with `CHECKPOINT_MISMATCH`. A history rewritten
+and re-signed after the checkpoint therefore fails even when its signatures
+and lifecycle semantics verify.
 
-Residual risk: an operator controlling the signing key and every checkpoint
-can rewrite local history. External checkpointing is deferred.
+Residual risk: the check helps only while the checkpoint is held outside the
+rail operator's control. No checkpoint service or transparency log is
+implemented, and an operator controlling the signing key and every retained
+checkpoint can rewrite local history.
 
 ### Key compromise
 
@@ -191,7 +199,7 @@ Do not describe the reference as production-ready while any of these remain:
 
 - deterministic demo keys
 - in-memory permit state
-- no external checkpoint
+- no external checkpoint service or transparency log
 - no production connector isolation
 - no independent evidence trust adapter
 - incomplete cross-language canonicalization vectors

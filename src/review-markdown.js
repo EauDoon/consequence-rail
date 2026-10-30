@@ -14,7 +14,15 @@ export function settlementMarkdown(bundle, options = {}) {
     ["bundle_digest", "profile", "verification_scope", "action_id", "action_digest", "outcome",
       "assurance_mode", "bypass_possible", "recourse_final_status", "closed_at", "event_count", "evidence_count"],
     ["Recorded state path: " + report.state_path.join(" -> "),
-      "Attention reasons: " + (report.attention_reasons.join(", ") || "none recorded")]);
+      "Attention reasons: " + (report.attention_reasons.join(", ") || "none recorded"),
+      ...checkpointDetails(options.checkpoint)]);
+}
+
+// A checkpoint result comes from verifyChainCheckpoint, never from the artifact.
+function checkpointDetails(checkpoint) {
+  if (checkpoint?.extends !== true) return [];
+  return [`Checkpoint: the first ${checkpoint.event_count} events match the caller-held chain head ` +
+    `${checkpoint.event_chain_head}; ${checkpoint.events_after_checkpoint} later events follow it.`];
 }
 
 export function recoveryMarkdown(bundle, options = {}) {

@@ -17,7 +17,7 @@ import {
   demoRecoveryTrustedKeys,
   demoTrustedKeys,
 } from "../src/signing.js";
-import { verifyBundle, verifyBundleTimeline } from "../src/verify.js";
+import { parseChainCheckpoint, verifyBundle, verifyBundleTimeline, verifyChainCheckpoint } from "../src/verify.js";
 
 import { assertArtifactDigest, readArtifactFile, serializeArtifact, writeExclusiveArtifactText as writeExclusiveText } from "../src/artifact-files.js";
 import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
@@ -49,13 +49,13 @@ Usage:
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo irreversible [--json]
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
-  crctl bundle verify <file> [--expect-digest <digest>] [--json]
+  crctl bundle verify <file> [--expect-digest <digest>] [--expect-checkpoint <count>:<head>] [--json]
   crctl bundle verify-many <file>... [--json]
-  crctl bundle timeline <file> [--json]
-  crctl bundle review <file> [--json|--markdown] [--out <new-report>]
-  crctl bundle receipt <file> --out <new-file> [--json]
-  crctl bundle evidence <file> [--json]
-  crctl bundle timing <audit-file> [--json]
+  crctl bundle timeline <file> [--expect-checkpoint <count>:<head>] [--json]
+  crctl bundle review <file> [--expect-checkpoint <count>:<head>] [--json|--markdown] [--out <new-report>]
+  crctl bundle receipt <file> --out <new-file> [--expect-checkpoint <count>:<head>] [--json]
+  crctl bundle evidence <file> [--expect-checkpoint <count>:<head>] [--json]
+  crctl bundle timing <audit-file> [--expect-checkpoint <count>:<head>] [--json]
   crctl bundle compare <left> <right> [--json]
   crctl recovery-preflight verify <file> [--at <ISO timestamp>] [--expect-digest <digest>] [--json]
   crctl recovery-preflight review <file> [--at <ISO timestamp>] [--json|--markdown] [--out <new-report>]
@@ -92,6 +92,9 @@ Flags:
   --require-qualified   Require QUALIFIED_EXACT (recovery verify/verify-many; add --at for freshness)
   --trusted-keys <file> Trust only the keys in this trusted-keys file (every bundle and
                         recovery-preflight command)
+  --expect-checkpoint <count>:<head> Require the bundle's event chain to extend a
+                        checkpoint recorded during the lifecycle (bundle verify, timeline,
+                        review, receipt, evidence and timing)
   -h, --help            Show this help
   --version             Print the implementation version
 
@@ -105,6 +108,13 @@ Trust:
   caller_supplied_keys with the file's trust_config_digest. The file format is
   consequence-rail/trusted-keys/v0.1. crctl trust demo prints the demonstration
   keys in that format, as a template.
+
+Checkpoints:
+  Every lifecycle response and GET /v0/actions/{id} returns event_count and
+  event_chain_head. Record them as <event_count>:<event_chain_head> somewhere
+  the rail operator does not control. --expect-checkpoint then fails with
+  CHECKPOINT_MISMATCH unless event number <event_count> of the bundle has that
+  hash, so a history rewritten and re-signed after the checkpoint is refused.
 
 Examples:
   All single-artifact review, evidence, timing, timeline and receipt commands
@@ -225,6 +235,22 @@ function suppliedProfileLines(trust) {
     : [];
 }
 
+// Checked after the command's own verification, so its errors keep priority,
+// and before any output is written.
+function checkCheckpoint(bundle, checkpoint, trust) {
+  return checkpoint === undefined ? undefined : verifyChainCheckpoint(bundle, checkpoint, settlementTrust(trust));
+}
+
+function checkpointFields(checked) {
+  return checked === undefined ? {} : { checkpoint: checked };
+}
+
+function checkpointLines(checked) {
+  return checked === undefined ? [] : [
+    `checkpoint: ${checked.event_count}:${checked.event_chain_head} extended by ${checked.events_after_checkpoint} later events`,
+  ];
+}
+
 function requireNoExtra(positional, count, command) {
   if (positional.length > count) {
     throw usage(`Unexpected extra argument for ${command}.`);
@@ -271,6 +297,14 @@ async function main() {
     throw usage("Expected outcome must be settled, compensated or disputed.");
   }
   if (options.json && options.markdown) throw usage("Choose --json or --markdown, not both.");
+  let checkpoint;
+  if (options["expect-checkpoint"] !== undefined) {
+    try {
+      checkpoint = parseChainCheckpoint(options["expect-checkpoint"]);
+    } catch {
+      throw usage("--expect-checkpoint must be <event_count>:<event_chain_head>, a positive count without leading zeros and an unpadded 43-character SHA-256 base64url digest.");
+    }
+  }
   const [command, subcommand, target] = positional;
 
   if (command === "demo") {
@@ -384,12 +418,14 @@ async function main() {
   if (command === "bundle") {
     if (subcommand === "receipt") {
       requireNoExtra(positional, 3, "bundle receipt");
-      assertFlags(options, new Set(["json", "out", "expect-digest", "trusted-keys"]));
+      assertFlags(options, new Set(["json", "out", "expect-digest", "trusted-keys", "expect-checkpoint"]));
       if (!target || !options.out) throw usage("Receipt export requires input and --out.");
       const trust = loadTrust(options);
-      const bundle = receiptBundle(readPinnedArtifact(target, options["expect-digest"]), settlementTrust(trust));
+      const input = readPinnedArtifact(target, options["expect-digest"]);
+      const bundle = receiptBundle(input, settlementTrust(trust));
+      const checked = checkCheckpoint(input, checkpoint, trust);
       writeExclusiveJson(options.out, bundle);
-      process.stdout.write(`${JSON.stringify({ valid: true, profile: "receipt", bundle_digest: digest(bundle), ...trust.profile, semantics: "not_checked_in_exported_profile" }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ valid: true, profile: "receipt", bundle_digest: digest(bundle), ...trust.profile, ...checkpointFields(checked), semantics: "not_checked_in_exported_profile" }, null, 2)}\n`);
       return;
     }
     if (subcommand === "verify-many") {
@@ -417,21 +453,25 @@ async function main() {
       throw usage(`Missing bundle file. Usage: crctl bundle ${subcommand} <file> [--json].`);
     }
     requireNoExtra(positional, 3, `bundle ${subcommand}`);
-    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest", "out", "trusted-keys"] :
-      subcommand === "verify" ? ["json", "expect-digest", "require-outcome", "trusted-keys"] : ["json", "expect-digest", "trusted-keys"]));
+    assertFlags(options, new Set(subcommand === "review" ? ["json", "markdown", "expect-digest", "out", "trusted-keys", "expect-checkpoint"] :
+      subcommand === "verify" ? ["json", "expect-digest", "require-outcome", "trusted-keys", "expect-checkpoint"] : ["json", "expect-digest", "trusted-keys", "expect-checkpoint"]));
     const trust = loadTrust(options);
     const bundle = readPinnedArtifact(target, options["expect-digest"]);
     if (subcommand === "review" && options.markdown) {
+      // The checkpoint runs the same verification as the review (semantics
+      // for audit bundles only), so a defective bundle fails the same way.
+      const checked = checkCheckpoint(bundle, checkpoint, trust);
       printReport(settlementMarkdown(bundle, {
         ...settlementTrust(trust),
         ...(trust.supplied ? { trustConfigDigest: trust.profile.trust_config_digest } : {}),
+        ...(checked === undefined ? {} : { checkpoint: checked }),
       }), options.out);
       return;
     }
     if (["review", "evidence", "timing"].includes(subcommand)) {
       const report = { review: reviewBundle, evidence: evidenceInventory, timing: lifecycleTiming }[subcommand];
       const result = report(bundle, settlementTrust(trust));
-      Object.assign(result, trust.profile);
+      Object.assign(result, trust.profile, checkpointFields(checkCheckpoint(bundle, checkpoint, trust)));
       printReport(serializeArtifact(result), options.out);
       return;
     }
@@ -441,7 +481,8 @@ async function main() {
         requireSemantics: true,
       });
       result.bundle_digest = digest(bundle);
-      Object.assign(result, suppliedProfile(trust));
+      const checked = checkCheckpoint(bundle, checkpoint, trust);
+      Object.assign(result, suppliedProfile(trust), checkpointFields(checked));
       applyOutcomeExpectation(result, options["require-outcome"]);
       if (options.json) {
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -456,6 +497,7 @@ async function main() {
             `semantics: ${result.semantics.status}`,
             `trusted_key: ${result.trusted_key_id}`,
             ...suppliedProfileLines(trust),
+            ...checkpointLines(checked),
             ...(options["require-outcome"] ? [`outcome_expectation_met: ${result.outcome_expectation_met}`] : []),
           ].join("\n") + "\n",
         );
@@ -463,7 +505,8 @@ async function main() {
       return;
     }
     const result = verifyBundleTimeline(bundle, settlementTrust(trust));
-    Object.assign(result, suppliedProfile(trust));
+    const checked = checkCheckpoint(bundle, checkpoint, trust);
+    Object.assign(result, suppliedProfile(trust), checkpointFields(checked));
     if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -475,6 +518,7 @@ async function main() {
           `events: ${result.event_count}`,
           `event_chain_head: ${result.event_chain_head}`,
           ...suppliedProfileLines(trust),
+          ...checkpointLines(checked),
           "timeline:",
           ...result.events.map((event) =>
             `${event.sequence} ${event.event_type} ${event.recorded_at}` +

@@ -329,6 +329,37 @@ verifier key maps, or as a `ConsequenceRail`'s `connectorTrustedKeys` and
 `recoveryTrustedKeys`. A trusted-keys file is a verifier-side trust set, not
 key management, and it carries no validity windows.
 
+## Check a bundle against a recorded checkpoint
+
+Signatures and the hash chain cannot stop the holder of the rail key from
+rewriting a whole history and signing it again. Only a chain head kept outside
+the rail operator's control can expose that. Every lifecycle response and
+`GET /v0/actions/{id}` already returns `event_count` and `event_chain_head`, so
+a policy system can record `<event_count>:<event_chain_head>` while the action
+is in progress, for example right after it authorizes the action. Later, check
+the exported bundle against it:
+
+```text
+node ./cmd/crctl.js bundle verify settlement-bundle.json --expect-checkpoint 2:<event_chain_head>
+```
+
+The bundle passes only if its event number `event_count` has exactly that
+hash. The chain's links and hashes are verified first, so a match proves that
+the first `event_count` events are the history that was recorded; later events
+may follow. Otherwise the command fails with `CHECKPOINT_MISMATCH` and exit
+status 1. `bundle verify`, `timeline`, `review`, `receipt`, `evidence` and
+`timing` accept the flag; JSON output gains a `checkpoint` object with
+`events_after_checkpoint`, and text output a `checkpoint:` line. A malformed
+value is a usage error raised before any file is read, and `bundle receipt`
+writes nothing when the checkpoint does not match. The flag combines with
+`--expect-digest` and `--trusted-keys`, and works on bundles from every
+release since 0.1.0. Library callers can use `parseChainCheckpoint` and
+`verifyChainCheckpoint` from [`src/verify.js`](src/verify.js).
+
+A checkpoint helps only while it stays outside the rail operator's control.
+This project runs no checkpoint service or transparency log, and someone who
+holds the rail key and every retained checkpoint can still rewrite history.
+
 ## Deterministic fault matrix
 
 ```text
@@ -378,7 +409,8 @@ trust. The CLI trusts them by default only so the synthetic demos verify; use
 Signatures establish integrity and provenance under a trusted key. They do not
 establish that evidence is true, complete, independent, or causally connected
 to an action. Hash chains detect mutation only while a trustworthy checkpoint
-or chain head remains outside an attacker's control.
+or chain head remains outside an attacker's control; `--expect-checkpoint`
+checks a bundle against one.
 
 Only a pre-authorized, bounded, reversible remedy may run automatically. An
 unanticipated or irreversible response must become a new consequential

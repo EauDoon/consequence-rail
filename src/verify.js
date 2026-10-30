@@ -309,6 +309,84 @@ export function verifyBundleTimeline(
   };
 }
 
+const CHECKPOINT_PATTERN = /^([1-9][0-9]*):([A-Za-z0-9_-]{43})$/;
+const CHECKPOINT_FORMAT =
+  "Checkpoint must be <event_count>:<event_chain_head>, a positive decimal count without leading zeros and an unpadded canonical SHA-256 base64url digest.";
+
+/**
+ * Parse an external event-chain checkpoint, "<event_count>:<event_chain_head>".
+ * Every lifecycle response and GET /v0/actions/{id} returns both values, so a
+ * policy system can record one while the action is still in progress.
+ *
+ * @param {string} text
+ * @returns {{event_count: number, event_chain_head: string}}
+ */
+export function parseChainCheckpoint(text) {
+  const match = typeof text === "string" ? CHECKPOINT_PATTERN.exec(text) : null;
+  const eventCount = match ? Number(match[1]) : Number.NaN;
+  if (
+    !match ||
+    !Number.isSafeInteger(eventCount) ||
+    Buffer.from(match[2], "base64url").toString("base64url") !== match[2]
+  ) {
+    throw new RailError("CHECKPOINT_INVALID", CHECKPOINT_FORMAT);
+  }
+  return { event_count: eventCount, event_chain_head: match[2] };
+}
+
+function normalizeCheckpoint(checkpoint) {
+  if (typeof checkpoint === "string") return parseChainCheckpoint(checkpoint);
+  if (
+    checkpoint === null ||
+    typeof checkpoint !== "object" ||
+    typeof checkpoint.event_count !== "number" ||
+    typeof checkpoint.event_chain_head !== "string"
+  ) {
+    throw new RailError("CHECKPOINT_INVALID", CHECKPOINT_FORMAT);
+  }
+  return parseChainCheckpoint(`${checkpoint.event_count}:${checkpoint.event_chain_head}`);
+}
+
+/**
+ * Verify a bundle, then prove that its event chain extends history recorded
+ * outside the bundle. The chain's links and hashes are verified first, so a
+ * match at the checkpointed position proves the first event_count events are
+ * exactly the checkpointed history. Audit bundles also get lifecycle
+ * semantics, as in review and timeline.
+ *
+ * @param {object} bundle
+ * @param {string|{event_count: number, event_chain_head: string}} checkpoint
+ * @param {object} [options]
+ * @param {Map<string, unknown>} [options.trustedKeys]
+ * @param {Map<string, unknown>} [options.trustedConnectorKeys]
+ * @returns {{event_count: number, event_chain_head: string, extends: true, events_after_checkpoint: number}}
+ */
+export function verifyChainCheckpoint(bundle, checkpoint, options = {}) {
+  const expected = normalizeCheckpoint(checkpoint);
+  verifyBundle(bundle, {
+    trustedKeys: options.trustedKeys,
+    trustedConnectorKeys: options.trustedConnectorKeys,
+    requireSemantics: bundle?.profile === "audit",
+  });
+  const events = bundle.events;
+  if (
+    expected.event_count > events.length ||
+    events[expected.event_count - 1].event_hash !== expected.event_chain_head
+  ) {
+    throw new RailError(
+      "CHECKPOINT_MISMATCH",
+      "The bundle's event chain does not extend the checkpointed history.",
+      { checkpoint_event_count: expected.event_count, bundle_event_count: events.length },
+    );
+  }
+  return {
+    event_count: expected.event_count,
+    event_chain_head: expected.event_chain_head,
+    extends: true,
+    events_after_checkpoint: events.length - expected.event_count,
+  };
+}
+
 function verifySemantics(bundle) {
   semanticAssert(
     bundle.profile === "audit" &&

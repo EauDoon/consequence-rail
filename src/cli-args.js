@@ -12,6 +12,7 @@ export const VALUE_FLAGS = Object.freeze({
   "--expect-other-digest": "expect-other-digest",
   "--require-outcome": "require-outcome",
   "--trusted-keys": "trusted-keys",
+  "--expect-checkpoint": "expect-checkpoint",
 });
 
 export const BOOL_FLAGS = Object.freeze({
