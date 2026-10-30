@@ -85,12 +85,16 @@ of the package version below.
   directly from `node:crypto`, closed an action with a signed receipt and then
   failed `exportBundle` with `CANONICALIZATION_FAILED`, so that settlement could
   never be exported. Missing public halves are now derived. A signer whose
-  public key contradicts its private key, a non-Ed25519 key, or a `kid` that is
-  empty or contains control characters is refused with `CONFIG_INVALID` (or
+  public key contradicts its private key, a non-Ed25519 key, or an empty or
+  non-string `kid` is refused with `CONFIG_INVALID` (or
   `RECOVERY_CONFIG_INVALID`) before any event is appended or any drill runs;
   a mismatched signer previously failed only at execute, after a reservation
-  and permit existed. Errors never include key material. Demo signers and the
-  pinned default artifact hashes are unchanged.
+  and permit existed. Every matching signer that 0.3.0 accepted still works:
+  `publicKey` may be any `node:crypto` key input, including DER, JWK, a PEM
+  `Buffer` or the private key, a `kid` may contain control characters, and
+  `publicKeyPem` may carry surrounding whitespace and is still exported
+  verbatim. Errors never include key material. Demo signers and the pinned
+  default artifact hashes are unchanged.
 - CLI artifact and report output is staged before atomic, no-overwrite
   publication. A partial write failure no longer leaves a truncated destination
   that blocks retrying the export. Existing files and symlinks are still refused.

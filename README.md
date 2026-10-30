@@ -325,9 +325,12 @@ public key and SPKI PEM. Pass it as the `ConsequenceRail` `signer` or the
 `runRecoveryPreflight` `signer`.
 
 Both check any signer when they are constructed or called: the `kid` must be a
-non-empty string without control characters, the private key must be Ed25519,
-and a supplied `publicKey` or `publicKeyPem` must match the private key. A
-missing public half is derived. A contradictory signer is refused with
+non-empty string, the private key must be Ed25519, and a supplied `publicKey`
+or `publicKeyPem` must match the private key. `publicKey` may be any key input
+`node:crypto` accepts, as in 0.3.0; `publicKeyPem` must be one SPKI
+`PUBLIC KEY` block. A missing public half is derived. `createSigner` also
+refuses a `keyId` with control characters, which a trusted-keys file cannot
+list. A contradictory signer is refused with
 `CONFIG_INVALID` (or `RECOVERY_CONFIG_INVALID`) before any event is recorded or
 any drill runs, and the error never includes key material. Storing and
 protecting the private key remains the operator's job; this project does not

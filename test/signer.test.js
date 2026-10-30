@@ -112,6 +112,63 @@ test("a PEM-string signer that worked before still closes and exports", async ()
   });
 });
 
+test("every matching signer shape that worked in 0.3.0 still closes, exports and verifies", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const publicKeyPem = pemOf(publicKey, "spki");
+  const base = { kid: "ops-rail", privateKey, publicKey, publicKeyPem };
+  const shapes = [
+    ["publicKey as SPKI DER input", { ...base, publicKey: { key: publicKey.export({ format: "der", type: "spki" }), format: "der", type: "spki" } }],
+    ["publicKey as JWK input", { ...base, publicKey: { key: publicKey.export({ format: "jwk" }), format: "jwk" } }],
+    ["publicKey as a PEM Buffer", { ...base, publicKey: Buffer.from(publicKeyPem) }],
+    ["publicKey as the private KeyObject", { ...base, publicKey: privateKey }],
+    ["publicKey as the private PEM", { ...base, publicKey: pemOf(privateKey, "pkcs8") }],
+    ["publicKeyPem with leading spaces", { ...base, publicKeyPem: `  ${publicKeyPem}` }],
+    ["kid with a trailing newline", { ...base, kid: "ops-rail\n" }],
+    ["kid with a tab", { ...base, kid: "ops\trail" }],
+  ];
+  for (const [label, signer] of shapes) {
+    const { rail, actionId, connectorSigner } = await closeSettledRefund(signer);
+    const audit = rail.exportBundle(actionId, { profile: "audit" });
+    // The trust hint keeps the caller's PEM text, as 0.3.0 did.
+    assert.equal(audit.trust_hint.rail.public_key_pem, signer.publicKeyPem, label);
+    assert.equal(audit.trust_hint.rail.key_id, signer.kid, label);
+    const result = verifyBundle(audit, {
+      trustedKeys: new Map([[signer.kid, publicKey]]),
+      trustedConnectorKeys: new Map([[connectorSigner.kid, connectorSigner.publicKey]]),
+      requireSemantics: true,
+    });
+    assert.equal(result.outcome, "settled", label);
+  }
+});
+
+test("a non-KeyObject publicKey is still compared with the private key", () => {
+  const good = rawEd25519Signer("ops-rail", { withPem: true });
+  const other = rawEd25519Signer("ops-other", { withPem: true });
+  const ec = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const cases = [
+    ["mismatched SPKI DER input", { key: other.publicKey.export({ format: "der", type: "spki" }), format: "der", type: "spki" }],
+    ["mismatched JWK input", { key: other.publicKey.export({ format: "jwk" }), format: "jwk" }],
+    ["mismatched PEM Buffer", Buffer.from(other.publicKeyPem)],
+    ["mismatched private KeyObject", other.privateKey],
+    ["EC public key", ec.publicKey],
+    ["unparseable Buffer", Buffer.from("not a key")],
+    ["plain object", {}],
+    ["number", 42],
+  ];
+  for (const [label, publicKey] of cases) {
+    const clock = new ManualClock();
+    assert.throws(
+      () => new ConsequenceRail({ signer: { ...good, publicKey }, clock, connector: new MockRefundConnector(clock) }),
+      (error) => {
+        assert.equal(error.code, "CONFIG_INVALID", label);
+        assertNoKeyMaterial(error, good.publicKeyPem, other.publicKeyPem);
+        return true;
+      },
+      label,
+    );
+  }
+});
+
 test("the rail refuses a contradictory or unsupported signer before any event is appended", () => {
   const good = rawEd25519Signer("ops-rail", { withPem: true });
   const other = rawEd25519Signer("ops-other", { withPem: true });
@@ -124,14 +181,12 @@ test("the rail refuses a contradictory or unsupported signer before any event is
     ["private PEM as publicKeyPem", { ...good, publicKeyPem: privatePem }],
     ["two PEM blocks", { ...good, publicKeyPem: `${good.publicKeyPem}${other.publicKeyPem}` }],
     ["non-string publicKeyPem", { ...good, publicKeyPem: 42 }],
-    ["private KeyObject as publicKey", { ...good, publicKey: good.privateKey }],
     ["EC P-256 private key", { kid: "ops-ec", privateKey: ec.privateKey }],
     ["RSA private key", { kid: "ops-rsa", privateKey: rsa.privateKey }],
     ["public KeyObject as privateKey", { kid: "ops-public", privateKey: good.publicKey }],
     ["missing kid", { privateKey: good.privateKey }],
     ["empty kid", { ...good, kid: "" }],
     ["numeric kid", { ...good, kid: 7 }],
-    ["control character in kid", { ...good, kid: "ops\u001b[31m" }],
     ["numeric privateKey", { kid: "ops-number", privateKey: 42 }],
     ["garbage privateKey string", { kid: "ops-garbage", privateKey: "not a key" }],
     ["plain object privateKey", { kid: "ops-object", privateKey: {} }],
@@ -235,6 +290,30 @@ test("a recovery drill signer without publicKeyPem now exports a verifiable dril
     clock,
   });
   verifyRecoveryPreflight(bundle, { trustedKeys: new Map([[signer.kid, signer.publicKey]]) });
+});
+
+test("recovery signers that worked in 0.3.0 still produce a qualified drill", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const publicKeyPem = pemOf(publicKey, "spki");
+  for (const signer of [
+    { kid: "ops-recovery", privateKey, publicKey: Buffer.from(publicKeyPem), publicKeyPem },
+    { kid: "ops-recovery\n", privateKey, publicKey, publicKeyPem },
+  ]) {
+    const clock = new ManualClock();
+    const bundle = await runRecoveryPreflight({
+      contract: buildRefundRecoveryContract(clock),
+      adapter: new MockRefundRecoveryAdapter(clock),
+      signer,
+      clock,
+    });
+    assert.equal(bundle.trust_hint.key_id, signer.kid);
+    const result = verifyRecoveryPreflight(bundle, {
+      trustedKeys: new Map([[signer.kid, publicKey]]),
+      requireCurrent: true,
+      now: clock.now(),
+    });
+    assert.equal(result.qualification, "QUALIFIED_EXACT");
+  }
 });
 
 test("a mismatched recovery signer is refused before the adapter runs", async () => {

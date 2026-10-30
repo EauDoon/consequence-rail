@@ -75,7 +75,8 @@ export function parsePublicKeyPem(text, code, label) {
   let publicKey;
   if (typeof text === "string" && text.length <= MAX_PEM_LENGTH && PUBLIC_KEY_PEM.test(text)) {
     try {
-      publicKey = createPublicKey({ key: text, format: "pem" });
+      // OpenSSL refuses spaces before the BEGIN line that the pattern allows.
+      publicKey = createPublicKey({ key: text.trim(), format: "pem" });
     } catch {
       publicKey = undefined;
     }
@@ -99,11 +100,20 @@ function privateKeyObject(value) {
   }
 }
 
+// Accept every public-key input 0.3.0 accepted. It passed publicKey straight to
+// node:crypto verification, which takes a KeyObject, a CryptoKey, PEM text or a
+// Buffer, a { key, format, type } DER or JWK input, or the private key itself.
+// publicKey is never exported, and the caller compares the result with the
+// public half of privateKey, so the leniency cannot admit another key.
 function suppliedPublicKey(value, code) {
-  if (typeof value === "string") return parsePublicKeyPem(value, code, "Signer publicKey");
   let key = null;
   try {
-    key = value instanceof KeyObject ? value : isCryptoKey(value) ? KeyObject.from(value) : null;
+    const object = value instanceof KeyObject ? value : isCryptoKey(value) ? KeyObject.from(value) : null;
+    key = object
+      ? object.type === "private" ? createPublicKey(object) : object
+      : value !== null && (typeof value === "object" || typeof value === "string")
+        ? createPublicKey(value)
+        : null;
   } catch {
     key = null;
   }
@@ -123,8 +133,10 @@ export function normalizeSigner(signer, code = "CONFIG_INVALID") {
   if (!signer || typeof signer !== "object") {
     throw new RailError(code, "A signer object is required.");
   }
-  if (!isValidKeyId(signer.kid)) {
-    throw new RailError(code, "Signer kid must be a non-empty string without control characters.");
+  // 0.3.0 signed with any non-empty kid, control characters included, so a
+  // signer object keeps that. createSigner and trusted-keys files are stricter.
+  if (typeof signer.kid !== "string" || signer.kid.length === 0) {
+    throw new RailError(code, "Signer kid must be a non-empty string.");
   }
   const privateKey = privateKeyObject(signer.privateKey);
   if (!privateKey) {
