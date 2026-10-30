@@ -238,6 +238,9 @@ function hostUrl(request) {
     throw requestError("HOST_INVALID", "Host must identify this loopback server.");
   }
   const localPort = String(request.socket.localPort);
+  // URL drops the scheme's default port, so "host" and "host:80" both parse
+  // to an empty port. Without this, a sidecar on port 80 refuses every request.
+  const hostPort = parsed.port === "" ? "80" : parsed.port;
   if (
     parsed.username ||
     parsed.password ||
@@ -245,7 +248,7 @@ function hostUrl(request) {
     parsed.search ||
     parsed.hash ||
     !LOOPBACK_HOSTS.has(parsed.hostname) ||
-    parsed.port !== localPort
+    hostPort !== localPort
   ) {
     throw requestError("HOST_INVALID", "Host must identify this loopback server.");
   }

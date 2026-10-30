@@ -4,7 +4,7 @@
 // Split from test/rail.test.js.
 
 import assert from "node:assert/strict";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -103,6 +103,72 @@ test("HTTP sidecar rejects ambiguous Host authorities before routing", async (co
     assert.match(response, /^HTTP\/1\.1 400 /u);
     assert.match(response, /"code":"HOST_INVALID"/u);
   }
+});
+
+// Drive the request handler directly, so the default-port case runs on every
+// platform, including runners that may not bind port 80.
+function dispatchWellKnown(server, { host, localPort }) {
+  return new Promise((resolve) => {
+    const request = Object.assign(new EventEmitter(), {
+      method: "GET",
+      url: "/.well-known/consequence-rail",
+      headers: { host },
+      rawHeaders: ["Host", host],
+      socket: { localPort, remoteAddress: "127.0.0.1" },
+    });
+    const response = Object.assign(new EventEmitter(), {
+      writeHead(status) {
+        this.statusCode = status;
+        return this;
+      },
+      end(text) {
+        resolve({ status: this.statusCode, body: JSON.parse(text) });
+        this.emit("finish");
+      },
+    });
+    server.emit("request", request, response);
+  });
+}
+
+test("HTTP sidecar on port 80 accepts the Host forms clients send for the default port", async () => {
+  // The URL parser drops a scheme's default port, so "127.0.0.1" and
+  // "127.0.0.1:80" both parse to an empty port, which never equals "80".
+  const server = createReferenceServer({ runtime: createDemoRuntime() });
+  for (const host of ["127.0.0.1", "127.0.0.1:80", "localhost", "[::1]"]) {
+    const { status, body } = await dispatchWellKnown(server, { host, localPort: 80 });
+    assert.equal(status, 200, host);
+    assert.equal(body.implementation, "consequence-rail-node-reference");
+  }
+  for (const [host, localPort] of [
+    ["127.0.0.1:8787", 80],
+    ["127.0.0.1", 8787],
+    ["127.0.0.1:80", 8787],
+    ["example.invalid", 80],
+  ]) {
+    const { status, body } = await dispatchWellKnown(server, { host, localPort });
+    assert.equal(status, 400, `${host} on ${localPort}`);
+    assert.equal(body.code, "HOST_INVALID");
+  }
+});
+
+test("HTTP sidecar bound to port 80 answers a portless Host header", async (context) => {
+  const server = createReferenceServer({ runtime: createDemoRuntime() });
+  try {
+    server.listen(80, "127.0.0.1");
+    await once(server, "listening");
+  } catch (error) {
+    if (["EACCES", "EADDRINUSE", "EPERM"].includes(error.code)) {
+      context.skip(`port 80 unavailable: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+  context.after(() => server.close());
+  const response = await rawSocketRequest(
+    80,
+    "GET /.well-known/consequence-rail HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+  );
+  assert.match(response, /^HTTP\/1\.1 200 /u);
 });
 
 test("HTTP sidecar rejects non-origin-form targets without state or rate mutation", async (context) => {

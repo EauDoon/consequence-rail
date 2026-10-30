@@ -23,6 +23,10 @@ of the package version below.
   `bundle compare` reported the substituted action class. It is now
   `BUNDLE_TAMPERED`. Every bundle produced by 0.1.0 through 0.3.0 already
   satisfies the binding; there is no signature or canonical-byte change.
+- `rail --port 80` refused every request with `HOST_INVALID`. URL parsing drops
+  the default port, so neither `Host: 127.0.0.1` nor `Host: 127.0.0.1:80`
+  matched the bound port. A Host without a port now means port 80; every other
+  Host check is unchanged.
 
 ## [0.3.0] - 2026-10-09
 
