@@ -11,6 +11,10 @@ of the package version below.
 
 ## [Unreleased]
 
+### Improvements
+
+- Summarize recovery batch qualification, distinct bundles and checked versus unchecked freshness separately from artifact verification; counts include verified files only and do not grant admission.
+
 ### Fixed
 
 - Create exported artifact files with owner-only permissions on POSIX, including under permissive process umasks, without changing atomic no-overwrite publication.

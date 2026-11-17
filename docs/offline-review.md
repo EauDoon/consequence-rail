@@ -134,6 +134,14 @@ is still a valid replay artifact, not acceptable recovery. Without `--at`,
 each result explicitly leaves freshness unchecked. Supplied filenames appear
 in batch reports and may need removal before sharing.
 
+The summary separates `qualification_counts` from `passed` (artifact verification).
+Qualification and freshness counts include verified input files only, including
+duplicate copies. `unique_bundle_count` counts distinct verified bundles instead.
+`freshness_checked_count` and `freshness_unchecked_count` distinguish a checked
+verification instant from an omitted check; unchecked never means current.
+Invalid or expired files rejected during verification are excluded from these
+counts and remain visible in `failed` and the individual results.
+
 Recovery `verify-many` detects identical bundle copies and differing signed drill
 attestations for the same action. Results retain action class, recovery class and
 coverage digest so differing scope is visible. Differing drills set
