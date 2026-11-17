@@ -59,3 +59,27 @@ test("a malformed batch verification instant fails once instead of per file", as
     (error) => error.code === "VERIFICATION_TIME_INVALID",
   );
 });
+
+test("recovery batch separates verification, qualification, freshness and duplicate counts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-recovery-summary-"));
+  const good = join(dir, "good.json"), failed = join(dir, "failed.json"), bad = join(dir, "bad.json");
+  const bundle = (await runRecoveryPreflightDemo()).bundle;
+  writeFileSync(good, JSON.stringify(bundle));
+  writeFileSync(failed, JSON.stringify((await runRecoveryPreflightDemo({ fault: "remedy-failure" })).bundle));
+  writeFileSync(bad, "{}");
+  const options = { trustedKeys: demoRecoveryTrustedKeys() };
+  const report = verifyRecoveryFiles([good, good, failed, bad], options);
+  assert.deepEqual(report.qualification_counts, { NOT_QUALIFIED: 1, QUALIFIED_EXACT: 2 });
+  assert.equal(report.unique_bundle_count, 2);
+  assert.equal(report.freshness_checked_count, 0);
+  assert.equal(report.freshness_unchecked_count, 3);
+  assert.equal(report.passed, 3);
+  assert.equal(report.qualification_is_not_admission, true);
+  const current = verifyRecoveryFiles([good], { ...options, requireCurrent: true, now: bundle.drill_attestation.drilled_at });
+  assert.equal(current.freshness_checked_count, 1);
+  assert.equal(current.freshness_unchecked_count, 0);
+  const invalid = verifyRecoveryFiles([bad], options);
+  assert.deepEqual(invalid.qualification_counts, {});
+  assert.equal(invalid.unique_bundle_count, 0);
+  assert.equal(invalid.freshness_unchecked_count, 0);
+});

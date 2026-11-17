@@ -96,7 +96,13 @@ export function verifyRecoveryFiles(paths, options = {}) {
       attestation_digests: [...new Set(rows.map(row => row.attestation_digest))] }));
   const duplicates = [...byBundle].filter(([, rows]) => rows.length > 1)
     .map(([bundle_digest, rows]) => ({ bundle_digest, files: rows.map(row => row.file) }));
+  const verified = results.filter(item => item.valid);
+  const qualification_counts = Object.fromEntries([...new Set(verified.map(row => row.qualification))]
+    .sort().map(value => [value, verified.filter(row => row.qualification === value).length]));
   return { ...batchResult(results), qualification_is_not_admission: true, duplicates, differing_drills,
+    qualification_counts, unique_bundle_count: byBundle.size,
+    freshness_checked_count: verified.filter(row => row.freshness_checked).length,
+    freshness_unchecked_count: verified.filter(row => !row.freshness_checked).length,
     review_required: differing_drills.length > 0,
     collection_limitation: "Different signed drills for one action require review; no drill is selected as current or authoritative." };
 }
