@@ -11,6 +11,10 @@ of the package version below.
 
 ## [Unreleased]
 
+### Fixed
+
+- Create exported artifact files with owner-only permissions on POSIX, including under permissive process umasks, without changing atomic no-overwrite publication.
+
 ## [0.4.0] - 2026-10-30
 
 This release adds capabilities without changing artifacts. There is no

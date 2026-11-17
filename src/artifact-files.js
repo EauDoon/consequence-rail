@@ -77,7 +77,7 @@ export function writeExclusiveArtifactText(path, text) {
     const destination = resolve(path);
     stagingDirectory = mkdtempSync(join(dirname(destination), ".crctl-output-"));
     const staged = join(stagingDirectory, "output");
-    writeFileSync(staged, text, { encoding: "utf8", flag: "wx" });
+    writeFileSync(staged, text, { encoding: "utf8", flag: "wx", mode: 0o600 });
     // Same-directory hard-link publication is atomic and fails if any entry
     // already occupies the destination. rename would silently overwrite it.
     linkSync(staged, destination);
