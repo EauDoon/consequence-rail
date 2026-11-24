@@ -4,6 +4,12 @@ Current public state: experimental v0.4.0 source release with Recovery
 Preflight and synthetic refund and inventory connectors. The source version is
 recorded in `package.json`; the source repository remains the release channel.
 
+## Next release candidate: 0.5.0
+
+Make large offline review sets easier to triage: reject invalid path lists before reading files and count verification failures by code. Exercise both settlement and recovery commands with mixed results; signatures, admission decisions and existing exit rules must remain unchanged.
+
+Before tagging, review the complete diff since the last release, including earlier unreleased work, and verify the normal release checks against the exact candidate. This plan does not mark a published version.
+
 ## GitHub metadata
 
 - Repository: `EauDoon/consequence-rail`

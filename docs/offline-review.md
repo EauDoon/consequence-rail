@@ -162,6 +162,9 @@ attention counts. Counts include each successfully verified file, including
 duplicates; invalid files contribute only to failure counts. `attention_required`
 describes recorded histories, while `review_required` identifies differing
 receipts. Attention alone does not change verification exit status.
+Both settlement and recovery `verify-many` reports include `failure_counts`:
+one entry per failure code, counting invalid input files rather than distinct
+bundles. This is independent of recorded outcomes and qualification.
 
 ## Require a specific verification result
 
