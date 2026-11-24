@@ -1,7 +1,8 @@
 import { readArtifactFile } from "./artifact-files.js";
 import { reviewBundle } from "./review.js";
 import { RailError } from "./errors.js";
-import { deepClone, digest } from "./canonical.js";
+import { digest } from "./canonical.js";
+import { types } from "node:util";
 import { reviewRecovery } from "./recovery-review.js";
 import { assertVerificationTime } from "./recovery-preflight.js";
 import { settlementProfileFields } from "./verify.js";
@@ -55,17 +56,28 @@ export function verifyArtifactFiles(paths, options = {}) {
 }
 
 function validatePaths(input) {
-  const paths = deepClone(input);
-  if (!Array.isArray(paths) || paths.length === 0 || paths.length > MAX_BATCH_FILES ||
-      paths.some((path) => typeof path !== "string" || path.length === 0 || path.length > 4096)) {
-    throw new RailError("BATCH_INVALID", "Supply 1 to 64 artifact file paths, each at most 4096 characters.");
+  const invalid = () => new RailError("BATCH_INVALID", "Supply 1 to 64 artifact file paths, each at most 4096 characters.");
+  // Reject the outer limit before traversing entries; do not copy nested
+  // values just to discover that they are not strings, or invoke getters.
+  if (types.isProxy(input) || !Array.isArray(input) || !input.length || input.length > MAX_BATCH_FILES) throw invalid();
+  if (Reflect.ownKeys(input).length !== input.length + 1) throw invalid();
+  const paths = [];
+  for (let i = 0; i < input.length; i++) {
+    const field = Object.getOwnPropertyDescriptor(input, i);
+    if (!field || !("value" in field) || typeof field.value !== "string" || !field.value.length || field.value.length > 4096) throw invalid();
+    paths.push(field.value);
   }
   return paths;
 }
 
 function batchResult(results) {
   const passed = results.filter((result) => result.valid).length;
-  return { valid: passed === results.length, file_count: results.length, passed, failed: results.length - passed, results };
+  const failure_counts = {};
+  for (const row of results) {
+    if (!row.valid) failure_counts[row.code] = (failure_counts[row.code] ?? 0) + 1;
+  }
+  return { valid: passed === results.length, file_count: results.length, passed, failed: results.length - passed,
+    failure_counts, results };
 }
 
 /** Independent drill replay results, with one caller-supplied verification instant. */

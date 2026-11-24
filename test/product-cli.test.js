@@ -35,6 +35,20 @@ test("review exports verified JSON and Markdown without overwriting or creating 
   }
 });
 
+test("both batch commands count input failures separately from verified artifacts", t => {
+  const dir = mkdtempSync(join(tmpdir(), "rail-batch-count-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const missing = join(dir, "absent.json");
+  for (const group of ["bundle", "recovery-preflight"]) {
+    const run = cli([group, "verify-many", missing, missing, "--json"]);
+    assert.equal(run.status, 1, run.stderr);
+    const report = JSON.parse(run.stdout);
+    assert.equal(report.failed, 2);
+    assert.deepEqual(report.failure_counts, { [report.results[0].code]: 2 });
+    assert.equal(report.unique_bundle_count, 0);
+  }
+});
+
 test("qualified-drill gates separate authentic failed drills from acceptance and freshness", async t => {
   const dir = mkdtempSync(join(tmpdir(), "rail-qualified-gate-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

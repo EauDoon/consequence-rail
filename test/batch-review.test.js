@@ -8,6 +8,14 @@ import { demoRecoveryTrustedKeys, demoTrustedKeys, demoConnectorTrustedKeys } fr
 import { runRefundDemo } from "../src/demo.js";
 import { verifyRecoveryFiles, verifyArtifactFiles } from "../src/batch.js";
 
+test("batch input bounds apply before traversing entries, for both file reviewers", () => {
+  for (const verify of [verifyArtifactFiles, verifyRecoveryFiles]) {
+    for (const paths of [Array(65), [42], new Array(1), Object.assign(["a"], { extra: "not a path" })]) {
+      assert.throws(() => verify(paths), { code: "BATCH_INVALID" });
+    }
+  }
+});
+
 test("settlement collections distinguish duplicate files from different signed receipts", async () => {
   const dir = mkdtempSync(join(tmpdir(), "rail-settlement-batch-"));
   const good = join(dir, "settled.json"), other = join(dir, "compensated.json"), invalid = join(dir, "invalid.json");

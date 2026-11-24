@@ -11,6 +11,10 @@ of the package version below.
 
 ## [Unreleased]
 
+### Operator review
+
+- The next release reports per-code failure counts for both offline batch verification commands. Their shared path validator now checks the 64-file boundary before traversing inputs and rejects invalid entries without copying arbitrary objects.
+
 ### Improvements
 
 - Summarize recovery batch qualification, distinct bundles and checked versus unchecked freshness separately from artifact verification; counts include verified files only and do not grant admission.
