@@ -22,8 +22,8 @@ import { parseChainCheckpoint, verifyBundleTimeline, verifyChainCheckpoint, veri
 import { assertArtifactDigest, readArtifactFile, serializeArtifact, writeExclusiveArtifactText as writeExclusiveText } from "../src/artifact-files.js";
 import { compareBundles, reviewBundle, receiptBundle, evidenceInventory, lifecycleTiming } from "../src/review.js";
 import { verifyArtifactFiles, verifyRecoveryFiles } from "../src/batch.js";
-import { scenarioCatalog } from "../src/scenarios.js";
-import { runScenarioMatrix } from "../src/scenario-matrix.js";
+import { findExercises, scenarioCatalog } from "../src/scenarios.js";
+import { runScenarioMatrix, summarizeScenarioMatrix } from "../src/scenario-matrix.js";
 import { digest } from "../src/canonical.js";
 import { reviewRecovery, compareRecovery, linkRecovery } from "../src/recovery-review.js";
 import { settlementMarkdown, recoveryMarkdown } from "../src/review-markdown.js";
@@ -44,7 +44,8 @@ function printHelp() {
 
 Usage:
   crctl demo list [--json]
-  crctl demo matrix [all|refund|inventory|recovery-preflight|irreversible] [--json]
+  crctl demo find <search terms> [--json]
+  crctl demo matrix [all|refund|inventory|recovery-preflight|irreversible] [--summary] [--json]
   crctl demo inventory [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo irreversible [--json]
@@ -321,11 +322,25 @@ async function main() {
   const [command, subcommand, target] = positional;
 
   if (command === "demo") {
+    if (subcommand === "find") {
+      assertFlags(options, new Set(["json"]));
+      const query = positional.slice(2).join(" ").trim();
+      if (!query) throw usage("demo find requires a search term.");
+      const result = findExercises(query);
+      if (options.json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      } else {
+        const lines = result.matches.map((row) =>
+          `${row.scenario} / ${row.fault} (${row.result})\n  ${row.purpose}\n  ${row.command}`);
+        process.stdout.write(`${result.case_count} matching exercises\n${lines.join("\n")}${lines.length ? "\n" : ""}`);
+      }
+      return;
+    }
     if (subcommand === "matrix") {
       requireNoExtra(positional, 3, "demo matrix");
-      assertFlags(options, new Set(["json"]));
+      assertFlags(options, new Set(["json", "summary"]));
       const result = await runScenarioMatrix(target ?? "all");
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify(options.summary ? summarizeScenarioMatrix(result) : result, null, 2)}\n`);
       if (!result.valid) process.exitCode = 1;
       return;
     }
@@ -336,7 +351,7 @@ async function main() {
       return;
     }
     if (!subcommand) {
-      throw usage("Missing demo scenario. Expected refund, inventory, irreversible, recovery-preflight, list, or matrix.");
+      throw usage("Missing demo scenario. Expected refund, inventory, irreversible, recovery-preflight, list, find, or matrix.");
     }
     if (subcommand === "refund") {
       requireNoExtra(positional, 2, "demo refund");

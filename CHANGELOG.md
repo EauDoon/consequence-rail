@@ -13,11 +13,16 @@ of the package version below.
 
 ### Improvements
 
+- Browse the offline architecture atlas, trace dependencies through admission, recovery and settlement, inspect source references and bookmark individual views.
+- Find synthetic exercises by scenario, outcome, qualification or purpose with `demo find`. Summarize matrix checks by scenario and retain failure details with `demo matrix --summary`.
+
 - The next release reports per-code failure counts for both offline batch verification commands. Their shared path validator now checks the 64-file boundary before traversing inputs and rejects invalid entries without copying arbitrary objects.
 
 - Summarize recovery batch qualification, distinct bundles and checked versus unchecked freshness separately from artifact verification; counts include verified files only and do not grant admission.
 
 ### Fixed
+
+- Check the irreversible demo's refusal code when grading the scenario matrix. A different failure that also refused admission previously passed this check.
 
 - Create exported artifact files with owner-only permissions on POSIX, including under permissive process umasks, without changing atomic no-overwrite publication.
 

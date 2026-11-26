@@ -18,6 +18,7 @@ export const VALUE_FLAGS = Object.freeze({
 export const BOOL_FLAGS = Object.freeze({
   "--json": "json",
   "--markdown": "markdown",
+  "--summary": "summary",
   "--require-qualified": "require-qualified",
   "--allow-receipt-profile": "allow-receipt-profile",
 });

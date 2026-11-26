@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { scenarioCatalog } from "../src/scenarios.js";
+import { findExercises, scenarioCatalog } from "../src/scenarios.js";
 import { runRefundDemo, runIrreversibleDemo } from "../src/demo.js";
 import { runInventoryDemo } from "../src/inventory-demo.js";
 
@@ -38,7 +38,7 @@ test("catalog documents every runnable synthetic fault with detached expectation
   catalog.scenarios[0].faults[0].expected.outcome = "disputed";
   assert.equal(scenarioCatalog().scenarios[0].faults[0].expected.outcome, "settled");
 });
-import { checkScenarioResult, runScenarioMatrix } from "../src/scenario-matrix.js";
+import { checkScenarioResult, runScenarioMatrix, summarizeScenarioMatrix } from "../src/scenario-matrix.js";
 
 test("all 31 deterministic fault controls pass in isolated runtimes", async () => {
   const result = await runScenarioMatrix();
@@ -59,4 +59,41 @@ test("matrix verdict fails on replay, failed tamper detection and preflight bypa
   assert.equal(checkScenarioResult("recovery-preflight", "none", { qualification: "QUALIFIED_EXACT" }, {
     qualification: "QUALIFIED_EXACT", permit_without_preflight: "issued", live_connector_execute_calls: 1,
   }).passed, false);
+});
+
+test("exercise search combines terms and retains runnable commands", () => {
+  const matches = findExercises("COMPENSATED   inventory").matches;
+  assert.ok(matches.length);
+  assert.ok(matches.every((row) => row.scenario === "inventory" && row.expected.outcome === "compensated"));
+  const refusal = findExercises("irreversible refused").matches;
+  assert.equal(refusal.length, 1);
+  assert.equal(refusal[0].command, "node ./cmd/crctl.js demo irreversible");
+  assert.equal(findExercises("outside-catalog").case_count, 0);
+});
+
+test("a different refusal is not a successful irreversible control", () => {
+  const result = checkScenarioResult("irreversible", "none", { admitted: false },
+    { admitted: false, code: "UNRELATED_FAILURE" });
+  assert.equal(result.passed, false);
+  assert.equal(result.checks.recourse_refusal, false);
+});
+
+test("compact matrix retains failed controls and exceptions without raw summaries", () => {
+  const report = summarizeScenarioMatrix({
+    valid: false, case_count: 3, passed: 1, failed: 2,
+    rows: [
+      { scenario: "refund", fault: "none", passed: true, summary: {} },
+      { scenario: "refund", fault: "duplicate", passed: false, checks: { bundle: false, execution_count: true } },
+      { scenario: "inventory", fault: "none", passed: false, code: "SCENARIO_FAILED" },
+    ],
+  });
+  assert.deepEqual(report.scenarios, [
+    { scenario: "refund", passed: 1, failed: 1 },
+    { scenario: "inventory", passed: 0, failed: 1 },
+  ]);
+  assert.deepEqual(report.failures, [
+    { scenario: "refund", fault: "duplicate", checks: ["bundle"] },
+    { scenario: "inventory", fault: "none", code: "SCENARIO_FAILED" },
+  ]);
+  assert.equal(Object.hasOwn(report, "rows"), false);
 });
