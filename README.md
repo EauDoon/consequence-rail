@@ -21,6 +21,10 @@ postcondition and closes the action with a signed technical outcome:
 
 ![Recourse is reserved before execution. A satisfied postcondition settles; a breach runs the reserved remedy, ending as compensated when verified or disputed when unresolved.](.github/assets/project-overview.svg)
 
+## Explore the architecture
+
+Open [the architecture atlas](docs/architecture-atlas.html) from a downloaded source checkout in your browser. The single HTML file displays nine components and their directed connections offline. Follow the permit, recovery or settlement trace, inspect a component, or copy its view link. The component directory and connection list also work with JavaScript disabled. Source links resolve inside the checkout.
+
 ## Two invariants
 
 1. **No verifiable recourse reservation, no enforced execution.**
@@ -554,6 +558,8 @@ Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.j
 ## Discover synthetic exercises
 
 `node ./cmd/crctl.js demo list --json` lists refund, inventory, recovery-preflight and irreversible-action exercises, including every fault's purpose and expected enforced-mode outcome. Catalog reads do not execute an action. The inventory scenario is available with the same fault and artifact export flags as refund.
+
+Find a case before running it. `node ./cmd/crctl.js demo find inventory disputed` searches the fixture catalog for all supplied terms and prints the expected result, purpose and exact command for each match. Add `--json` for structured results. For a compact handoff, `node ./cmd/crctl.js demo matrix all --summary` runs the same controls and reports passes and failures by scenario, with failed check names or error codes.
 
 Run `node ./cmd/crctl.js demo matrix --json` to exercise all 31 catalog cases, or select one scenario after `matrix`. Each case uses a fresh synthetic runtime. The report checks declared outcomes, single execution, bounded remedies, tamper rejection and preflight isolation. Any failed check sets a nonzero exit status. Passing the matrix is local reference validation, not proof of production recovery.
 

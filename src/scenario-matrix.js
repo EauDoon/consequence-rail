@@ -23,6 +23,9 @@ export function checkScenarioResult(scenario, fault, expected, summary) {
     checks.isolation = summary.live_connector_execute_calls === 0 && summary.live_connector_remedy_calls === 0;
     checks.synthetic_only = summary.production_recovery_claimed === false;
   }
+  if (scenario === "irreversible") {
+    checks.recourse_refusal = summary.code === "RECOURSE_INVALID";
+  }
   return { passed: Object.values(checks).every(Boolean), checks };
 }
 
@@ -47,4 +50,24 @@ export async function runScenarioMatrix(selection = "all") {
   }
   const passed = rows.filter((row) => row.passed).length;
   return { valid: passed === rows.length, synthetic_only: true, case_count: rows.length, passed, failed: rows.length - passed, rows };
+}
+
+/** Keep case names and failed checks for handoff; omit detailed fixture observations. */
+export function summarizeScenarioMatrix({ rows, ...counts }) {
+  const scenarios = new Map();
+  const failures = [];
+  for (const row of rows) {
+    if (!scenarios.has(row.scenario)) {
+      scenarios.set(row.scenario, { scenario: row.scenario, passed: 0, failed: 0 });
+    }
+    scenarios.get(row.scenario)[row.passed ? "passed" : "failed"] += 1;
+    if (!row.passed) {
+      const failure = { scenario: row.scenario, fault: row.fault };
+      if (row.code) failure.code = row.code;
+      else failure.checks = Object.keys(row.checks).filter((name) => !row.checks[name]);
+      failures.push(failure);
+    }
+
+  }
+  return { ...counts, scenarios: [...scenarios.values()], failures };
 }

@@ -44,3 +44,25 @@ const scenarios = deepFreeze([
 export function scenarioCatalog() {
   return { synthetic_only: true, production_recovery_claimed: false, scenarios: deepClone(scenarios) };
 }
+
+/** Search declared controls without running a fixture or loading a saved artifact. */
+export function findExercises(query) {
+  const terms = query.toLowerCase().trim().split(/\s+/);
+  const matches = [];
+  for (const scenario of scenarioCatalog().scenarios) {
+    const controls = scenario.faults.length ? scenario.faults : [{
+      name: "none", purpose: "Refuse an action without bounded recourse.", expected: scenario.expected,
+    }];
+    for (const { name, purpose, expected } of controls) {
+      const result = expected.outcome ?? expected.qualification ?? expected.state ?? "refused";
+      const fields = [scenario.name, name, purpose, result, expected.state, expected.rejection]
+        .filter(Boolean).join(" ").toLowerCase();
+      if (terms.every((term) => fields.includes(term))) {
+        const faultFlag = name === "none" ? "" : ` --fault ${name}`;
+        matches.push({ scenario: scenario.name, fault: name, purpose, expected, result,
+          command: `node ./cmd/crctl.js demo ${scenario.name}${faultFlag}` });
+      }
+    }
+  }
+  return { synthetic_only: true, case_count: matches.length, matches };
+}

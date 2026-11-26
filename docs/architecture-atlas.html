@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Consequence Rail · Architecture atlas</title>
+<style>
+:root{color-scheme:dark;font:16px/1.55 system-ui,sans-serif;background:#0b1519;color:#e8f0e9;--line:#344b4f;--mint:#92ecbc;--muted:#b0c5c2}
+*{box-sizing:border-box}body{max-width:1230px;margin:auto;padding:clamp(16px,4vw,56px)}
+a{color:var(--mint);text-underline-offset:.2em}a:hover{text-decoration-thickness:2px}
+header{border-bottom:1px solid var(--line);padding-bottom:22px}
+.brand,.kicker,label,summary,.tools button,select{font:600 .83rem/1.5 ui-monospace,monospace}
+.brand,.kicker{letter-spacing:.09em;color:var(--mint)}.brand{text-decoration:none}
+h1{font-size:clamp(2.4rem,6.7vw,5.5rem);letter-spacing:-.065em;line-height:1;margin:.5em 0 .2em}
+header p{max-width:64ch;margin:0;color:var(--muted)}h2{line-height:1.2;letter-spacing:-.035em}h3{margin:1.6em 0 .4em}
+.workspace{display:grid;grid-template-columns:minmax(0,2.5fr) minmax(220px,1fr);margin-top:22px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#142226}
+.workspace[hidden]{display:none}.stage{min-width:0;background:radial-gradient(ellipse at center,#1c3536,#0e1d22 75%);padding:16px}
+.toolbar,.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,button{background:#142629;color:#edf6ef;border:1px solid #567271;border-radius:5px;padding:8px;min-height:44px}
+button{cursor:pointer}.tools button:hover{background:#294344}.tools{justify-content:space-between}
+:focus-visible{outline:3px solid #f9cd79;outline-offset:2px}
+svg{width:100%;height:auto;display:block;touch-action:none}
+svg text{font:600 13px ui-monospace,monospace;fill:#eef9f1;paint-order:stroke;stroke:#101e22;stroke-width:4px;stroke-linejoin:round}
+svg .node{cursor:pointer}.stage small{color:var(--muted)}aside{padding:clamp(16px,2.2vw,32px);border-left:1px solid var(--line)}
+aside select{width:100%;margin:.5em 0}aside p{color:var(--muted)}aside ul{padding-left:1.2em}aside li{margin:.4em 0}
+details{border-top:1px solid var(--line);padding:1em 0}summary{cursor:pointer;font-size:1rem}table{border-collapse:collapse;width:100%;margin-block:1em}
+th,td{border-bottom:1px solid var(--line);text-align:left;padding:12px 8px;vertical-align:top}td{color:var(--muted)}th:first-child{min-width:8em}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem;color:#caddd6}
+@media(max-width:770px){.workspace{grid-template-columns:1fr}aside{border:0;border-top:1px solid var(--line)}.stage{padding:10px}th,td{padding:8px 4px}th:first-child{min-width:0}table{font-size:.9rem}}
+#mobile-key,.node-index{display:none}
+@media(max-width:600px){
+  .node-label{display:none}.node-index{display:block;font-size:32px}
+  #mobile-key{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:4px;margin:12px 0}
+  #mobile-key button{font-size:.9rem;text-align:left}
+  #mobile-key button[aria-pressed=true]{border-color:var(--mint);color:var(--mint)}
+}
+</style>
+<header><a class="brand" href="../README.md">EAUDOON / CONSEQUENCE RAIL</a>
+<h1>Architecture atlas</h1><p>Follow an action from a bounded remedy to a signed settlement receipt. Inspect the gates, the evidence each gate needs, and the components that can check it.</p></header>
+<main>
+<section class="workspace" id="workspace" aria-label="Interactive architecture explorer" hidden>
+<div class="stage">
+<div class="toolbar"><label for="route">Trace</label><select id="route"><option value="all">Entire lifecycle</option><option value="admission">Permit admission</option><option value="recovery">Recovery preflight</option><option value="settlement">Settlement and review</option></select></div>
+<svg id="view" viewBox="0 0 720 440" tabindex="0" role="group" aria-label="3D lifecycle. Use arrow keys to rotate, or inspect any component in the selector." aria-describedby="gestures">
+<defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#89cba6"/></marker></defs>
+<g id="grid"></g><g id="links"></g><g id="points"></g></svg>
+<div id="mobile-key" role="group" aria-label="Component key"></div>
+<div class="tools"><small id="gestures">Drag or use arrow keys to rotate.</small><button id="reset" type="button">Reset view</button></div></div>
+<aside><label for="component">Inspect component</label><select id="component"></select><div aria-live="polite"><p class="kicker" id="group"></p><h2 id="title"></h2><p id="description"></p></div><a id="source">Read source</a> · <a id="permalink">Link to this view</a><h3>Connections</h3><ul id="neighbors"></ul></aside>
+</section>
+<h2>Component directory</h2>
+<table><thead><tr><th scope="col">Component</th><th scope="col">Stage</th><th scope="col">Responsibility</th></tr></thead><tbody id="directory">
+<tr id="proposal" data-point="-255 42 -75"><th scope="row"><a href="../spec/model.md">Action proposal</a></th><td>Admission</td><td>An immutable description binds the target, parameters, evidence plan and expiry to one digest.</td></tr>
+<tr id="policy" data-point="-115 105 15"><th scope="row"><a href="../docs/architecture.md#policy-adapter">Policy decision</a></th><td>Admission</td><td>The caller supplies a decision and its policy digest. The reference sidecar accepts this input for its synthetic connector.</td></tr>
+<tr id="reserve" data-point="-80 -5 -120"><th scope="row"><a href="../spec/schemas/recourse-reservation.schema.json">Recourse reservation</a></th><td>Admission</td><td>The connector signs a commitment covering a bounded remedy for the exact action. The rail checks its status again before use.</td></tr>
+<tr id="drill" data-point="43 -95 -55"><th scope="row"><a href="recovery-evidence.md">Recovery drill</a></th><td>Recovery</td><td>Where policy requires preflight, an isolated fixture supplies a signed drill bundle. The rail checks its bindings, qualification and freshness.</td></tr>
+<tr id="permit" data-point="40 30 50"><th scope="row"><a href="../spec/schemas/action-permit.schema.json">Action permit</a></th><td>Admission</td><td>The rail issues a single-use permit after the required gates pass. The permit expires and binds the action and reservation.</td></tr>
+<tr id="execute" data-point="205 95 25"><th scope="row"><a href="../spec/state-machine.md">Connector execution</a></th><td>Settlement</td><td>The protected connector consumes the authorized operation. Ambiguous execution is reconciled through status before proceeding.</td></tr>
+<tr id="evidence" data-point="210 -15 -90"><th scope="row"><a href="../src/postconditions.js">Outcome evidence</a></th><td>Settlement</td><td>The rail checks the source, resource and freshness of the observed state and evaluates the declared postcondition.</td></tr>
+<tr id="receipt" data-point="148 -118 65"><th scope="row"><a href="../spec/schemas/settlement-receipt.schema.json">Settlement receipt</a></th><td>Settlement</td><td>Closing binds a technical outcome to the signed event chain. A verified remedy can yield compensation. An unresolved result may be disputed.</td></tr>
+<tr id="verify" data-point="-135 -118 95"><th scope="row"><a href="offline-review.md">Offline verification</a></th><td>Review</td><td>Caller-selected trusted keys check artifact integrity. An audit bundle also supports replay of the lifecycle and its evidence.</td></tr>
+</tbody></table>
+<details><summary>Directed connections</summary><ul id="relationships">
+<li data-from="proposal" data-to="policy"><a href="#proposal">Action proposal</a> binds authorization to the action → <a href="#policy">Policy decision</a>.</li>
+<li data-from="policy" data-to="reserve"><a href="#policy">Policy decision</a> allows a reservation request → <a href="#reserve">Recourse reservation</a>.</li>
+<li data-from="reserve" data-to="permit"><a href="#reserve">Recourse reservation</a> binds a verified commitment → <a href="#permit">Action permit</a>.</li>
+<li data-from="reserve" data-to="drill"><a href="#reserve">Recourse reservation</a> defines the drill envelope → <a href="#drill">Recovery drill</a>.</li>
+<li data-from="drill" data-to="permit"><a href="#drill">Recovery drill</a> qualifies required preflight → <a href="#permit">Action permit</a>.</li>
+<li data-from="permit" data-to="execute"><a href="#permit">Action permit</a> authorizes one attempt → <a href="#execute">Connector execution</a>.</li>
+<li data-from="execute" data-to="evidence"><a href="#execute">Connector execution</a> produces an observable effect → <a href="#evidence">Outcome evidence</a>.</li>
+<li data-from="evidence" data-to="receipt"><a href="#evidence">Outcome evidence</a> supports the terminal outcome → <a href="#receipt">Settlement receipt</a>.</li>
+<li data-from="receipt" data-to="verify"><a href="#receipt">Settlement receipt</a> is checked within a saved bundle → <a href="#verify">Offline verification</a>.</li>
+</ul></details>
+<details id="queryPanel" hidden><summary>Inspect graph data</summary><p>Local read-only projection of the selected trace.</p>
+<pre>query ArchitectureTrace($trace: Trace!) {
+  architecture(trace: $trace) {
+    nodes { id label stage }
+    edges { from to relation }
+  }
+}</pre><pre id="response"></pre></details>
+</main>
+<script>
+"use strict";
+const byId = (id) => document.getElementById(id);
+const nodes = [...byId("directory").rows].map((row,index) => ({
+  number: index+1, id: row.id, label: row.cells[0].textContent, source: row.querySelector("a").getAttribute("href"),
+  stage: row.cells[1].textContent, description: row.cells[2].textContent,
+  point: row.dataset.point.split(" ").map(Number),
+}));
+const edges = [...byId("relationships").children].map((item) => ({
+  from: item.dataset.from, to: item.dataset.to, relation: item.childNodes[1].textContent.replace("→", "").trim(),
+}));
+const catalog = new Map(nodes.map((node) => [node.id, node]));
+const traces = {
+  all: nodes.map(({ id }) => id),
+  admission: ["proposal","policy","reserve","permit"],
+  recovery: ["reserve","drill","permit"],
+  settlement: ["permit","execute","evidence","receipt","verify"],
+};
+const colors = { Admission:"#a7eabb", Recovery:"#ffcf85", Settlement:"#8ad9e3", Review:"#cdc2ff" };
+const route = byId("route"), component = byId("component"), view = byId("view");
+let yaw = -.16, pitch = -.13, selected = "permit";
+function currentTrace() {
+  const ids = traces[route.value];
+  return { nodes: ids.map((id) => catalog.get(id)),
+    edges: edges.filter((edge) => ids.includes(edge.from) && ids.includes(edge.to)) };
+}
+function project([x,y,z]) {
+  const lateral = x*Math.cos(yaw) + z*Math.sin(yaw);
+  const depth = z*Math.cos(yaw) - x*Math.sin(yaw);
+  const vertical = y*Math.cos(pitch) - depth*Math.sin(pitch);
+  const scale = 650 / (760 - depth*Math.cos(pitch) - y*Math.sin(pitch));
+  return { x:360+lateral*scale, y:216-vertical*scale, scale };
+}
+function element(type, attributes) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", type);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  return node;
+}
+function line(a,b,style) {
+  return element("line", {x1:a.x,y1:a.y,x2:b.x,y2:b.y,...style});
+}
+function draw() {
+  const graph = currentTrace();
+  const projection = new Map(graph.nodes.map((node) => [node.id,project(node.point)]));
+  const grid = [];
+  for (let k = -300; k <= 300; k += 60) {
+    grid.push(line(project([k,-137,-220]),project([k,-137,220]),{stroke:"#304847"}));
+    grid.push(line(project([-300,-137,k]),project([300,-137,k]),{stroke:"#304847"}));
+  }
+  byId("grid").replaceChildren(...grid);
+  byId("links").replaceChildren(...graph.edges.map(({from,to}) => {
+    const a = projection.get(from), b = projection.get(to);
+    const length = Math.hypot(b.x-a.x,b.y-a.y) || 1;
+    const tip = {x:b.x-(b.x-a.x)*11/length,y:b.y-(b.y-a.y)*11/length};
+    return line(a,tip,{stroke:"#89cba6","stroke-width":from===selected || to===selected ? 2.5 : 1.4,"marker-end":"url(#arrow)"});
+  }));
+  const ordered = [...graph.nodes].sort((a,b) => projection.get(a.id).scale-projection.get(b.id).scale);
+  byId("points").replaceChildren(...ordered.map((node) => {
+    const p = projection.get(node.id);
+    const g = element("g",{class:"node","data-id":node.id,transform:"translate("+p.x+" "+p.y+")"});
+    g.append(element("circle",{r:18,fill:"transparent"}));
+    if (node.id === selected) g.append(element("circle",{r:12,stroke:"#f7fff5",fill:"none","stroke-width":2}));
+    g.append(element("circle",{r:7*p.scale+2,fill:colors[node.stage]}));
+    const label = element("text",{class:"node-label",y:-16,"text-anchor":"middle"});
+    label.textContent = node.label;
+    const index = element("text",{class:"node-index",y:-19,"text-anchor":"middle"});
+    index.textContent = node.number;
+    g.append(label,index);
+    return g;
+  }));
+}
+function inspect(id) {
+  selected = id;
+  component.value = id;
+  for (const button of byId("mobile-key").children) {
+    button.setAttribute("aria-pressed",String(button.value === id));
+  }
+  const node = catalog.get(id);
+  byId("group").textContent = node.stage;
+  byId("title").textContent = node.label;
+  byId("description").textContent = node.description;
+  byId("source").href = node.source;
+  byId("permalink").href = "#" + new URLSearchParams({trace:route.value,node:id});
+  byId("neighbors").replaceChildren(...currentTrace().edges.filter((edge) => edge.from === id || edge.to === id).map((edge) => {
+    const li = document.createElement("li"), a = catalog.get(edge.from), b = catalog.get(edge.to);
+    li.textContent = a.label+" → "+b.label+" · "+edge.relation;
+    return li;
+  }));
+  draw();
+}
+function showTrace() {
+  const graph = currentTrace();
+  byId("mobile-key").replaceChildren(...graph.nodes.map((node) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = node.number+". "+node.label;
+    button.value = node.id;
+    button.onclick = () => inspect(node.id);
+    return button;
+  }));
+  component.replaceChildren(...graph.nodes.map((node) => new Option(node.label,node.id)));
+  const data = { architecture: { nodes: graph.nodes.map(({id,label,stage}) => ({id,label,stage})), edges:graph.edges }};
+  byId("response").textContent = JSON.stringify({data},null,2);
+  inspect(graph.nodes.some((node) => node.id===selected) ? selected : graph.nodes[0].id);
+}
+function rotate(dx,dy) {
+  yaw += dx; pitch = Math.max(-.95,Math.min(.95,pitch+dy)); draw();
+}
+let drag;
+view.addEventListener("pointerdown", (event) => {
+  if (!event.isPrimary || event.button !== 0) return;
+  drag = {startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,
+    id:event.target.closest(".node")?.dataset.id,moved:false};
+  view.setPointerCapture(event.pointerId);
+});
+view.addEventListener("pointermove", (event) => {
+  if (!drag || !event.isPrimary) return;
+  drag.moved ||= Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY)>4;
+  if (drag.moved) rotate((event.clientX-drag.x)*.008,(event.clientY-drag.y)*.008);
+  drag.x = event.clientX; drag.y = event.clientY;
+});
+view.addEventListener("pointerup",(event) => {
+  if (!event.isPrimary) return;
+  if (drag?.id && !drag.moved) inspect(drag.id);
+  drag = null;
+});
+view.addEventListener("lostpointercapture",() => { drag = null; });
+const keys = new Map([["ArrowLeft",[-.12,0]],["ArrowRight",[.12,0]],["ArrowUp",[0,-.12]],["ArrowDown",[0,.12]]]);
+view.addEventListener("keydown",(event) => {
+  if (keys.has(event.key)) { event.preventDefault(); rotate(...keys.get(event.key)); }
+});
+byId("reset").onclick = () => { yaw = -.16; pitch = -.13; draw(); };
+component.onchange = () => inspect(component.value);
+route.onchange = showTrace;
+function restoreView() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const trace = params.get("trace");
+  if (Object.hasOwn(traces,trace) && traces[trace].includes(params.get("node"))) {
+    route.value = trace;
+    selected = params.get("node");
+  }
+  showTrace();
+}
+window.addEventListener("hashchange",restoreView);
+restoreView();
+byId("workspace").hidden = false;
+byId("queryPanel").hidden = false;
+</script></html>
