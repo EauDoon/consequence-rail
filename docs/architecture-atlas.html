@@ -4,48 +4,116 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Consequence Rail · Architecture atlas</title>
 <style>
-:root{color-scheme:dark;font:16px/1.55 system-ui,sans-serif;background:#0b1519;color:#e8f0e9;--line:#344b4f;--mint:#92ecbc;--muted:#b0c5c2}
-*{box-sizing:border-box}body{max-width:1230px;margin:auto;padding:clamp(16px,4vw,56px)}
-a{color:var(--mint);text-underline-offset:.2em}a:hover{text-decoration-thickness:2px}
-header{border-bottom:1px solid var(--line);padding-bottom:22px}
-.brand,.kicker,label,summary,.tools button,select{font:600 .83rem/1.5 ui-monospace,monospace}
-.brand,.kicker{letter-spacing:.09em;color:var(--mint)}.brand{text-decoration:none}
-h1{font-size:clamp(2.4rem,6.7vw,5.5rem);letter-spacing:-.065em;line-height:1;margin:.5em 0 .2em}
-header p{max-width:64ch;margin:0;color:var(--muted)}h2{line-height:1.2;letter-spacing:-.035em}h3{margin:1.6em 0 .4em}
-.workspace{display:grid;grid-template-columns:minmax(0,2.5fr) minmax(220px,1fr);margin-top:22px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#142226}
-.workspace[hidden]{display:none}.stage{min-width:0;background:radial-gradient(ellipse at center,#1c3536,#0e1d22 75%);padding:16px}
-.toolbar,.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-select,button{background:#142629;color:#edf6ef;border:1px solid #567271;border-radius:5px;padding:8px;min-height:44px}
-button{cursor:pointer}.tools button:hover{background:#294344}.tools{justify-content:space-between}
-:focus-visible{outline:3px solid #f9cd79;outline-offset:2px}
-svg{width:100%;height:auto;display:block;touch-action:none}
-svg text{font:600 13px ui-monospace,monospace;fill:#eef9f1;paint-order:stroke;stroke:#101e22;stroke-width:4px;stroke-linejoin:round}
-svg .node{cursor:pointer}.stage small{color:var(--muted)}aside{padding:clamp(16px,2.2vw,32px);border-left:1px solid var(--line)}
-aside select{width:100%;margin:.5em 0}aside p{color:var(--muted)}aside ul{padding-left:1.2em}aside li{margin:.4em 0}
-details{border-top:1px solid var(--line);padding:1em 0}summary{cursor:pointer;font-size:1rem}table{border-collapse:collapse;width:100%;margin-block:1em}
-th,td{border-bottom:1px solid var(--line);text-align:left;padding:12px 8px;vertical-align:top}td{color:var(--muted)}th:first-child{min-width:8em}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem;color:#caddd6}
-@media(max-width:770px){.workspace{grid-template-columns:1fr}aside{border:0;border-top:1px solid var(--line)}.stage{padding:10px}th,td{padding:8px 4px}th:first-child{min-width:0}table{font-size:.9rem}}
-#mobile-key,.node-index{display:none}
-@media(max-width:600px){
-  .node-label{display:none}.node-index{display:block;font-size:32px}
-  #mobile-key{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:4px;margin:12px 0}
-  #mobile-key button{font-size:.9rem;text-align:left}
-  #mobile-key button[aria-pressed=true]{border-color:var(--mint);color:var(--mint)}
+:root {
+  color-scheme: dark;
+  font: 16px/1.48 system-ui, sans-serif;
+  background: #0b1317;
+  color: #f3f4e9;
+  --line: #34464c;
+  --muted: #b4c5c7;
+  --mint: #a4efbf;
+  --mono: ui-monospace, "Courier New", monospace;
+}
+* { box-sizing: border-box }
+body { max-width: 1440px; margin: auto; padding: clamp(14px, 3.6vw, 52px) }
+a { color: var(--mint); text-underline-offset: .22em }
+a:hover { text-decoration-thickness: 2px }
+:focus-visible { outline: 3px solid #ffcd76; outline-offset: 2px }
+.brand, .kicker, label, .tools button, summary, select, #size {
+  font: 600 .79rem/1.4 var(--mono);
+}
+.brand { color: var(--mint); letter-spacing: .1em; text-decoration: none }
+header { padding-bottom: 22px; border-bottom: 1px solid var(--line) }
+.intro { margin-top: 14px; display: flex; gap: 32px; align-items: end; justify-content: space-between }
+h1 { margin: 0; font-weight: 630; font-size: clamp(2rem,5.8vw,5.2rem); line-height: 1.06; letter-spacing: -.063em }
+.intro p { color: var(--muted); margin: 0 0 4px; max-width: 35ch; font-size: 1rem }
+h2 { line-height: 1.15; letter-spacing: -.04em }
+.workspace { display: grid; grid-template-columns: minmax(0,2.2fr) minmax(265px,1fr); margin-top: 20px;
+  border: 1px solid var(--line); border-radius: 12px; background: #131f24; overflow: hidden }
+[hidden] { display: none !important }
+.stage { min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse at 53% 49%,#22363a,#101d23 72%) }
+.toolbar, .tools, .legend { display: flex; align-items: center; flex-wrap: wrap; gap: 10px }
+.toolbar, .tools { padding: 10px 18px; justify-content: space-between }
+.toolbar { border-bottom: 1px solid var(--line) }
+.toolbar label { display: flex; gap: 10px; align-items: center }
+#size { font-size: .73rem; color: var(--muted); font-weight: 400 }
+select,button { color: #f1f5ee; background: #17272d; border: 1px solid #52666a; border-radius: 5px;
+  padding: 8px 10px; min-height: 44px; max-width: 100% }
+button { cursor: pointer }
+button:hover { background: #294045 }
+svg#view { display: block; width: 100%; flex: 1 0 auto; min-height: 0; height: clamp(300px,29vw,420px); touch-action: none }
+svg text { font: 600 13px var(--mono); fill: #f3f8f1; paint-order: stroke; stroke: #152226; stroke-width: 4px; stroke-linejoin: round }
+svg .node { cursor: pointer }
+.legend { list-style: none; margin: 0; padding: 0 18px 10px; gap: 7px 16px; color: var(--muted);
+  font: .75rem/1.6 var(--mono) }
+.legend li, .kicker { display: flex; align-items: center; gap: 6px }
+.legend i, .kicker::before { content: ''; display: inline-block; width: .65em; height: .65em; border-radius: 100%; background: var(--color) }
+.tools { border-top: 1px solid var(--line); color: var(--muted) }
+aside { min-width: 0; padding: clamp(16px,1.8vw,28px); border-left: 1px solid var(--line); background: #18252a }
+aside select { width: 100%; margin: 5px 0 0 }
+.kicker { color: var(--color,var(--mint)); margin: 1.4em 0 .5em; letter-spacing: .04em }
+aside h2 { font-size: clamp(1.5rem,2.2vw,2.1rem); margin: 0 }
+#description { margin: .65em 0 .8em; color: #d0dddb }
+.references { display: flex; gap: 16px; font-size: .9rem }
+aside h3 { padding-top: 14px; margin: 18px 0 0; border-top: 1px solid var(--line); font-size: .96rem }
+#neighbors { margin: 0; padding: 0; list-style: none }
+#neighbors li { padding: 7px 0 4px }
+#neighbors strong { display: block; font-size: .9rem; font-weight: 600 }
+#neighbors span { display: block; color: var(--muted); font-size: .83rem }
+#key-panel, .node-index { display: none }
+details { border-top: 1px solid var(--line); padding: 1em 0 }
+summary { cursor: pointer; font-size: .92rem }
+main > h2 { margin: 1.5em 0 .5em }
+table { border-collapse: collapse; width: 100%; margin-block: .7em 1.2em }
+th,td { border-bottom: 1px solid var(--line); text-align: left; padding: 12px 8px; vertical-align: top }
+td { color: var(--muted) }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; color: #caddd6 }
+@media(max-width:830px) {
+  .workspace { grid-template-columns: 1fr }
+  aside { border: 0; border-top: 1px solid var(--line) }
+  .intro { align-items: start; flex-direction: column; gap: 5px }
+  .intro p { max-width: 58ch }
+}
+@media(max-width:600px) {
+  header { padding-bottom: 12px }
+  .intro { margin-top: 8px }
+  .intro p { font-size: .9rem; max-width: 39ch }
+  .workspace { margin-top: 12px }
+  .toolbar, .tools { padding: 6px 10px; gap: 3px }
+  .toolbar select { width: auto; padding-left: 8px }
+  .toolbar label { gap: 5px }
+  #size { font-size: .66rem }
+  svg#view { flex: none; height: auto; aspect-ratio: 520/355 }
+  .node-label { display: none }
+  .node-index { display: block; font-size: 23px }
+  .legend { font-size: .69rem; padding: 3px 10px 8px; gap: 3px 10px }
+  .tools small { font-size: .77rem }
+  #key-panel { display: block; padding: 0 10px; border: 0 }
+  #key-panel summary { padding: 10px 0; min-height: 44px }
+  #mobile-key { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; margin-bottom: 10px }
+  #mobile-key button { font-size: .85rem; text-align: left }
+  #mobile-key button[aria-pressed=true] { border-color: var(--mint); color: var(--mint) }
+  aside { padding: 14px }
+  .kicker { margin: .7em 0 .3em }
+  th,td { padding: 8px 3px; font-size: .85rem }
+}
+@media(max-width:425px) { #size { display: none } }
+@media(max-width:360px) {
+  .tools button { padding-inline: 6px }
 }
 </style>
 <header><a class="brand" href="../README.md">EAUDOON / CONSEQUENCE RAIL</a>
-<h1>Architecture atlas</h1><p>Follow an action from a bounded remedy to a signed settlement receipt. Inspect the gates, the evidence each gate needs, and the components that can check it.</p></header>
+<div class="intro"><h1>Architecture atlas</h1><p>Trace the gates and evidence behind a signed settlement receipt.</p></div></header>
 <main>
 <section class="workspace" id="workspace" aria-label="Interactive architecture explorer" hidden>
 <div class="stage">
-<div class="toolbar"><label for="route">Trace</label><select id="route"><option value="all">Entire lifecycle</option><option value="admission">Permit admission</option><option value="recovery">Recovery preflight</option><option value="settlement">Settlement and review</option></select></div>
+<div class="toolbar"><label for="route">Trace <select id="route"><option value="all">Entire lifecycle</option><option value="admission">Permit admission</option><option value="recovery">Recovery preflight</option><option value="settlement">Settlement and review</option></select></label><span id="size"></span></div>
 <svg id="view" viewBox="0 0 720 440" tabindex="0" role="group" aria-label="3D lifecycle. Use arrow keys to rotate, or inspect any component in the selector." aria-describedby="gestures">
-<defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#89cba6"/></marker></defs>
 <g id="grid"></g><g id="links"></g><g id="points"></g></svg>
-<div id="mobile-key" role="group" aria-label="Component key"></div>
-<div class="tools"><small id="gestures">Drag or use arrow keys to rotate.</small><button id="reset" type="button">Reset view</button></div></div>
-<aside><label for="component">Inspect component</label><select id="component"></select><div aria-live="polite"><p class="kicker" id="group"></p><h2 id="title"></h2><p id="description"></p></div><a id="source">Read source</a> · <a id="permalink">Link to this view</a><h3>Connections</h3><ul id="neighbors"></ul></aside>
+<ul class="legend" aria-label="Lifecycle stages" id="legend"></ul>
+<div class="tools"><small id="gestures">Drag or use arrow keys.</small><button id="reset" type="button">Reset view</button></div>
+<details id="key-panel"><summary>Component key</summary><div id="mobile-key" role="group" aria-label="Component key"></div></details></div>
+<aside><label for="component">Inspect component</label><select id="component"></select><div aria-live="polite"><p class="kicker" id="group"></p><h2 id="title"></h2><p id="description"></p></div><div class="references"><a id="source">Read source</a><a id="permalink">Link to this view</a></div><h3>Connections</h3><ul id="neighbors"></ul></aside>
 </section>
 <h2>Component directory</h2>
 <table><thead><tr><th scope="col">Component</th><th scope="col">Stage</th><th scope="col">Responsibility</th></tr></thead><tbody id="directory">
@@ -98,7 +166,9 @@ const traces = {
 };
 const colors = { Admission:"#a7eabb", Recovery:"#ffcf85", Settlement:"#8ad9e3", Review:"#cdc2ff" };
 const route = byId("route"), component = byId("component"), view = byId("view");
-let yaw = -.16, pitch = -.13, selected = "permit";
+const narrow = matchMedia("(max-width:600px)");
+const home = { yaw:-.16, pitch:-.29 };
+let yaw = home.yaw, pitch = home.pitch, selected = "permit";
 function currentTrace() {
   const ids = traces[route.value];
   return { nodes: ids.map((id) => catalog.get(id)),
@@ -109,7 +179,7 @@ function project([x,y,z]) {
   const depth = z*Math.cos(yaw) - x*Math.sin(yaw);
   const vertical = y*Math.cos(pitch) - depth*Math.sin(pitch);
   const scale = 650 / (760 - depth*Math.cos(pitch) - y*Math.sin(pitch));
-  return { x:360+lateral*scale, y:216-vertical*scale, scale };
+  return { x:360+lateral*scale, y:190-vertical*scale, scale };
 }
 function element(type, attributes) {
   const node = document.createElementNS("http://www.w3.org/2000/svg", type);
@@ -119,28 +189,76 @@ function element(type, attributes) {
 function line(a,b,style) {
   return element("line", {x1:a.x,y1:a.y,x2:b.x,y2:b.y,...style});
 }
+// Score label positions in viewBox coordinates. The same layout follows the camera on rotation.
+function placeLabels(projection) {
+  if (narrow.matches) return;
+  const occupied = [...projection.values()].map(({x,y}) => ({left:x-11,top:y-11,right:x+11,bottom:y+11}));
+  const bounds = view.viewBox.baseVal;
+  const overlap = (a,b) => Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left)) *
+    Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+  const labels = [...byId("points").children].sort((a,b) =>
+    Number(b.dataset.id === selected)-Number(a.dataset.id === selected));
+  for (const station of labels) {
+    const anchor = projection.get(station.dataset.id);
+    const label = station.querySelector(".node-label");
+    const half = label.getComputedTextLength()/2+4;
+    let best;
+    for (const [dx,dy] of [[0,-16],[0,27],[half+12,4],[-half-12,4],[0,-35],[0,44],[half,-23],[-half,-23]]) {
+      const x = Math.max(bounds.x+half+2, Math.min(bounds.x+bounds.width-half-2,anchor.x+dx));
+      const y = Math.max(bounds.y+17, Math.min(bounds.y+bounds.height-5,anchor.y+dy));
+      const box = {left:x-half,top:y-14,right:x+half,bottom:y+4};
+      const cost = occupied.reduce((total,other) => total+overlap(box,other),0);
+      if (!best || cost < best.cost) best = {x,y,box,cost};
+      if (cost===0) break;
+    }
+    label.setAttribute("x",best.x-anchor.x);
+    label.setAttribute("y",best.y-anchor.y);
+    occupied.push(best.box);
+  }
+}
 function draw() {
   const graph = currentTrace();
   const projection = new Map(graph.nodes.map((node) => [node.id,project(node.point)]));
+  view.setAttribute("viewBox",narrow.matches ? "100 10 520 355" : "0 -5 720 365");
   const grid = [];
   for (let k = -300; k <= 300; k += 60) {
-    grid.push(line(project([k,-137,-220]),project([k,-137,220]),{stroke:"#304847"}));
-    grid.push(line(project([-300,-137,k]),project([300,-137,k]),{stroke:"#304847"}));
+    grid.push(line(project([k,-137,-180]),project([k,-137,180]),{stroke:"#2d4142"}));
+  }
+  for (let k = -180; k <= 180; k += 60) {
+    grid.push(line(project([-300,-137,k]),project([300,-137,k]),{stroke:"#2d4142"}));
   }
   byId("grid").replaceChildren(...grid);
   byId("links").replaceChildren(...graph.edges.map(({from,to}) => {
-    const a = projection.get(from), b = projection.get(to);
-    const length = Math.hypot(b.x-a.x,b.y-a.y) || 1;
-    const tip = {x:b.x-(b.x-a.x)*11/length,y:b.y-(b.y-a.y)*11/length};
-    return line(a,tip,{stroke:"#89cba6","stroke-width":from===selected || to===selected ? 2.5 : 1.4,"marker-end":"url(#arrow)"});
+    const start = projection.get(from), end = projection.get(to);
+    const dx = end.x-start.x, dy = end.y-start.y;
+    const length = Math.hypot(dx,dy) || 1;
+    const nx = -dy/length, ny = dx/length;
+    const active = from===selected || to===selected;
+    const color = active ? "#aef0c3" : "#739699";
+    const track = element("g",{"aria-hidden":"true"});
+    for (const offset of [-2,2]) {
+      track.append(line({x:start.x+nx*offset,y:start.y+ny*offset},
+        {x:end.x+nx*offset,y:end.y+ny*offset},{stroke:color,"stroke-width":active ? 1.6 : 1.1}));
+    }
+    const x = start.x+dx*.65, y = start.y+dy*.65;
+    const arrow = element("path",{d:"M-4 -3.5 L3 0 L-4 3.5",stroke:color,fill:"none",
+      "stroke-width":2.3,transform:"translate("+x+" "+y+") rotate("+Math.atan2(dy,dx)*180/Math.PI+")"});
+    track.append(arrow);
+    return track;
   }));
+  const supports = graph.nodes.map((node) => {
+    const station = projection.get(node.id), ground = project([node.point[0],-137,node.point[2]]);
+    return line(station,ground,{stroke:"#567374","stroke-width":1,"stroke-dasharray":"2 5",opacity:.65});
+  });
+  byId("grid").append(...supports);
   const ordered = [...graph.nodes].sort((a,b) => projection.get(a.id).scale-projection.get(b.id).scale);
   byId("points").replaceChildren(...ordered.map((node) => {
     const p = projection.get(node.id);
     const g = element("g",{class:"node","data-id":node.id,transform:"translate("+p.x+" "+p.y+")"});
     g.append(element("circle",{r:18,fill:"transparent"}));
-    if (node.id === selected) g.append(element("circle",{r:12,stroke:"#f7fff5",fill:"none","stroke-width":2}));
-    g.append(element("circle",{r:7*p.scale+2,fill:colors[node.stage]}));
+    if (node.id === selected) g.append(element("circle",{r:15,stroke:"#f7fff5",fill:"none","stroke-width":2}));
+    g.append(element("circle",{r:7*p.scale+2,fill:"#17272b",stroke:colors[node.stage],"stroke-width":3}));
+    g.append(element("circle",{r:3.2,fill:colors[node.stage]}));
     const label = element("text",{class:"node-label",y:-16,"text-anchor":"middle"});
     label.textContent = node.label;
     const index = element("text",{class:"node-index",y:-19,"text-anchor":"middle"});
@@ -148,6 +266,7 @@ function draw() {
     g.append(label,index);
     return g;
   }));
+  placeLabels(projection);
 }
 function inspect(id) {
   selected = id;
@@ -156,14 +275,20 @@ function inspect(id) {
     button.setAttribute("aria-pressed",String(button.value === id));
   }
   const node = catalog.get(id);
-  byId("group").textContent = node.stage;
+  byId("group").style.setProperty("--color",colors[node.stage]);
+  byId("group").textContent = String(node.number).padStart(2,"0")+" / "+node.stage;
   byId("title").textContent = node.label;
   byId("description").textContent = node.description;
   byId("source").href = node.source;
   byId("permalink").href = "#" + new URLSearchParams({trace:route.value,node:id});
   byId("neighbors").replaceChildren(...currentTrace().edges.filter((edge) => edge.from === id || edge.to === id).map((edge) => {
     const li = document.createElement("li"), a = catalog.get(edge.from), b = catalog.get(edge.to);
-    li.textContent = a.label+" → "+b.label+" · "+edge.relation;
+    const incoming = b.id === id;
+    const heading = document.createElement("strong");
+    heading.textContent = (incoming ? "From " + a.label : "To " + b.label);
+    const detail = document.createElement("span");
+    detail.textContent = edge.relation;
+    li.append(heading,detail);
     return li;
   }));
   draw();
@@ -179,6 +304,14 @@ function showTrace() {
     return button;
   }));
   component.replaceChildren(...graph.nodes.map((node) => new Option(node.label,node.id)));
+  byId("size").textContent = graph.nodes.length+" nodes / "+graph.edges.length+" links";
+  byId("legend").replaceChildren(...[...new Set(graph.nodes.map(node => node.stage))].map((stage) => {
+    const item = document.createElement("li");
+    const dot = document.createElement("i");
+    dot.style.setProperty("--color",colors[stage]);
+    item.append(dot,stage);
+    return item;
+  }));
   const data = { architecture: { nodes: graph.nodes.map(({id,label,stage}) => ({id,label,stage})), edges:graph.edges }};
   byId("response").textContent = JSON.stringify({data},null,2);
   inspect(graph.nodes.some((node) => node.id===selected) ? selected : graph.nodes[0].id);
@@ -209,7 +342,7 @@ const keys = new Map([["ArrowLeft",[-.12,0]],["ArrowRight",[.12,0]],["ArrowUp",[
 view.addEventListener("keydown",(event) => {
   if (keys.has(event.key)) { event.preventDefault(); rotate(...keys.get(event.key)); }
 });
-byId("reset").onclick = () => { yaw = -.16; pitch = -.13; draw(); };
+byId("reset").onclick = () => { yaw = home.yaw; pitch = home.pitch; draw(); };
 component.onchange = () => inspect(component.value);
 route.onchange = showTrace;
 function restoreView() {
@@ -222,7 +355,8 @@ function restoreView() {
   showTrace();
 }
 window.addEventListener("hashchange",restoreView);
-restoreView();
+narrow.addEventListener("change",draw);
 byId("workspace").hidden = false;
+restoreView();
 byId("queryPanel").hidden = false;
 </script></html>
