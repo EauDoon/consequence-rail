@@ -28,6 +28,8 @@ of the package version below.
 
 - Name every demo subcommand in the unknown demo scenario error. `crctl demo <unknown>` listed only the four fixtures and omitted `list`, `find` and `matrix`, unlike the missing-scenario error.
 
+- Give the scenario matrix CLI test a 60 second child timeout. Under the parallel suite on a 4-core runner the 31-fixture run passed the 5 second default, was killed, and failed the test with a null exit status.
+
 ## [0.4.0] - 2026-10-30
 
 This release adds capabilities without changing artifacts. There is no
