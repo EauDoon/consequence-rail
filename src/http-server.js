@@ -202,6 +202,7 @@ function errorStatus(error) {
   if (error.code === "ACTION_CAPACITY_REACHED") return 503;
   if (
     error.code === "SCHEMA_INVALID" ||
+    error.code === "ACTION_CLASS_UNREGISTERED" ||
     error.code?.startsWith("EVIDENCE_") ||
     error.code?.startsWith("RECOVERY_")
   ) return 422;
@@ -396,8 +397,9 @@ export function createReferenceServer({
           implementation_version: VERSION,
           assurance_modes: ["enforced", "cooperative", "observed"],
           executable_modes: ["enforced", "cooperative"],
-          optional_features: ["recovery-preflight/v0.1", "signed-authorization/v0.1"],
+          optional_features: ["recovery-preflight/v0.1", "signed-authorization/v0.1", "action-classes/v0.3"],
           signed_authorization_required: rail.requireSignedAuthorization,
+          registered_action_types: rail.actionClasses.list().map((item) => item.action_type),
           connector: runtime.connector.capabilities(),
         });
         return;

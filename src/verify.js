@@ -3,6 +3,7 @@ import { validateSettlementBundle } from "./bundle-validation.js";
 import { verifyEventChain } from "./event-store.js";
 import { RailError } from "./errors.js";
 import { evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
+import { unmetBindings } from "./action-classes.js";
 import { ALLOWED_TRANSITIONS, recourseScopeField } from "./rail.js";
 import { verifyArtifact } from "./signing.js";
 
@@ -15,7 +16,12 @@ const SETTLEMENT_VERSION_BINDINGS = new Map([
     proposal: "consequence-rail/action-proposal/v0.2",
     receipt: "consequence-rail/settlement-receipt/v0.2",
   }],
+  ["consequence-rail/settlement-bundle/v0.3", {
+    proposal: "consequence-rail/action-proposal/v0.3",
+    receipt: "consequence-rail/settlement-receipt/v0.3",
+  }],
 ]);
+const OPEN_PROPOSAL_VERSION = "consequence-rail/action-proposal/v0.3";
 
 // Largest lag a receipt-profile closed_at may have behind the terminal CLOSED
 // event's recorded_at. Current receipts copy recorded_at exactly; the tolerance
@@ -98,7 +104,7 @@ export function verifyBundle(
     receipt.schema_version === versionBinding.receipt,
     "Receipt schema version does not match the bundle.",
   );
-  if (versionBinding.receipt === "consequence-rail/settlement-receipt/v0.2") {
+  if (versionBinding.receipt !== "consequence-rail/settlement-receipt/v0.1") {
     integrityAssert(
       receipt.proposal_schema_version === versionBinding.proposal,
       "Signed receipt proposal version does not match the bundle.",
@@ -448,7 +454,8 @@ function verifySemantics(bundle) {
 
   semanticAssert(reservation.action_digest === action.action_digest, "Reservation action binding is invalid.");
   semanticAssert(commitment.action_digest === action.action_digest, "Connector commitment action binding is invalid.");
-  const scopeField = recourseScopeField(action.action_type);
+  const open = proposal.schema_version === OPEN_PROPOSAL_VERSION;
+  const scopeField = open ? proposal.recourse_scope.field : recourseScopeField(action.action_type);
   semanticAssert(
     Object.hasOwn(commitment, scopeField) && Object.hasOwn(reservation, scopeField),
     `Reservation and commitment must both carry the ${scopeField} remedy scope.`,
@@ -486,7 +493,15 @@ function verifySemantics(bundle) {
     proposal.target.connector === reservation.connector,
     "Reservation connector does not match the action target.",
   );
-  if (proposal.action_type === "demo.refund.issue/v1") {
+  if (open) {
+    const covers = proposal.recourse_scope.covers_parameter;
+    semanticAssert(
+      covers === null ||
+        (reservation[scopeField] >= proposal.parameters[covers] &&
+          commitment[scopeField] >= proposal.parameters[covers]),
+      `Reservation scope does not cover the proposed ${covers}.`,
+    );
+  } else if (proposal.action_type === "demo.refund.issue/v1") {
     semanticAssert(
       reservation.max_amount_minor >= proposal.parameters.amount_minor &&
         commitment.max_amount_minor >= proposal.parameters.amount_minor,
@@ -741,7 +756,12 @@ function verifyEvidenceSemantics(evidence, proposal, events) {
       evidence.resource?.id === proposal.target.resource_id,
     "Evidence resource does not match the proposal.",
   );
-  if (proposal.action_type === "demo.refund.issue/v1") {
+  if (proposal.schema_version === OPEN_PROPOSAL_VERSION) {
+    semanticAssert(
+      unmetBindings(proposal, evidence.facts ?? {}).length === 0,
+      "Evidence facts do not equal the parameters the proposal binds them to.",
+    );
+  } else if (proposal.action_type === "demo.refund.issue/v1") {
     semanticAssert(
       evidence.facts?.currency === proposal.parameters.currency,
       "Evidence currency does not match the proposal.",

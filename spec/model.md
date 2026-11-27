@@ -55,6 +55,40 @@ After authorization, the proposal MUST NOT change. A changed target,
 parameter, postcondition, expiry, idempotency key, or assurance mode is a new
 action.
 
+### Registered action classes (ActionProposal v0.3)
+
+ActionProposal v0.1 and v0.2 admit only the demo refund, email and inventory
+types. ActionProposal v0.3 admits any action type that the rail operator has
+registered as an `ActionClass`
+([`schemas/action-class.schema.json`](schemas/action-class.schema.json)).
+A class names its `action_type` (a dotted lower-case name and a `/vN`
+version; the three earlier demo types are reserved) and declares:
+
+- `parameters`: a closed map of 1 to 32 parameters, each a string (optional
+  length bounds, pattern and enum), an integer (optional bounds) or a boolean.
+- `recourse`: the remedy `scope_field` (`max_amount_minor` or
+  `max_quantity`), the remedy `kinds` the class allows, and
+  `covers_parameter`, an integer parameter the reserved scope must cover, or
+  `null` when the scope is a count of remedy operations.
+- `evidence_bindings`: evidence facts (dot paths) that must equal a named
+  parameter, so accepted evidence shows the approved effect and not a
+  different one.
+
+A v0.3 proposal repeats the class's remedy scope as `recourse_scope` and lists
+at least the class bindings in `evidence_plan.parameter_bindings`. Both are
+inside the action digest, so the authorizer approves them and an offline
+verifier checks reservation coverage and evidence bindings without the
+registry. The rail refuses a proposal for an unregistered class with
+`ACTION_CLASS_UNREGISTERED`, and refuses evidence that breaks a binding with
+`EVIDENCE_BINDING_MISMATCH`, which closes the action as disputed. A v0.3
+proposal settles into a v0.3 settlement bundle and receipt, which sign the
+v0.3 proposal schema identifier.
+
+The reference demo class `demo.ticket.comment/v1` posts one comment on a
+synthetic support ticket. Its scope is `max_quantity` with no covered
+parameter (the remedy may delete one comment), its kinds are `reverse` and
+`escalate`, and it binds the `visibility` fact to the `visibility` parameter.
+
 ## AuthorizationDecision
 
 An authorization binds a policy decision to the action before any recourse

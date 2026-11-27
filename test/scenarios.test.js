@@ -3,10 +3,11 @@ import test from "node:test";
 import { findExercises, scenarioCatalog } from "../src/scenarios.js";
 import { runRefundDemo, runIrreversibleDemo } from "../src/demo.js";
 import { runInventoryDemo } from "../src/inventory-demo.js";
+import { runTicketDemo } from "../src/ticket-demo.js";
 
 test("every advertised execution assurance mode completes its synthetic demo", async () => {
-  for (const scenario of scenarioCatalog().scenarios.filter((item) => ["refund", "inventory"].includes(item.name))) {
-    const run = scenario.name === "refund" ? runRefundDemo : runInventoryDemo;
+  for (const scenario of scenarioCatalog().scenarios.filter((item) => ["refund", "inventory", "ticket"].includes(item.name))) {
+    const run = { refund: runRefundDemo, inventory: runInventoryDemo, ticket: runTicketDemo }[scenario.name];
     for (const assurance of scenario.assurance_modes) {
       const { summary } = await run({ assuranceMode: assurance });
       assert.equal(summary.state, "CLOSED");
@@ -29,8 +30,8 @@ test("the irreversible scenario is refused by the connector capability gate", ()
 test("catalog documents every runnable synthetic fault with detached expectations", () => {
   const catalog = scenarioCatalog();
   assert.equal(catalog.synthetic_only, true);
-  assert.equal(catalog.scenarios.length, 4);
-  assert.equal(catalog.scenarios.flatMap((scenario) => scenario.faults).length, 30);
+  assert.equal(catalog.scenarios.length, 5);
+  assert.equal(catalog.scenarios.flatMap((scenario) => scenario.faults).length, 40);
   for (const scenario of catalog.scenarios) for (const fault of scenario.faults) {
     assert.equal(typeof fault.purpose, "string");
     assert.ok(Object.keys(fault.expected).length);
@@ -40,9 +41,9 @@ test("catalog documents every runnable synthetic fault with detached expectation
 });
 import { checkScenarioResult, runScenarioMatrix, summarizeScenarioMatrix } from "../src/scenario-matrix.js";
 
-test("all 31 deterministic fault controls pass in isolated runtimes", async () => {
+test("all 41 deterministic fault controls pass in isolated runtimes", async () => {
   const result = await runScenarioMatrix();
-  assert.equal(result.case_count, 31);
+  assert.equal(result.case_count, 41);
   assert.equal(result.valid, true, JSON.stringify(result.rows.filter((row) => !row.passed)));
   assert.deepEqual(await runScenarioMatrix("inventory"), await runScenarioMatrix("inventory"));
   await assert.rejects(() => runScenarioMatrix("__proto__"), { code: "SCENARIO_INVALID" });

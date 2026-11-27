@@ -43,6 +43,11 @@
                     "executable_modes": { "type": "array", "items": { "type": "string" } },
                     "optional_features": { "type": "array", "items": { "type": "string" } },
                     "signed_authorization_required": { "type": "boolean" },
+                    "registered_action_types": {
+                      "description": "Action types this rail admits through ActionProposal v0.3, one per registered action class.",
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
                     "connector": { "$ref": "#/components/schemas/ConnectorCapabilities" }
                   }
                 }
@@ -84,7 +89,8 @@
               "schema": {
                 "oneOf": [
                   { "$ref": "../spec/schemas/action-proposal.schema.json" },
-                  { "$ref": "../spec/schemas/action-proposal-v0.2.schema.json" }
+                  { "$ref": "../spec/schemas/action-proposal-v0.2.schema.json" },
+                  { "$ref": "../spec/schemas/action-proposal-v0.3.schema.json" }
                 ]
               }
             }
@@ -687,7 +693,8 @@
                 "schema": {
                   "oneOf": [
                     { "$ref": "../spec/schemas/settlement-bundle.schema.json" },
-                    { "$ref": "../spec/schemas/settlement-bundle-v0.2.schema.json" }
+                    { "$ref": "../spec/schemas/settlement-bundle-v0.2.schema.json" },
+                    { "$ref": "../spec/schemas/settlement-bundle-v0.3.schema.json" }
                   ]
                 }
               }
@@ -746,7 +753,8 @@
               "schema": {
                 "oneOf": [
                   { "$ref": "../spec/schemas/settlement-bundle.schema.json" },
-                  { "$ref": "../spec/schemas/settlement-bundle-v0.2.schema.json" }
+                  { "$ref": "../spec/schemas/settlement-bundle-v0.2.schema.json" },
+                  { "$ref": "../spec/schemas/settlement-bundle-v0.3.schema.json" }
                 ]
               }
             }

@@ -276,6 +276,28 @@ file lists none, and refuses an unsigned body with
 A Constitutional Agent Testbench evaluation fits in `evaluation_input_digest`
 (the JSON it evaluated) and `evaluation_digest` (its result). The decision lives at most one day and is bound
 to one action, so it cannot approve a changed or different action.
+The Testbench signs nothing for an action whose bound values its digest cannot
+tell apart, such as `1.0` against `1`, `-0.0`, or integers beyond
+2^53 - 1, so keep such values out of proposals it must approve.
+
+## Gate any action, not only payments
+
+The refund, email and inventory demos are fixed types. To put another agent
+action through the rail (a ticket comment, a CRM update, a deploy, a
+permission grant), register an action class: its closed parameters, the
+remedy scope and kinds it allows, and the evidence facts that must equal
+parameters. Proposals for that class use ActionProposal v0.3 and settle into
+v0.3 bundles that verify offline without the registry.
+
+```text
+node ./cmd/crctl.js demo ticket --fault duplicate
+```
+
+The ticket demo is the non-money example: an agent posts a comment, the
+connector posts it twice, the postcondition fails, and the reserved remedy
+deletes only the extra comment. Library callers pass `actionClasses` to the
+rail; see [`src/action-classes.js`](src/action-classes.js) and
+[ActionProposal v0.3](spec/model.md#registered-action-classes-actionproposal-v03).
 
 ## Assurance modes
 
@@ -459,6 +481,7 @@ node ./cmd/crctl.js demo refund --fault post-remedy-false-evidence
 node ./cmd/crctl.js demo refund --fault permit-replay
 node ./cmd/crctl.js demo refund --fault action-mutation
 node ./cmd/crctl.js demo refund --fault tampered-bundle
+node ./cmd/crctl.js demo ticket --fault duplicate
 ```
 
 All inputs, account references, order references, money values, keys, and
@@ -525,6 +548,8 @@ Read:
 - [`spec/schemas/`](spec/schemas/): JSON Schemas
 - [`api/openapi.json`](api/openapi.json): OpenAPI 3.1 surface
 - [`src/`](src/): reference rail, signing, connector, and verifier
+- [`src/action-classes.js`](src/action-classes.js): registered action classes
+  for ActionProposal v0.3
 - [`src/recovery-preflight.js`](src/recovery-preflight.js): recovery contract,
   qualification and replay verification
 - [`src/mock-refund-recovery-adapter.js`](src/mock-refund-recovery-adapter.js):
@@ -584,7 +609,7 @@ Verify up to 64 audit bundles with `node ./cmd/crctl.js bundle verify-many one.j
 
 Find a case before running it. `node ./cmd/crctl.js demo find inventory disputed` searches the fixture catalog for all supplied terms and prints the expected result, purpose and exact command for each match. Add `--json` for structured results. For a compact handoff, `node ./cmd/crctl.js demo matrix all --summary` runs the same controls and reports passes and failures by scenario, with failed check names or error codes.
 
-Run `node ./cmd/crctl.js demo matrix --json` to exercise all 31 catalog cases, or select one scenario after `matrix`. Each case uses a fresh synthetic runtime. The report checks declared outcomes, single execution, bounded remedies, tamper rejection and preflight isolation. Any failed check sets a nonzero exit status. Passing the matrix is local reference validation, not proof of production recovery.
+Run `node ./cmd/crctl.js demo matrix --json` to exercise all 41 catalog cases, or select one scenario after `matrix`. Each case uses a fresh synthetic runtime. The report checks declared outcomes, single execution, bounded remedies, tamper rejection and preflight isolation. Any failed check sets a nonzero exit status. Passing the matrix is local reference validation, not proof of production recovery.
 
 ## Check recovery freshness explicitly
 

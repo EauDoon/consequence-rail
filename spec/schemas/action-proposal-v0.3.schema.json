@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:action-proposal:v0.3",
+  "title": "ActionProposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "action_type",
+    "subject",
+    "target",
+    "parameters",
+    "idempotency_key",
+    "requested_at",
+    "expires_at",
+    "assurance_mode",
+    "postcondition",
+    "evidence_plan",
+    "recourse_scope"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/action-proposal/v0.3"
+    },
+    "action_type": {
+      "description": "A registered action class: a dotted lowercase name and a /vN version. The three demo types of earlier versions are reserved and cannot be registered.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)+/v[1-9][0-9]*$",
+      "not": {
+        "enum": [
+          "demo.refund.issue/v1",
+          "demo.email.send/v1",
+          "demo.inventory.allocate/v1"
+        ]
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector",
+        "resource_type",
+        "resource_id"
+      ],
+      "properties": {
+        "connector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resource_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resource_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "parameters": {
+      "description": "Closed parameters checked by the rail against the registered class. Values are strings, safe integers or booleans.",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "integer",
+          "boolean"
+        ]
+      }
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assurance_mode": {
+      "enum": [
+        "enforced",
+        "cooperative",
+        "observed"
+      ]
+    },
+    "postcondition": {
+      "$ref": "#/$defs/postcondition"
+    },
+    "evidence_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "max_age_seconds",
+        "parameter_bindings"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "max_age_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "parameter_bindings": {
+          "description": "Evidence facts that must equal a proposal parameter, so a verifier can check the observed effect matches the approved one.",
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "fact",
+              "parameter"
+            ],
+            "properties": {
+              "fact": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+              },
+              "parameter": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "recourse_scope": {
+      "description": "The registered class remedy scope, repeated so offline verification needs no registry.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "covers_parameter"
+      ],
+      "properties": {
+        "field": {
+          "enum": [
+            "max_amount_minor",
+            "max_quantity"
+          ]
+        },
+        "covers_parameter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "postcondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "clauses"
+      ],
+      "properties": {
+        "op": {
+          "const": "all"
+        },
+        "clauses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "op",
+              "value"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "op": {
+                "enum": [
+                  "eq",
+                  "gte",
+                  "lte"
+                ]
+              },
+              "value": {}
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "op": {
+                      "enum": [
+                        "gte",
+                        "lte"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "op"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "value": {
+                      "type": "number",
+                      "minimum": -1.7976931348623157e+308,
+                      "maximum": 1.7976931348623157e+308
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

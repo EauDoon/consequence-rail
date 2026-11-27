@@ -1,5 +1,6 @@
 import { digest } from "./canonical.js";
 import { RailError } from "./errors.js";
+import { SCOPE_FIELDS, validateDeclaredBindings } from "./action-classes.js";
 import { recourseScopeField, proposalAdmitsActionType } from "./rail.js";
 
 const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
@@ -8,7 +9,9 @@ const MAX_DURATION_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
 const PROPOSAL_VERSIONS = new Set([
   "consequence-rail/action-proposal/v0.1",
   "consequence-rail/action-proposal/v0.2",
+  "consequence-rail/action-proposal/v0.3",
 ]);
+const OPEN_PROPOSAL_VERSION = "consequence-rail/action-proposal/v0.3";
 const BUNDLE_VERSION_BINDINGS = new Map([
   ["consequence-rail/settlement-bundle/v0.1", {
     proposal: "consequence-rail/action-proposal/v0.1",
@@ -17,6 +20,10 @@ const BUNDLE_VERSION_BINDINGS = new Map([
   ["consequence-rail/settlement-bundle/v0.2", {
     proposal: "consequence-rail/action-proposal/v0.2",
     receipt: "consequence-rail/settlement-receipt/v0.2",
+  }],
+  ["consequence-rail/settlement-bundle/v0.3", {
+    proposal: "consequence-rail/action-proposal/v0.3",
+    receipt: "consequence-rail/settlement-receipt/v0.3",
   }],
 ]);
 
@@ -58,6 +65,7 @@ const PROPOSAL_FIELDS = new Set([
   "postcondition",
   "evidence_plan",
 ]);
+const PROPOSAL_V3_FIELDS = new Set([...PROPOSAL_FIELDS, "recourse_scope"]);
 const SUBJECT_FIELDS = new Set(["type", "id"]);
 const TARGET_FIELDS = new Set(["connector", "resource_type", "resource_id"]);
 const REFUND_PARAMETER_FIELDS = new Set(["amount_minor", "currency"]);
@@ -66,6 +74,8 @@ const EMAIL_PARAMETER_FIELDS = new Set(["recipient_id", "subject"]);
 const POSTCONDITION_FIELDS = new Set(["op", "clauses"]);
 const POSTCONDITION_CLAUSE_FIELDS = new Set(["path", "op", "value"]);
 const EVIDENCE_PLAN_FIELDS = new Set(["source", "max_age_seconds"]);
+const EVIDENCE_PLAN_V3_FIELDS = new Set([...EVIDENCE_PLAN_FIELDS, "parameter_bindings"]);
+const RECOURSE_SCOPE_FIELDS = new Set(["field", "covers_parameter"]);
 const RESERVATION_FIELDS = new Set([
   "schema_version",
   "reservation_id",
@@ -303,8 +313,46 @@ function postcondition(value) {
   });
 }
 
+function openParameters(value) {
+  plainObject(value, "ActionProposal.parameters");
+  const names = Object.keys(value);
+  if (names.length === 0 || names.length > 32) {
+    invalid("ActionProposal.parameters must hold 1 to 32 parameters.");
+  }
+  for (const name of names) {
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(name)) {
+      invalid("ActionProposal.parameters has an invalid parameter name.");
+    }
+    const item = value[name];
+    if (
+      typeof item !== "string" &&
+      typeof item !== "boolean" &&
+      !Number.isSafeInteger(item)
+    ) {
+      invalid(`ActionProposal.parameters.${name} must be a string, safe integer or boolean.`);
+    }
+  }
+}
+
+function recourseScope(value, parameters) {
+  exactObject(value, RECOURSE_SCOPE_FIELDS, RECOURSE_SCOPE_FIELDS, "ActionProposal.recourse_scope");
+  if (!SCOPE_FIELDS.includes(value.field)) {
+    invalid("ActionProposal.recourse_scope.field is unsupported.");
+  }
+  if (value.covers_parameter !== null) {
+    if (
+      typeof value.covers_parameter !== "string" ||
+      !Number.isSafeInteger(parameters[value.covers_parameter])
+    ) {
+      invalid("ActionProposal.recourse_scope.covers_parameter must name an integer parameter or be null.");
+    }
+  }
+}
+
 function proposal(value, expectedVersion) {
-  exactObject(value, PROPOSAL_FIELDS, PROPOSAL_FIELDS, "ActionProposal");
+  const open = value?.schema_version === OPEN_PROPOSAL_VERSION;
+  const proposalFields = open ? PROPOSAL_V3_FIELDS : PROPOSAL_FIELDS;
+  exactObject(value, proposalFields, proposalFields, "ActionProposal");
   if (!PROPOSAL_VERSIONS.has(value.schema_version)) {
     invalid("ActionProposal schema version is unsupported.");
   }
@@ -321,7 +369,10 @@ function proposal(value, expectedVersion) {
   for (const field of TARGET_FIELDS) {
     string(value.target[field], `ActionProposal.target.${field}`, { nonempty: true });
   }
-  if (value.action_type === "demo.inventory.allocate/v1") {
+  if (open) {
+    openParameters(value.parameters);
+    recourseScope(value.recourse_scope, value.parameters);
+  } else if (value.action_type === "demo.inventory.allocate/v1") {
     exactObject(
       value.parameters,
       INVENTORY_PARAMETER_FIELDS,
@@ -358,12 +409,11 @@ function proposal(value, expectedVersion) {
     invalid("ActionProposal assurance mode is unsupported.");
   }
   postcondition(value.postcondition);
-  exactObject(
-    value.evidence_plan,
-    EVIDENCE_PLAN_FIELDS,
-    EVIDENCE_PLAN_FIELDS,
-    "ActionProposal.evidence_plan",
-  );
+  const planFields = open ? EVIDENCE_PLAN_V3_FIELDS : EVIDENCE_PLAN_FIELDS;
+  exactObject(value.evidence_plan, planFields, planFields, "ActionProposal.evidence_plan");
+  if (open) {
+    validateDeclaredBindings(value, (message) => new RailError("BUNDLE_TAMPERED", message));
+  }
   string(value.evidence_plan.source, "ActionProposal.evidence_plan.source", { nonempty: true });
   integer(
     value.evidence_plan.max_age_seconds,
@@ -388,12 +438,14 @@ function action(value, expectedProposalVersion) {
  * reservation cannot pass as a refund reservation or the reverse.
  */
 function scopeInteger(value, scopeField, label) {
-  const present = ["max_amount_minor", "max_quantity"].filter((field) => Object.hasOwn(value, field));
-  if (present.length !== 1 || present[0] !== scopeField) {
-    invalid(`${label} must carry exactly one remedy scope field (${scopeField}).`);
+  const present = SCOPE_FIELDS.filter((field) => Object.hasOwn(value, field));
+  // A null scope field means the bundle does not carry the proposal that
+  // declares it (a v0.3 receipt profile): exactly one known field is enough.
+  if (present.length !== 1 || (scopeField !== null && present[0] !== scopeField)) {
+    invalid(`${label} must carry exactly one remedy scope field (${scopeField ?? SCOPE_FIELDS.join(" or ")}).`);
     return;
   }
-  integer(value[scopeField], `${label}.${scopeField}`, 0);
+  integer(value[present[0]], `${label}.${present[0]}`, 0);
 }
 
 function commitment(value, scopeField = "max_amount_minor") {
@@ -502,15 +554,15 @@ function evidence(value, index) {
 }
 
 function receipt(value, versionBinding) {
-  const fields = versionBinding.receipt === "consequence-rail/settlement-receipt/v0.2"
-    ? RECEIPT_V2_FIELDS
-    : RECEIPT_FIELDS;
+  const fields = versionBinding.receipt === "consequence-rail/settlement-receipt/v0.1"
+    ? RECEIPT_FIELDS
+    : RECEIPT_V2_FIELDS;
   exactObject(value, fields, fields, "SettlementReceipt");
   if (value.schema_version !== versionBinding.receipt) {
     invalid("SettlementReceipt schema version does not match the settlement bundle.");
   }
   if (
-    versionBinding.receipt === "consequence-rail/settlement-receipt/v0.2" &&
+    versionBinding.receipt !== "consequence-rail/settlement-receipt/v0.1" &&
     value.proposal_schema_version !== versionBinding.proposal
   ) {
     invalid("SettlementReceipt proposal schema version does not match the settlement bundle.");
@@ -613,7 +665,9 @@ export function validateSettlementBundle(bundle) {
     invalid("SettlementBundle profile is unsupported.");
   }
   action(bundle.action, versionBinding.proposal);
-  const scopeField = recourseScopeField(bundle.action?.action_type);
+  const scopeField = versionBinding.proposal === OPEN_PROPOSAL_VERSION
+    ? (bundle.action?.proposal?.recourse_scope?.field ?? null)
+    : recourseScopeField(bundle.action?.action_type);
   reservation(bundle.recourse_reservation, scopeField);
   permit(bundle.action_permit);
   stringArray(bundle.evidence_manifest, "SettlementBundle.evidence_manifest", { digests: true });

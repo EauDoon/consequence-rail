@@ -50,7 +50,7 @@ test("crctl rejects unknown commands and incomplete usage", () => {
   assert.match(stderrJson(unknownDemo).message, /Unknown demo scenario 'nope'/);
   // Both demo usage errors name every demo subcommand, not only the four fixtures.
   for (const message of [stderrJson(demoOnly).message, stderrJson(unknownDemo).message]) {
-    assert.match(message, /Expected refund, inventory, irreversible, recovery-preflight, list, find, or matrix\./);
+    assert.match(message, /Expected refund, inventory, ticket, irreversible, recovery-preflight, list, find, or matrix\./);
   }
 
   const verifyNoFile = runCli("crctl.js", ["bundle", "verify"]);
@@ -296,12 +296,12 @@ test("new CLI workflows exercise verified review, comparison, batch, catalog and
     assert.equal(batch.status, 1);
     assert.equal(JSON.parse(batch.stdout).passed, 2);
     assert.equal(JSON.parse(batch.stdout).review_required, true);
-    assert.equal(JSON.parse(runCli("crctl.js", ["demo", "list", "--json"]).stdout).scenarios.length, 4);
-    // The matrix runs 31 fixtures in one process. Under the parallel suite on
+    assert.equal(JSON.parse(runCli("crctl.js", ["demo", "list", "--json"]).stdout).scenarios.length, 5);
+    // The matrix runs 41 fixtures in one process. Under the parallel suite on
     // a small or Windows runner it can pass the 5 second default and be killed.
     const matrix = runCli("crctl.js", ["demo", "matrix", "--json"], { timeout: 60_000 });
     assert.equal(matrix.status, 0);
-    assert.equal(JSON.parse(matrix.stdout).passed, 31);
+    assert.equal(JSON.parse(matrix.stdout).passed, 41);
     for (const args of [["bundle", "compare", first], ["demo", "matrix", "bogus"], ["bundle", "review", first, "--fault", "duplicate"]]) {
       assert.equal(runCli("crctl.js", args).status, 1);
     }
