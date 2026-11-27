@@ -26,6 +26,8 @@ of the package version below.
 
 - Create exported artifact files with owner-only permissions on POSIX, including under permissive process umasks, without changing atomic no-overwrite publication.
 
+- Name every demo subcommand in the unknown demo scenario error. `crctl demo <unknown>` listed only the four fixtures and omitted `list`, `find` and `matrix`, unlike the missing-scenario error.
+
 ## [0.4.0] - 2026-10-30
 
 This release adds capabilities without changing artifacts. There is no
