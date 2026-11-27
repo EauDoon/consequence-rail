@@ -271,6 +271,7 @@ export class ConsequenceRail {
       policy_id: signed.policy_id,
       policy_digest: signed.policy_digest,
       evaluation_input_digest: signed.evaluation_input_digest,
+      evaluation_digest: signed.evaluation_digest,
       require_recovery_preflight:
         this.requireRecoveryPreflight || signed.require_recovery_preflight,
       decided_at: signed.decided_at,

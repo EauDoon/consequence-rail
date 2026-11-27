@@ -31,6 +31,7 @@ const DECISION_FIELDS = new Set([
   "policy_id",
   "policy_digest",
   "evaluation_input_digest",
+  "evaluation_digest",
   "require_recovery_preflight",
   "decided_at",
   "expires_at",
@@ -42,6 +43,7 @@ const INPUT_FIELDS = new Set([
   "policyId",
   "policyDigest",
   "evaluationInputDigest",
+  "evaluationDigest",
   "requireRecoveryPreflight",
   "decidedAt",
   "expiresAt",
@@ -61,13 +63,14 @@ function checkDecisionBody(body, code) {
   assert(typeof body.allow === "boolean", code, "AuthorizationDecision.allow must be boolean.");
   assertNonEmptyString(body.policy_id, "AuthorizationDecision.policy_id", code);
   assertDigest(body.policy_digest, "AuthorizationDecision.policy_digest", code);
-  assert(
-    body.evaluation_input_digest === null ||
-      (typeof body.evaluation_input_digest === "string" &&
-        /^[A-Za-z0-9_-]{43}$/.test(body.evaluation_input_digest)),
-    code,
-    "AuthorizationDecision.evaluation_input_digest must be a digest or null.",
-  );
+  for (const field of ["evaluation_input_digest", "evaluation_digest"]) {
+    assert(
+      body[field] === null ||
+        (typeof body[field] === "string" && /^[A-Za-z0-9_-]{43}$/.test(body[field])),
+      code,
+      `AuthorizationDecision.${field} must be a digest or null.`,
+    );
+  }
   assert(
     typeof body.require_recovery_preflight === "boolean",
     code,
@@ -97,6 +100,7 @@ export function createAuthorizationDecision(input, signer) {
     policy_id: input.policyId,
     policy_digest: input.policyDigest,
     evaluation_input_digest: input.evaluationInputDigest ?? null,
+    evaluation_digest: input.evaluationDigest ?? null,
     require_recovery_preflight: input.requireRecoveryPreflight ?? false,
     decided_at: input.decidedAt,
     expires_at: input.expiresAt,

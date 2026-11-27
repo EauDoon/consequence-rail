@@ -273,8 +273,8 @@ file lists none, and refuses an unsigned body with
 `AUTHORIZATION_SIGNATURE_REQUIRED`. Library callers construct the rail with
 `authorizerTrustedKeys` and `requireSignedAuthorization: true`, and sign with
 `createAuthorizationDecision` from [`src/authorization.js`](src/authorization.js).
-A Constitutional Agent Testbench evaluation receipt digest fits in
-`evaluation_input_digest`. The decision lives at most one day and is bound
+A Constitutional Agent Testbench evaluation fits in `evaluation_input_digest`
+(the JSON it evaluated) and `evaluation_digest` (its result). The decision lives at most one day and is bound
 to one action, so it cannot approve a changed or different action.
 
 ## Assurance modes

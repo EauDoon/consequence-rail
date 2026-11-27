@@ -66,9 +66,11 @@ authorizer, such as a policy engine, a contract checker or a human approval
 step, and signed with that authorizer's Ed25519 key. It contains:
 
 - the exact `action_digest`
-- `allow`, `policy_id`, `policy_digest` and an optional
-  `evaluation_input_digest` (for example a Constitutional Agent Testbench
-  evaluation receipt digest)
+- `allow`, `policy_id` and `policy_digest`
+- `evaluation_input_digest`, the digest of the exact JSON the policy
+  evaluated, or `null`
+- `evaluation_digest`, the digest of the authorizer's evaluation result (for
+  example a Constitutional Agent Testbench evaluation), or `null`
 - `require_recovery_preflight`
 - `decided_at` and `expires_at`, at most 86,400 seconds apart
 - `decision_id`, derived from the digest of the unsigned body

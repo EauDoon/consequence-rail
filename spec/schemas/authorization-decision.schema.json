@@ -13,6 +13,7 @@
     "policy_id",
     "policy_digest",
     "evaluation_input_digest",
+    "evaluation_digest",
     "require_recovery_preflight",
     "decided_at",
     "expires_at",
@@ -26,6 +27,10 @@
     "policy_id": { "type": "string", "minLength": 1 },
     "policy_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
     "evaluation_input_digest": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "evaluation_digest": {
       "type": ["string", "null"],
       "pattern": "^[A-Za-z0-9_-]{43}$"
     },
