@@ -99,7 +99,14 @@ const EVIDENCE_PLAN_V3_FIELDS = new Set([...EVIDENCE_PLAN_FIELDS, "parameter_bin
 const RECOURSE_SCOPE_FIELDS = new Set(["field", "covers_parameter"]);
 // A v0.3 proposal may name the plan it is one step of, and the postcondition
 // that shows its effect undone if the plan is unwound.
-const PROPOSAL_V3_OPTIONAL_FIELDS = new Set([...PROPOSAL_V3_FIELDS, "plan"]);
+const PROPOSAL_V3_OPTIONAL_FIELDS = new Set([...PROPOSAL_V3_FIELDS, "plan", "mandate_reference"]);
+// A v0.3 proposal may name the AP2 Payment Mandate it executes under. The
+// rail does not verify the mandate; it binds the reference into the action
+// digest and copies it into the signed receipt, so the receipt and an AP2
+// Payment Receipt under the same profile carry the same digest.
+export const MANDATE_REFERENCE_FIELDS = new Set(["profile", "mandate_id", "mandate_digest"]);
+export const MANDATE_REFERENCE_PROFILES = new Set(["sha256-terminal-compact-jws"]);
+export const MANDATE_ID_PATTERN = /^[\x21-\x7E]{1,256}$/;
 const PLAN_REFERENCE_FIELDS = new Set(["plan_id", "step", "unwind_postcondition"]);
 export const PLAN_ID_PATTERN = /^plan_[A-Za-z0-9_-]{1,64}$/;
 export const MAX_PLAN_STEPS = 100;

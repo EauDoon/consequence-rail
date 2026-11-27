@@ -202,6 +202,29 @@
           "$ref": "#/$defs/postcondition"
         }
       }
+    },
+    "mandate_reference": {
+      "description": "Optional: the AP2 Payment Mandate this action executes under, as a reference the rail binds but does not verify. Under profile sha256-terminal-compact-jws, mandate_digest is the unpadded base64url SHA-256 of the exact ASCII bytes of the terminal closed mandate's issuer compact JWS (the text before the first ~), which equals the reference claim of an AP2 Payment Receipt under that profile. mandate_id is the closed Payment Mandate transaction_id. Both are opaque strings: compare them byte for byte.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "mandate_id",
+        "mandate_digest"
+      ],
+      "properties": {
+        "profile": {
+          "const": "sha256-terminal-compact-jws"
+        },
+        "mandate_id": {
+          "type": "string",
+          "pattern": "^[\\x21-\\x7E]{1,256}$"
+        },
+        "mandate_digest": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        }
+      }
     }
   },
   "$defs": {

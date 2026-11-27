@@ -92,6 +92,25 @@ switch and reverse-order unwind. An unwound step's receipt is `compensated`;
 its audit bundle carries initial evidence that satisfied the postcondition
 and `post-unwind` evidence that satisfied the unwind postcondition.
 
+A v0.3 proposal may also carry `mandate_reference`, which names the AP2
+Payment Mandate the action executes under. It has three fields:
+
+- `profile`: `sha256-terminal-compact-jws`, the only profile defined.
+- `mandate_id`: the closed Payment Mandate's `transaction_id`, 1 to 256
+  visible ASCII characters.
+- `mandate_digest`: the unpadded base64url SHA-256 of the exact ASCII bytes of
+  the terminal closed mandate's issuer compact JWS, which is the text before
+  the first `~`. Selective disclosures and a key-binding JWT are not hashed.
+  In a delegate chain, the last segment's issuer JWS is hashed. The value
+  equals the `reference` claim of an AP2 Payment Receipt under the same
+  profile.
+
+Both values are opaque: implementations MUST compare them byte for byte and
+MUST NOT change their case or padding. The rail does not verify the mandate.
+The reference is part of the action digest, so an authorizer that approves
+the action approves it under that mandate, and a SettlementReceipt v0.3 copies
+it as signed `mandate_reference`.
+
 The reference demo class `demo.ticket.comment/v1` posts one comment on a
 synthetic support ticket. Its scope is `max_quantity` with no covered
 parameter (the remedy may delete one comment), its kinds are `reverse` and
@@ -312,6 +331,7 @@ produce a settlement receipt.
 The receipt binds:
 
 - proposal schema version in SettlementReceipt v0.2
+- the proposal's `mandate_reference`, when present, in SettlementReceipt v0.3
 - action digest
 - reservation digest
 - connector commitment digest and final reservation status
