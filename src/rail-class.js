@@ -13,6 +13,7 @@ import {
 import { isSignedAuthorizationDecision, verifyAuthorizationDecision } from "./authorization.js";
 import { verifySimulationResult } from "./simulation.js";
 import { MemoryEventStore } from "./event-store.js";
+import { MemoryPermitLedger } from "./permit-ledger.js";
 import { RailError } from "./errors.js";
 import { divergentPostconditionPaths, evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
 import { verifyRecoveryPreflight } from "./recovery-preflight.js";
@@ -112,6 +113,7 @@ export class ConsequenceRail {
     measureRecoveryImplementation = null,
     maxActions = MAX_ACTIONS,
     eventStore,
+    permitLedger,
   } = {}) {
     assert(signer && clock && connector, "CONFIG_INVALID", "Signer, clock and connector are required.");
     // Check the whole signer contract now. A signer without publicKeyPem used
@@ -196,8 +198,30 @@ export class ConsequenceRail {
       value: eventStoreFacade,
       enumerable: true,
     });
+    // The permit ledger records each consumed permit jti before the
+    // connector is called. A shared, durable ledger keeps a permit single-use
+    // across rail processes and restarts.
+    const configuredPermitLedger = permitLedger ?? new MemoryPermitLedger();
+    assert(
+      typeof configuredPermitLedger?.consume === "function",
+      "CONFIG_INVALID",
+      "The permit ledger must provide consume().",
+    );
+    Object.defineProperty(this, "permitLedger", {
+      value: Object.freeze({ consume: configuredPermitLedger.consume.bind(configuredPermitLedger) }),
+      enumerable: true,
+    });
     this.actions = new Map();
     this.trustedKeys = new Map([[signer.kid, signer.publicKey]]);
+  }
+
+  /**
+   * A stream with history that this rail does not hold in memory was written
+   * by an earlier process on a durable store. The rail does not resume it;
+   * it refuses to start the same action or plan again.
+   */
+  assertNoDurableHistory(streamId, code, message, details) {
+    assert(this.eventStore.list(streamId).length === 0, code, message, details);
   }
 
   propose(input) {
@@ -212,6 +236,12 @@ export class ConsequenceRail {
     assert(!this.actions.has(actionId), "ACTION_EXISTS", "An identical action is already registered.", {
       action_id: actionId,
     });
+    this.assertNoDurableHistory(
+      actionId,
+      "ACTION_EXISTS",
+      "The event log already holds this action from an earlier run.",
+      { action_id: actionId },
+    );
     const plan = proposal.plan ? this.getPlan(proposal.plan.plan_id) : null;
     if (plan) {
       this.assertPlanOpen(plan);
@@ -621,6 +651,28 @@ export class ConsequenceRail {
           action_id: actionId,
           state: record.state,
         },
+      );
+    }
+    // Consume the permit in the ledger, then at the connector if it keeps
+    // its own lease, before any state change. Either refusal means another
+    // process or an earlier run already spent this permit.
+    const leaseEntry = {
+      jti: record.permit.jti,
+      action_digest: record.action_digest,
+      expires_at: record.permit.expires_at,
+    };
+    assert(
+      this.permitLedger.consume(leaseEntry) === true,
+      "PERMIT_USED",
+      "The permit ledger already holds this permit as consumed.",
+      { action_id: actionId, state: record.state, jti: record.permit.jti },
+    );
+    if (typeof this.connector.consumePermit === "function") {
+      assert(
+        (await this.connector.consumePermit(leaseEntry)) === true,
+        "PERMIT_USED",
+        "The connector already holds this permit as consumed.",
+        { action_id: actionId, state: record.state, jti: record.permit.jti },
       );
     }
     const useNumber = record.permit_uses + 1;
@@ -1059,6 +1111,9 @@ export class ConsequenceRail {
       "plan_id must look like plan_<name>.",
     );
     assert(!this.plans.has(planId), "PLAN_EXISTS", "A plan with this id is already open.", { plan_id: planId });
+    this.assertNoDurableHistory(planId, "PLAN_EXISTS", "The event log already holds this plan from an earlier run.", {
+      plan_id: planId,
+    });
     assert(this.plans.size < this.maxActions, "ACTION_CAPACITY_REACHED", "The in-memory plan capacity has been reached.");
     this.eventStore.append(planId, "PLAN_OPENED", "rail", { plan_id: planId });
     this.plans.set(planId, { plan_id: planId, state: "open", steps: [], halt_reason: null });

@@ -2,6 +2,28 @@ import { deepClone, deepFreeze, digest, without } from "./canonical.js";
 import { RailError } from "./errors.js";
 import { signArtifact, verifyArtifact } from "./signing.js";
 
+/**
+ * Build the next signed, hash-linked event of a stream. Shared by the memory
+ * and file stores so both write the same event shape.
+ */
+export function buildEvent(signer, clock, actionId, previous, eventType, actor, payload) {
+  const unsigned = {
+    schema_version: "consequence-rail/event/v0.1",
+    action_id: actionId,
+    sequence: previous ? previous.sequence + 1 : 0,
+    previous_hash: previous?.event_hash ?? null,
+    event_type: eventType,
+    actor,
+    recorded_at: clock.now(),
+    payload: deepClone(payload),
+  };
+  const signed = signArtifact(unsigned, signer);
+  return deepFreeze({
+    ...signed,
+    event_hash: digest(signed),
+  });
+}
+
 export class MemoryEventStore {
   constructor(signer, clock) {
     Object.defineProperty(this, "failureAtomicAppend", {
@@ -15,22 +37,7 @@ export class MemoryEventStore {
 
   append(actionId, eventType, actor, payload) {
     const events = this.byAction.get(actionId) ?? [];
-    const previous = events.at(-1);
-    const unsigned = {
-      schema_version: "consequence-rail/event/v0.1",
-      action_id: actionId,
-      sequence: events.length,
-      previous_hash: previous?.event_hash ?? null,
-      event_type: eventType,
-      actor,
-      recorded_at: this.clock.now(),
-      payload: deepClone(payload),
-    };
-    const signed = signArtifact(unsigned, this.signer);
-    const event = deepFreeze({
-      ...signed,
-      event_hash: digest(signed),
-    });
+    const event = buildEvent(this.signer, this.clock, actionId, events.at(-1), eventType, actor, payload);
     const returnedEvent = deepClone(event);
     const nextEvents = [...events, event];
     this.byAction.set(actionId, nextEvents);

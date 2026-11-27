@@ -105,10 +105,19 @@ the digest immediately before connector invocation.
 Threat: a valid permit is used more than once.
 
 Control: permits have `max_uses: 1`; consumption occurs synchronously before
-the asynchronous connector call.
+the asynchronous connector call. The rail first records the permit `jti` in a
+permit ledger with an atomic consume that answers true once. The
+`FilePermitLedger` claims each `jti` by creating one file with exclusive
+create, so rail processes that share its directory cannot both spend one
+permit. A connector that keeps its own lease (`consumePermit`) is asked next,
+which stops a replay even between rails that share no ledger. A failed
+execution after consumption leaves the permit spent; that costs a new
+authorization, never a repeated effect.
 
-Residual risk: the in-memory store is a single-process demonstration. A
-distributed deployment needs transactional shared consumption.
+Residual risk: the default ledger is in memory and covers one process. The
+file ledger relies on exclusive-create semantics, which some network file
+systems do not give. A multi-host deployment needs a ledger on a store with a
+transactional insert, or a connector lease.
 
 ### Ambiguous timeout
 
@@ -211,6 +220,13 @@ outcome. The check helps only while the checkpoint is held outside the
 rail operator's control. No checkpoint service or transparency log is
 implemented, and an operator controlling the signing key and every retained
 checkpoint can rewrite local history.
+
+`FileEventStore` writes each event as one fsynced line and refuses to open a
+log with a torn, edited, reordered or foreign line (`EVENT_LOG_CORRUPT`). It
+does not repair a log by dropping lines. One process holds a log at a time
+(`EVENT_LOG_LOCKED`). A restarted rail does not resume an action from the log;
+it refuses to propose an action or open a plan whose stream already exists, so
+a crash cannot lead to the same action running twice.
 
 ### Key compromise
 
