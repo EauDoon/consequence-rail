@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:authorization-decision:v0.1",
+  "title": "AuthorizationDecision",
+  "description": "A policy decision signed by an authorizer key over one exact action digest. The rail accepts it only under an explicitly trusted authorizer key, at or after decided_at and before expires_at. decision_id is authz_ plus the first 20 characters of the digest of the body without decision_id and signature. expires_at is at most 86,400 seconds after decided_at.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "decision_id",
+    "action_digest",
+    "allow",
+    "policy_id",
+    "policy_digest",
+    "evaluation_input_digest",
+    "require_recovery_preflight",
+    "decided_at",
+    "expires_at",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": { "const": "consequence-rail/authorization-decision/v0.1" },
+    "decision_id": { "type": "string", "pattern": "^authz_[A-Za-z0-9_-]{20}$" },
+    "action_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "allow": { "type": "boolean" },
+    "policy_id": { "type": "string", "minLength": 1 },
+    "policy_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "evaluation_input_digest": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "require_recovery_preflight": { "type": "boolean" },
+    "decided_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "type": "string", "minLength": 1 },
+        "value": { "type": "string", "pattern": "^[A-Za-z0-9_-]{86}$" }
+      }
+    }
+  }
+}

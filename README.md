@@ -256,6 +256,27 @@ exports with `UNTRUSTED_KEY`. Library callers pass the same maps as
 `createReferenceServer({ bundleTrust })`. Without the flag and the parameter
 every response and startup line is unchanged.
 
+## Require a signed approval
+
+By default `authorize` records the caller's own claim of `allow`, so an agent
+that can call the rail can also approve its own action. To separate the two,
+let a policy system sign an `AuthorizationDecision` over the exact action
+digest with its own key, and make the rail accept nothing else:
+
+```text
+node ./cmd/rail.js --require-signed-authorization
+```
+
+The sidecar then trusts the keys in the `authorizer` role of its
+`--trusted-keys` file, or the public demonstration authorizer key when the
+file lists none, and refuses an unsigned body with
+`AUTHORIZATION_SIGNATURE_REQUIRED`. Library callers construct the rail with
+`authorizerTrustedKeys` and `requireSignedAuthorization: true`, and sign with
+`createAuthorizationDecision` from [`src/authorization.js`](src/authorization.js).
+A Constitutional Agent Testbench evaluation receipt digest fits in
+`evaluation_input_digest`. The decision lives at most one day and is bound
+to one action, so it cannot approve a changed or different action.
+
 ## Assurance modes
 
 | Mode | Meaning | May issue a permit |

@@ -201,6 +201,17 @@ export function createDemoRecoverySigner() {
   );
 }
 
+/**
+ * Public demonstration authorizer key. Like every demo key it is derived
+ * from a public label and must never carry production trust.
+ */
+export function createDemoAuthorizerSigner() {
+  return createDeterministicDemoSigner(
+    "authorization-decision-signing-key",
+    "demo-authorizer-ed25519",
+  );
+}
+
 export function signArtifact(body, signer) {
   if (!isPlainObject(body) || !signer?.privateKey || !signer?.kid) {
     throw new RailError("SIGNING_INVALID", "Artifact body and signer are required.");
@@ -285,5 +296,10 @@ export function demoConnectorTrustedKeys() {
 
 export function demoRecoveryTrustedKeys() {
   const signer = createDemoRecoverySigner();
+  return new Map([[signer.kid, signer.publicKey]]);
+}
+
+export function demoAuthorizerTrustedKeys() {
+  const signer = createDemoAuthorizerSigner();
   return new Map([[signer.kid, signer.publicKey]]);
 }

@@ -9,6 +9,7 @@ import { ConsequenceRail } from "./rail.js";
 import {
   createDemoSigner,
   demoConnectorTrustedKeys,
+  demoAuthorizerTrustedKeys,
   demoRecoveryTrustedKeys,
   demoTrustedKeys,
 } from "./signing.js";
@@ -92,6 +93,8 @@ export function buildRefundReservation(actionDigest, proposal, clock) {
 export function createDemoRuntime({
   assuranceMode = "enforced",
   requireRecoveryPreflight = false,
+  requireSignedAuthorization = false,
+  authorizerTrustedKeys = demoAuthorizerTrustedKeys(),
   clock = new ManualClock(),
 } = {}) {
   const signer = createDemoSigner();
@@ -102,6 +105,8 @@ export function createDemoRuntime({
     connector,
     connectorTrustedKeys: connector.trustedKeys(),
     recoveryTrustedKeys: demoRecoveryTrustedKeys(),
+    authorizerTrustedKeys,
+    requireSignedAuthorization,
     requireRecoveryPreflight,
     measureRecoveryImplementation: (candidateConnector) =>
       measureMockRefundRecoveryImplementation(candidateConnector),

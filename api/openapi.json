@@ -42,6 +42,7 @@
                     "assurance_modes": { "type": "array", "items": { "type": "string" } },
                     "executable_modes": { "type": "array", "items": { "type": "string" } },
                     "optional_features": { "type": "array", "items": { "type": "string" } },
+                    "signed_authorization_required": { "type": "boolean" },
                     "connector": { "$ref": "#/components/schemas/ConnectorCapabilities" }
                   }
                 }
@@ -172,13 +173,16 @@
       "post": {
         "operationId": "authorizeAction",
         "summary": "Bind an external policy decision to the action",
-        "description": "The loopback v0.1 reference accepts this decision without authenticating a policy service. Real connectors require an authenticated policy adapter.",
+        "description": "Accepts either a SignedAuthorizationDecision, verified against the trusted authorizer keys and bound to this action's digest, or the unsigned AuthorizationDecision claim. The unsigned form authenticates nobody: any caller, including the proposer, can send it. A sidecar started with --require-signed-authorization refuses it with AUTHORIZATION_SIGNATURE_REQUIRED.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AuthorizationDecision"
+                "oneOf": [
+                  { "$ref": "#/components/schemas/SignedAuthorizationDecision" },
+                  { "$ref": "#/components/schemas/AuthorizationDecision" }
+                ]
               }
             }
           }
@@ -984,6 +988,14 @@
               "null"
             ]
           },
+          "authorization_decision_digest": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "authorizer_key_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "recovery_preflight_required": {
             "type": "boolean"
           },
@@ -1028,6 +1040,49 @@
           "require_recovery_preflight": {
             "type": "boolean",
             "default": false
+          }
+        }
+      },
+      "SignedAuthorizationDecision": {
+        "description": "A consequence-rail/authorization-decision/v0.1 artifact. Same fields as spec/schemas/authorization-decision.schema.json.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "decision_id",
+          "action_digest",
+          "allow",
+          "policy_id",
+          "policy_digest",
+          "evaluation_input_digest",
+          "require_recovery_preflight",
+          "decided_at",
+          "expires_at",
+          "signature"
+        ],
+        "properties": {
+          "schema_version": { "const": "consequence-rail/authorization-decision/v0.1" },
+          "decision_id": { "type": "string", "pattern": "^authz_[A-Za-z0-9_-]{20}$" },
+          "action_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+          "allow": { "type": "boolean" },
+          "policy_id": { "type": "string", "minLength": 1 },
+          "policy_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+          "evaluation_input_digest": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "require_recovery_preflight": { "type": "boolean" },
+          "decided_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "signature": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["algorithm", "key_id", "value"],
+            "properties": {
+              "algorithm": { "const": "Ed25519" },
+              "key_id": { "type": "string", "minLength": 1 },
+              "value": { "type": "string", "pattern": "^[A-Za-z0-9_-]{86}$" }
+            }
           }
         }
       },

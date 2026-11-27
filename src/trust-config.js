@@ -14,7 +14,10 @@ import {
 } from "./signing.js";
 
 export const TRUSTED_KEYS_SCHEMA_VERSION = "consequence-rail/trusted-keys/v0.1";
-export const TRUST_ROLES = Object.freeze(["rail", "connector", "recovery"]);
+export const TRUST_ROLES = Object.freeze(["rail", "connector", "recovery", "authorizer"]);
+// Roles added after 0.4.0 enter the normalized digest only when they hold a
+// key, so a file without them keeps its earlier trust_config_digest.
+const OPTIONAL_DIGEST_ROLES = new Set(["authorizer"]);
 export const MAX_KEYS_PER_ROLE = 32;
 
 const DOCUMENT_FIELDS = new Set(["schema_version", ...TRUST_ROLES]);
@@ -75,7 +78,7 @@ export function parseTrustedKeys(value) {
     });
     rows.sort((left, right) => (left.key_id < right.key_id ? -1 : left.key_id > right.key_id ? 1 : 0));
     maps[role] = map;
-    normalized[role] = rows;
+    if (!OPTIONAL_DIGEST_ROLES.has(role) || rows.length > 0) normalized[role] = rows;
     total += map.size;
   }
   if (total === 0) throw invalid("Trusted keys document must contain at least one key.");

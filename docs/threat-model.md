@@ -27,6 +27,21 @@ mode is `cooperative` or `observed`.
 Residual risk: the reference connector only declares custody. A production
 deployment must enforce it through target and network controls.
 
+### Self-authorization
+
+Threat: the agent that proposes an action also calls `authorize` with
+`allow: true`, so the policy step approves nothing.
+
+Control: a rail or sidecar that requires signed authorization accepts only an
+`AuthorizationDecision` signed by a key in the separate authorizer trust role
+and bound to the exact action digest, inside its lifetime. The unsigned claim
+is refused with `AUTHORIZATION_SIGNATURE_REQUIRED` and leaves no event.
+
+Residual risk: the default rail still accepts the unsigned claim for 0.4.0
+callers. A signed decision proves which key approved, not that the policy
+behind it was right. Whoever holds the authorizer key can approve anything,
+so it must not be reachable by the proposing agent.
+
 ### Action mutation
 
 Threat: parameters, target, postcondition or expiry change after approval.

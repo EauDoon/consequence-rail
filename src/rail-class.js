@@ -4,6 +4,7 @@
 
 import { deepClone, deepFreeze, digest } from "./canonical.js";
 import { isExpired } from "./clock.js";
+import { isSignedAuthorizationDecision, verifyAuthorizationDecision } from "./authorization.js";
 import { MemoryEventStore } from "./event-store.js";
 import { RailError } from "./errors.js";
 import { evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
@@ -88,6 +89,8 @@ export class ConsequenceRail {
     connector,
     connectorTrustedKeys,
     recoveryTrustedKeys,
+    authorizerTrustedKeys,
+    requireSignedAuthorization = false,
     requireRecoveryPreflight = false,
     measureRecoveryImplementation = null,
     maxActions = MAX_ACTIONS,
@@ -98,6 +101,21 @@ export class ConsequenceRail {
     // to close an action and then fail at export; a mismatched public half
     // failed only at execute, after a reservation and permit existed.
     signer = normalizeSigner(signer, "CONFIG_INVALID");
+    assert(
+      typeof requireSignedAuthorization === "boolean",
+      "CONFIG_INVALID",
+      "requireSignedAuthorization must be boolean.",
+    );
+    assert(
+      authorizerTrustedKeys === undefined || authorizerTrustedKeys instanceof Map,
+      "CONFIG_INVALID",
+      "authorizerTrustedKeys must be a Map when supplied.",
+    );
+    assert(
+      !requireSignedAuthorization || authorizerTrustedKeys?.size > 0,
+      "CONFIG_INVALID",
+      "requireSignedAuthorization needs at least one trusted authorizer key.",
+    );
     assert(
       typeof requireRecoveryPreflight === "boolean",
       "CONFIG_INVALID",
@@ -119,6 +137,9 @@ export class ConsequenceRail {
     this.connector = connector;
     this.connectorTrustedKeys = connectorTrustedKeys ?? new Map();
     this.recoveryTrustedKeys = recoveryTrustedKeys ?? new Map();
+    // Copied so a caller changing its own map later cannot change the trust.
+    this.authorizerTrustedKeys = new Map(authorizerTrustedKeys ?? []);
+    this.requireSignedAuthorization = requireSignedAuthorization;
     this.requireRecoveryPreflight = requireRecoveryPreflight;
     this.measureRecoveryImplementation = measureRecoveryImplementation;
     this.maxActions = maxActions;
@@ -184,6 +205,18 @@ export class ConsequenceRail {
   authorize(actionId, decision) {
     const record = this.get(actionId);
     this.assertState(record, "PROPOSED");
+    if (isSignedAuthorizationDecision(decision)) {
+      return this.authorizeSigned(record, decision);
+    }
+    // The unsigned form records a caller's claim. Whoever can call the rail
+    // can make it, including the proposer, so a rail that must separate the
+    // two refuses it.
+    assert(
+      !this.requireSignedAuthorization,
+      "AUTHORIZATION_SIGNATURE_REQUIRED",
+      "This rail accepts only a signed AuthorizationDecision from a trusted authorizer.",
+      { action_id: actionId },
+    );
     assertNoUnknownFields(decision, AUTHORIZATION_FIELDS, "AuthorizationDecision");
     assertRequiredFields(
       decision,
@@ -222,6 +255,49 @@ export class ConsequenceRail {
     });
     record.authorization = authorization;
     return this.inspect(actionId);
+  }
+
+  authorizeSigned(record, decision) {
+    // Verify everything before the first append: a refused decision leaves
+    // the action PROPOSED with no new event.
+    const verified = verifyAuthorizationDecision(decision, {
+      trustedKeys: this.authorizerTrustedKeys,
+      actionDigest: record.action_digest,
+      now: this.clock.now(),
+    });
+    const signed = verified.decision;
+    const authorization = deepFreeze(deepClone({
+      allow: signed.allow,
+      policy_id: signed.policy_id,
+      policy_digest: signed.policy_digest,
+      evaluation_input_digest: signed.evaluation_input_digest,
+      require_recovery_preflight:
+        this.requireRecoveryPreflight || signed.require_recovery_preflight,
+      decided_at: signed.decided_at,
+      decision_digest: verified.decision_digest,
+      authorizer_key_id: verified.key_id,
+    }));
+    this.eventStore.append(record.action_id, "AUTHORIZATION_DECISION_ACCEPTED", "authorizer", {
+      decision_digest: verified.decision_digest,
+      decision_id: signed.decision_id,
+      authorizer_key_id: verified.key_id,
+      allow: signed.allow,
+      policy_id: signed.policy_id,
+      policy_digest: signed.policy_digest,
+    });
+    this.transition(
+      record,
+      signed.allow ? "AUTHORIZED" : "DENIED",
+      signed.allow ? "POLICY_ALLOWED" : "POLICY_DENIED",
+      {
+        policy_id: signed.policy_id,
+        policy_digest: signed.policy_digest,
+        decision_digest: verified.decision_digest,
+      },
+    );
+    record.authorization = authorization;
+    record.authorization_decision = deepFreeze(signed);
+    return this.inspect(record.action_id);
   }
 
   acceptRecoveryQualification(actionId, bundle) {
@@ -864,6 +940,12 @@ export class ConsequenceRail {
       event_count: events.length,
       event_chain_head: events.at(-1)?.event_hash ?? null,
       outcome: record.receipt?.outcome ?? null,
+      ...(record.authorization?.decision_digest
+        ? {
+            authorization_decision_digest: record.authorization.decision_digest,
+            authorizer_key_id: record.authorization.authorizer_key_id,
+          }
+        : {}),
       ...(recoveryEnabled
         ? {
             recovery_preflight_required: true,
