@@ -295,6 +295,7 @@ export class McpGateway {
     const id = pending.action_id;
     try {
       rail.reserveRecourse(id, tool.gate.buildReservation(structuredClone(pending.proposal), pending.action_digest));
+      if (rail.requireSimulation) await rail.simulate(id);
       rail.issuePermit(id);
       await rail.execute(id, this.executeOptions);
       let view = rail.inspect(id);
@@ -323,6 +324,7 @@ export class McpGateway {
         state: view.state,
         outcome: view.outcome,
         receipt_digest: receiptDigest,
+        ...(view.simulation_digest ? { simulation_digest: view.simulation_digest } : {}),
         event_chain_head: view.event_chain_head,
       };
       const text = view.outcome === "settled"

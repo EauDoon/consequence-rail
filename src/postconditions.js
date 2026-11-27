@@ -59,6 +59,20 @@ function readPath(object, path) {
 // Indexes of the clauses whose fact is absent from the evidence. Evidence
 // that omits a declared fact cannot be evaluated, so the rail rejects it
 // instead of recording an undefined actual value.
+/**
+ * The postcondition paths whose value differs between two fact sets, or is
+ * present in only one. Used to compare a dry run with the observed effect.
+ */
+export function divergentPostconditionPaths(postcondition, expectedFacts, actualFacts) {
+  const paths = [...new Set((postcondition?.clauses ?? []).map((clause) => clause.path))];
+  return paths.filter((path) => {
+    const expected = resolvePath(expectedFacts, path);
+    const actual = resolvePath(actualFacts, path);
+    if (expected.found !== actual.found) return true;
+    return JSON.stringify(expected.value) !== JSON.stringify(actual.value);
+  }).sort();
+}
+
 export function missingPostconditionPaths(postcondition, facts) {
   const clauses = Array.isArray(postcondition?.clauses) ? postcondition.clauses : [];
   const missing = [];

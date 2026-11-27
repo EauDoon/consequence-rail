@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:consequence-rail:schema:simulation-result:v0.1",
+  "title": "SimulationResult",
+  "description": "A connector-signed dry run of one exact action: the facts the connector predicts the action would produce, without producing them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "action_digest",
+    "connector",
+    "simulated_at",
+    "predicted_facts",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "consequence-rail/simulation-result/v0.1"
+    },
+    "action_digest": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "connector": {
+      "type": "string",
+      "minLength": 1
+    },
+    "simulated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "predicted_facts": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "key_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
+        }
+      }
+    }
+  }
+}

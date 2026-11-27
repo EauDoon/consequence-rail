@@ -40,6 +40,7 @@ export async function startPlanStep(runtime, step, { run = true } = {}) {
     policy_digest: digest({ plan: PLAN_DEMO_ID, max_steps: 3 }),
   });
   rail.reserveRecourse(proposed.action_id, buildTicketReservation(proposed.action_digest, proposal));
+  await rail.simulate(proposed.action_id);
   rail.issuePermit(proposed.action_id);
   if (run) {
     await rail.execute(proposed.action_id);

@@ -32,6 +32,7 @@ export class MockTicketConnector {
     this.recourseStatusCalls = 0;
     this.remedyCalls = 0;
     this.remedyStatusCalls = 0;
+    this.simulateCalls = 0;
     this.exclusiveCredentialCustody = true;
   }
 
@@ -102,6 +103,26 @@ export class MockTicketConnector {
     if (reservation && reservation.status === "active") {
       reservation.status = "released";
     }
+  }
+
+  /**
+   * Signed dry run: predict the facts that posting this comment would
+   * produce, without posting it. A ticket that is locked predicts no comment.
+   */
+  simulate(proposal, { actionDigest }) {
+    this.simulateCalls += 1;
+    const locked = this.lockedTickets?.has(proposal.target.resource_id) === true;
+    return signArtifact({
+      schema_version: "consequence-rail/simulation-result/v0.1",
+      action_digest: actionDigest,
+      connector: CONNECTOR,
+      simulated_at: this.clock.now(),
+      predicted_facts: {
+        comment_count: locked ? 0 : 1,
+        visibility: proposal.parameters.visibility,
+        body_matches: !locked,
+      },
+    }, this.signer);
   }
 
   postComment(proposal, idempotencyKey, suffix) {

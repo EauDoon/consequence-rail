@@ -83,6 +83,7 @@ export function createTicketMcpGateway({
     authorizerTrustedKeys: demoAuthorizerTrustedKeys(),
     requireSignedAuthorization: true,
     actionClasses: [DEMO_TICKET_COMMENT_CLASS],
+    requireSimulation: true,
   });
   const gateway = new McpGateway({
     rail,

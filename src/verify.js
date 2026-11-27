@@ -2,7 +2,7 @@ import { digest } from "./canonical.js";
 import { validateSettlementBundle } from "./bundle-validation.js";
 import { verifyEventChain } from "./event-store.js";
 import { RailError } from "./errors.js";
-import { evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
+import { divergentPostconditionPaths, evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
 import { unmetBindings } from "./action-classes.js";
 import { ALLOWED_TRANSITIONS, recourseScopeField } from "./rail.js";
 import { verifyArtifact } from "./signing.js";
@@ -89,6 +89,7 @@ export function verifyBundle(
   verifyArtifact(bundle.recourse_reservation, trustedKeys);
   verifyArtifact(bundle.recourse_reservation?.connector_commitment, trustedConnectorKeys);
   verifyArtifact(bundle.action_permit, trustedKeys);
+  if (bundle.simulation_result) verifyArtifact(bundle.simulation_result, trustedConnectorKeys);
   for (const evidence of bundle.outcome_evidence ?? []) {
     verifyArtifact(evidence, trustedKeys);
   }
@@ -112,6 +113,13 @@ export function verifyBundle(
   }
 
   integrityAssert(permit.action_id === action.action_id, "Permit action id does not match the bundle.");
+  if (bundle.simulation_result) {
+    integrityAssert(
+      digest(bundle.simulation_result) === permit.simulation_digest &&
+        bundle.simulation_result.action_digest === action.action_digest,
+      "Simulation result is not the one bound into the permit.",
+    );
+  }
   integrityAssert(
     permit.action_digest === action.action_digest,
     "Permit action digest does not match the bundle.",
@@ -569,6 +577,9 @@ function verifySemantics(bundle) {
     "Lifecycle contains more than one execution attempt.",
   );
 
+  const simulation = permit.simulation_digest
+    ? verifySimulationSemantics(bundle, proposal, events)
+    : null;
   const unwound = states.includes("UNWIND_DUE");
   semanticAssert(
     !unwound || (proposal.plan !== undefined && states.includes("SATISFIED") && !states.includes("BREACHED")),
@@ -681,7 +692,53 @@ function verifySemantics(bundle) {
     final_state: "CLOSED",
     derived_outcome: expectedOutcome,
     evidence_count: evaluations.length,
+    ...(simulation ? { simulation } : {}),
   };
+}
+
+/**
+ * A simulation-bound permit must follow an accepted, fresh dry run that
+ * predicted the postcondition, and the recorded divergence between the
+ * prediction and the initial evidence must be the one the facts show.
+ */
+function verifySimulationSemantics(bundle, proposal, events) {
+  const simulation = bundle.simulation_result;
+  const permit = bundle.action_permit;
+  const simulationDigest = permit.simulation_digest;
+  semanticAssert(proposal.schema_version === OPEN_PROPOSAL_VERSION, "Only a v0.3 action can carry simulation evidence.");
+  semanticAssert(simulation.connector === proposal.target.connector, "Simulation names a different connector.");
+  const accepted = events.find((event) =>
+    event.event_type === "SIMULATION_ACCEPTED" && event.payload.simulation_digest === simulationDigest);
+  const permitted = events.find((event) =>
+    event.event_type === "STATE_TRANSITION" && event.payload.to_state === "PERMITTED");
+  semanticAssert(accepted && permitted && accepted.sequence < permitted.sequence, "The permit was not preceded by acceptance of its simulation.");
+  semanticAssert(stateBeforeEvent(events, accepted.sequence) === "RECOURSE_RESERVED", "The simulation was accepted outside RECOURSE_RESERVED.");
+  const prediction = evaluatePostcondition(proposal.postcondition, { facts: simulation.predicted_facts });
+  semanticAssert(
+    prediction.satisfied === true && accepted.payload.predicted_satisfied === true,
+    "A permit was issued on a simulation that did not predict the postcondition.",
+  );
+  semanticAssert(
+    unmetBindings(proposal, simulation.predicted_facts).length === 0,
+    "Simulation predicts facts that contradict the proposal's bound parameters.",
+  );
+  const age = new Date(permit.issued_at).getTime() - new Date(simulation.simulated_at).getTime();
+  semanticAssert(age >= 0 && age <= proposal.evidence_plan.max_age_seconds * 1_000, "The simulation was stale when the permit was issued.");
+  const initial = bundle.outcome_evidence.find((item) => (item.phase ?? "initial") === "initial");
+  const compared = events.filter((event) => event.event_type === "SIMULATION_COMPARED");
+  if (!initial) {
+    semanticAssert(compared.length === 0, "A simulation comparison exists without initial evidence.");
+    return { simulation_digest: simulationDigest, diverged_paths: null };
+  }
+  const diverged = divergentPostconditionPaths(proposal.postcondition, simulation.predicted_facts, initial.facts);
+  semanticAssert(
+    compared.length === 1 &&
+      compared[0].payload.simulation_digest === simulationDigest &&
+      compared[0].payload.evidence_digest === digest(initial) &&
+      JSON.stringify(compared[0].payload.diverged_paths) === JSON.stringify(diverged),
+    "The recorded simulation divergence does not match the evidence.",
+  );
+  return { simulation_digest: simulationDigest, diverged_paths: diverged };
 }
 
 function replayStates(events, action) {

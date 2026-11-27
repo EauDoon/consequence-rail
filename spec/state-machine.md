@@ -95,6 +95,12 @@ attestation is current, explicitly trusted, `QUALIFIED_EXACT`, and matched to
 the action and recourse envelope. Running a drill against the live connector
 is outside the state machine and MUST NOT occur as part of permit issuance.
 
+Simulation evidence does not add a state either. While an action is
+`RECOURSE_RESERVED`, the rail may accept a signed connector dry run
+(`SIMULATION_ACCEPTED`). The transition to `PERMITTED` MUST fail when an
+accepted dry run predicts the postcondition fails or has gone stale, and the
+permit then binds the simulation digest.
+
 ## Plans and unwind
 
 A v0.3 proposal may be one numbered step of a plan. While the plan is open, a

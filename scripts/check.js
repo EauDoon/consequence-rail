@@ -32,6 +32,8 @@ const required = [
   "spec/schemas/settlement-bundle-v0.3.schema.json",
   "spec/schemas/settlement-receipt-v0.2.schema.json",
   "spec/schemas/settlement-receipt-v0.3.schema.json",
+  "spec/schemas/action-permit-v0.2.schema.json",
+  "spec/schemas/simulation-result.schema.json",
   "spec/schemas/trusted-keys.schema.json",
   "docs/threat-model.md",
   "conformance/refund-action.json",

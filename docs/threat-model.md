@@ -63,6 +63,20 @@ callers. A signed decision proves which key approved, not that the policy
 behind it was right. Whoever holds the authorizer key can approve anything,
 so it must not be reachable by the proposing agent.
 
+### Unsafe action a dry run would catch
+
+Threat: an action that the downstream system would reject or apply wrongly
+gets a permit and runs, so the only protection is the remedy afterwards.
+
+Control: a rail with `requireSimulation` needs a connector-signed dry run of
+the exact action digest before the permit, refuses the permit when the dry
+run predicts a breach, and binds the dry run into the permit. The verifier
+checks the binding and the recorded divergence from the real effect.
+
+Residual risk: a dry run is the connector's prediction, signed by the
+connector. A connector that lies in both its prediction and its evidence is
+not caught by either; the divergence record only shows where they disagree.
+
 ### Runaway plan
 
 Threat: an agent keeps taking steps after one of them shows the plan is

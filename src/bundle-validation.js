@@ -138,6 +138,15 @@ const PERMIT_FIELDS = new Set([
   "max_uses",
   "signature",
 ]);
+const PERMIT_V2_FIELDS = new Set([...PERMIT_FIELDS, "simulation_digest"]);
+const SIMULATION_FIELDS = new Set([
+  "schema_version",
+  "action_digest",
+  "connector",
+  "simulated_at",
+  "predicted_facts",
+  "signature",
+]);
 const EVIDENCE_FIELDS = new Set([
   "schema_version",
   "action_digest",
@@ -524,11 +533,14 @@ function reservation(value, scopeField = "max_amount_minor") {
   signature(value.signature, "RecourseReservation.signature");
 }
 
-function permit(value) {
-  exactObject(value, PERMIT_FIELDS, PERMIT_FIELDS, "ActionPermit");
-  if (value.schema_version !== "consequence-rail/action-permit/v0.1") {
+function permit(value, allowSimulation = false) {
+  const simulated = allowSimulation && value?.schema_version === "consequence-rail/action-permit/v0.2";
+  const fields = simulated ? PERMIT_V2_FIELDS : PERMIT_FIELDS;
+  exactObject(value, fields, fields, "ActionPermit");
+  if (value.schema_version !== "consequence-rail/action-permit/v0.1" && !simulated) {
     invalid("ActionPermit schema version is unsupported.");
   }
+  if (simulated) digestString(value.simulation_digest, "ActionPermit.simulation_digest");
   for (const field of ["permit_id", "action_id", "jti"]) {
     string(value[field], `ActionPermit.${field}`, { nonempty: true });
   }
@@ -546,6 +558,18 @@ function permit(value) {
   timestamp(value.issued_at, "ActionPermit.issued_at");
   timestamp(value.expires_at, "ActionPermit.expires_at");
   signature(value.signature, "ActionPermit.signature");
+}
+
+function simulationResult(value) {
+  exactObject(value, SIMULATION_FIELDS, SIMULATION_FIELDS, "SimulationResult");
+  if (value.schema_version !== "consequence-rail/simulation-result/v0.1") {
+    invalid("SimulationResult schema version is unsupported.");
+  }
+  digestString(value.action_digest, "SimulationResult.action_digest");
+  string(value.connector, "SimulationResult.connector", { nonempty: true });
+  timestamp(value.simulated_at, "SimulationResult.simulated_at");
+  plainObject(value.predicted_facts, "SimulationResult.predicted_facts");
+  signature(value.signature, "SimulationResult.signature");
 }
 
 function evidence(value, index) {
@@ -670,7 +694,13 @@ export function validateSettlementBundle(bundle) {
       cause_code: error?.code ?? "CANONICALIZATION_FAILED",
     });
   }
-  exactObject(bundle, BUNDLE_FIELDS, BUNDLE_FIELDS, "SettlementBundle");
+  const openBundle = bundle?.schema_version === "consequence-rail/settlement-bundle/v0.3";
+  exactObject(
+    bundle,
+    openBundle ? new Set([...BUNDLE_FIELDS, "simulation_result"]) : BUNDLE_FIELDS,
+    BUNDLE_FIELDS,
+    "SettlementBundle",
+  );
   const versionBinding = BUNDLE_VERSION_BINDINGS.get(bundle.schema_version);
   if (!versionBinding) {
     invalid("SettlementBundle schema version is unsupported.");
@@ -683,7 +713,16 @@ export function validateSettlementBundle(bundle) {
     ? (bundle.action?.proposal?.recourse_scope?.field ?? null)
     : recourseScopeField(bundle.action?.action_type);
   reservation(bundle.recourse_reservation, scopeField);
-  permit(bundle.action_permit);
+  permit(bundle.action_permit, openBundle);
+  const simulatedPermit = bundle.action_permit.schema_version === "consequence-rail/action-permit/v0.2";
+  if (Object.hasOwn(bundle, "simulation_result")) {
+    if (!simulatedPermit || bundle.profile !== "audit") {
+      invalid("Only an audit bundle with a simulation-bound permit carries a simulation result.");
+    }
+    simulationResult(bundle.simulation_result);
+  } else if (simulatedPermit && bundle.profile === "audit") {
+    invalid("An audit bundle with a simulation-bound permit must carry the simulation result.");
+  }
   stringArray(bundle.evidence_manifest, "SettlementBundle.evidence_manifest", { digests: true });
   if (!Array.isArray(bundle.outcome_evidence)) {
     invalid("SettlementBundle.outcome_evidence must be an array.");
