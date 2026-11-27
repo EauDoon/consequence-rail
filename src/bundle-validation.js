@@ -66,6 +66,8 @@ const PROPOSAL_FIELDS = new Set([
   "evidence_plan",
 ]);
 const PROPOSAL_V3_FIELDS = new Set([...PROPOSAL_FIELDS, "recourse_scope"]);
+const PROPOSAL_V3_ALLOWED_FIELDS = new Set([...PROPOSAL_V3_FIELDS, "plan"]);
+const PLAN_REFERENCE_FIELDS = new Set(["plan_id", "step", "unwind_postcondition"]);
 const SUBJECT_FIELDS = new Set(["type", "id"]);
 const TARGET_FIELDS = new Set(["connector", "resource_type", "resource_id"]);
 const REFUND_PARAMETER_FIELDS = new Set(["amount_minor", "currency"]);
@@ -351,8 +353,12 @@ function recourseScope(value, parameters) {
 
 function proposal(value, expectedVersion) {
   const open = value?.schema_version === OPEN_PROPOSAL_VERSION;
-  const proposalFields = open ? PROPOSAL_V3_FIELDS : PROPOSAL_FIELDS;
-  exactObject(value, proposalFields, proposalFields, "ActionProposal");
+  exactObject(
+    value,
+    open ? PROPOSAL_V3_ALLOWED_FIELDS : PROPOSAL_FIELDS,
+    open ? PROPOSAL_V3_FIELDS : PROPOSAL_FIELDS,
+    "ActionProposal",
+  );
   if (!PROPOSAL_VERSIONS.has(value.schema_version)) {
     invalid("ActionProposal schema version is unsupported.");
   }
@@ -372,6 +378,14 @@ function proposal(value, expectedVersion) {
   if (open) {
     openParameters(value.parameters);
     recourseScope(value.recourse_scope, value.parameters);
+    if (Object.hasOwn(value, "plan")) {
+      exactObject(value.plan, PLAN_REFERENCE_FIELDS, PLAN_REFERENCE_FIELDS, "ActionProposal.plan");
+      if (typeof value.plan.plan_id !== "string" || !/^plan_[A-Za-z0-9_-]{1,64}$/.test(value.plan.plan_id)) {
+        invalid("ActionProposal.plan.plan_id is invalid.");
+      }
+      integer(value.plan.step, "ActionProposal.plan.step", 1, 100);
+      postcondition(value.plan.unwind_postcondition);
+    }
   } else if (value.action_type === "demo.inventory.allocate/v1") {
     exactObject(
       value.parameters,

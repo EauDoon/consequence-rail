@@ -178,6 +178,30 @@
           "pattern": "^[a-z][a-z0-9_]{0,63}$"
         }
       }
+    },
+    "plan": {
+      "description": "Optional: this action is one numbered step of a plan on the rail. A satisfied step stays held with its recourse reserved until the plan is committed or unwound; unwinding runs its reserved remedy and verifies unwind_postcondition.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan_id",
+        "step",
+        "unwind_postcondition"
+      ],
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "pattern": "^plan_[A-Za-z0-9_-]{1,64}$"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "unwind_postcondition": {
+          "$ref": "#/$defs/postcondition"
+        }
+      }
     }
   },
   "$defs": {

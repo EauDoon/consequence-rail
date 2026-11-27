@@ -6,6 +6,7 @@ import {
   runInventoryDemo,
 } from "../src/inventory-demo.js";
 import { TICKET_DEMO_FAULTS, runTicketDemo } from "../src/ticket-demo.js";
+import { runPlanDemo } from "../src/plan-demo.js";
 import { ASSURANCE_MODES } from "../src/rail.js";
 import { RailError } from "../src/errors.js";
 import {
@@ -50,6 +51,7 @@ Usage:
   crctl demo inventory [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo ticket [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
+  crctl demo plan [--commit] [--json]
   crctl demo irreversible [--json]
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
   crctl bundle verify <file> [--expect-digest <digest>] [--expect-checkpoint <count>:<head>]
@@ -89,6 +91,7 @@ Flags:
   --fault <name>        Synthetic fault to inject
   --assurance <mode>    Assurance mode for the refund, inventory and ticket demos
   --json                Print machine-readable JSON
+  --commit              Plan demo: keep the steps instead of halting and unwinding
   --markdown            Print a readable settlement or recovery review
   --out <file>          Write a demo bundle, receipt projection, review report or trust file
                         (must not exist)
@@ -362,7 +365,7 @@ async function main() {
       return;
     }
     if (!subcommand) {
-      throw usage("Missing demo scenario. Expected refund, inventory, ticket, irreversible, recovery-preflight, list, find, or matrix.");
+      throw usage("Missing demo scenario. Expected refund, inventory, ticket, plan, irreversible, recovery-preflight, list, find, or matrix.");
     }
     if (subcommand === "refund") {
       requireNoExtra(positional, 2, "demo refund");
@@ -439,6 +442,27 @@ async function main() {
       printRefund(result.summary, Boolean(options.json));
       return;
     }
+    if (subcommand === "plan") {
+      requireNoExtra(positional, 2, "demo plan");
+      assertFlags(options, new Set(["commit", "json"]));
+      const { summary } = await runPlanDemo({ mode: options.commit ? "commit" : "unwind" });
+      if (options.json) {
+        process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+      } else {
+        process.stdout.write([
+          `scenario: ${summary.scenario}`,
+          `mode: ${summary.mode}`,
+          `plan: ${summary.plan_id}`,
+          `plan_state: ${summary.plan_state}`,
+          ...summary.steps.map((step) => `step_${step.step}: ${step.state} ${step.outcome ?? "no receipt"}`),
+          `kill_switch: ${summary.kill_switch ?? "not used"}`,
+          `unwind_order: ${summary.unwind_order.join(", ") || "none"}`,
+          `active_comments: ${summary.active_comments}`,
+          `bundle_verification: ${summary.bundle_verification}`,
+        ].join("\n") + "\n");
+      }
+      return;
+    }
     if (subcommand === "irreversible") {
       requireNoExtra(positional, 2, "demo irreversible");
       assertFlags(options, new Set(["json"]));
@@ -475,7 +499,7 @@ async function main() {
       return;
     }
     throw usage(
-      `Unknown demo scenario '${subcommand}'. Expected refund, inventory, ticket, irreversible, recovery-preflight, list, find, or matrix.`,
+      `Unknown demo scenario '${subcommand}'. Expected refund, inventory, ticket, plan, irreversible, recovery-preflight, list, find, or matrix.`,
     );
   }
 

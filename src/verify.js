@@ -569,19 +569,33 @@ function verifySemantics(bundle) {
     "Lifecycle contains more than one execution attempt.",
   );
 
+  const unwound = states.includes("UNWIND_DUE");
+  semanticAssert(
+    !unwound || (proposal.plan !== undefined && states.includes("SATISFIED") && !states.includes("BREACHED")),
+    "Only a satisfied plan step can be unwound.",
+  );
   const evaluations = bundle.outcome_evidence.map((evidence) =>
-    verifyEvidenceSemantics(evidence, proposal, events),
+    verifyEvidenceSemantics(evidence, proposal, events, unwound),
   );
 
   if (expectedOutcome === "settled") {
     semanticAssert(
-      evaluations.some((item) => item.phase !== "post-remedy" && item.satisfied),
+      evaluations.some((item) => item.phase === "initial" && item.satisfied),
       "Settled outcome lacks satisfying initial evidence.",
     );
     semanticAssert(!states.includes("BREACHED"), "Settled lifecycle contains a breach.");
+  } else if (expectedOutcome === "compensated" && unwound) {
+    semanticAssert(
+      evaluations.some((item) => item.phase === "initial" && item.satisfied),
+      "Unwound step lacks evidence that it first succeeded.",
+    );
+    semanticAssert(
+      evaluations.some((item) => item.phase === "post-unwind" && item.satisfied),
+      "Unwound step lacks evidence satisfying its unwind postcondition.",
+    );
   } else if (expectedOutcome === "compensated") {
     semanticAssert(
-      evaluations.some((item) => item.phase !== "post-remedy" && !item.satisfied),
+      evaluations.some((item) => item.phase === "initial" && !item.satisfied),
       "Compensated outcome lacks evidence of the initial breach.",
     );
     semanticAssert(
@@ -726,6 +740,15 @@ function replayStates(events, action) {
 
 function deriveOutcome(states) {
   if (states.includes("REMEDIATED")) return "compensated";
+  // A plan step can be SATISFIED and then fail to unwind, so an unresolved
+  // state outranks SATISFIED.
+  if (
+    states.some((state) =>
+      ["INCONCLUSIVE", "REVIEW_REQUIRED", "REMEDY_FAILED", "REMEDY_INCONCLUSIVE"].includes(state),
+    )
+  ) {
+    return "disputed";
+  }
   if (states.includes("SATISFIED")) return "settled";
   if (
     states.some((state) =>
@@ -742,7 +765,15 @@ function deriveOutcome(states) {
   throw new RailError("SEMANTIC_INVALID", "Lifecycle does not support a settlement outcome.");
 }
 
-function verifyEvidenceSemantics(evidence, proposal, events) {
+function verifyEvidenceSemantics(evidence, proposal, events, unwound = false) {
+  const phase = evidence.phase ?? "initial";
+  semanticAssert(
+    ["initial", "post-remedy", "post-unwind"].includes(phase) &&
+      (phase !== "post-unwind" || unwound) &&
+      (phase !== "post-remedy" || !unwound),
+    "Evidence phase does not match the signed lifecycle.",
+  );
+  const postcondition = phase === "post-unwind" ? proposal.plan.unwind_postcondition : proposal.postcondition;
   semanticAssert(
     evidence.action_digest === digest(proposal),
     "Evidence is bound to a different proposal.",
@@ -756,7 +787,7 @@ function verifyEvidenceSemantics(evidence, proposal, events) {
       evidence.resource?.id === proposal.target.resource_id,
     "Evidence resource does not match the proposal.",
   );
-  if (proposal.schema_version === OPEN_PROPOSAL_VERSION) {
+  if (proposal.schema_version === OPEN_PROPOSAL_VERSION && phase !== "post-unwind") {
     semanticAssert(
       unmetBindings(proposal, evidence.facts ?? {}).length === 0,
       "Evidence facts do not equal the parameters the proposal binds them to.",
@@ -773,22 +804,22 @@ function verifyEvidenceSemantics(evidence, proposal, events) {
     );
   }
   semanticAssert(
-    missingPostconditionPaths(proposal.postcondition, evidence.facts).length === 0,
+    missingPostconditionPaths(postcondition, evidence.facts).length === 0,
     "Evidence does not report every postcondition fact.",
   );
   const evidenceDigest = digest(evidence);
   const acceptedEvent = events.find(
     (event) =>
       event.event_type ===
-        (evidence.phase === "post-remedy"
-          ? "REMEDY_EVIDENCE_ACCEPTED"
-          : "EVIDENCE_ACCEPTED") &&
+        (phase === "initial"
+          ? "EVIDENCE_ACCEPTED"
+          : "REMEDY_EVIDENCE_ACCEPTED") &&
       event.payload.evidence_digest === evidenceDigest,
   );
   semanticAssert(acceptedEvent, "Evidence is not bound to an acceptance event.");
   semanticAssert(
     stateBeforeEvent(events, acceptedEvent.sequence) ===
-      (evidence.phase === "post-remedy" ? "REMEDY_VERIFYING" : "VERIFYING"),
+      (phase === "initial" ? "VERIFYING" : "REMEDY_VERIFYING"),
     "Evidence was accepted outside its legal lifecycle phase.",
   );
   const age =
@@ -798,7 +829,7 @@ function verifyEvidenceSemantics(evidence, proposal, events) {
     age >= 0 && age <= proposal.evidence_plan.max_age_seconds * 1_000,
     "Accepted evidence violates the configured freshness window.",
   );
-  const evaluation = evaluatePostcondition(proposal.postcondition, evidence);
+  const evaluation = evaluatePostcondition(postcondition, evidence);
   semanticAssert(
     digest(evaluation) === digest(evidence.evaluation),
     "Recorded evidence evaluation does not match the configured postcondition.",
@@ -808,7 +839,7 @@ function verifyEvidenceSemantics(evidence, proposal, events) {
     "Evidence acceptance event contradicts the postcondition evaluation.",
   );
   return {
-    phase: evidence.phase ?? "initial",
+    phase,
     satisfied: evaluation.satisfied,
   };
 }
