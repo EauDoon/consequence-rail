@@ -14,8 +14,8 @@ test("the implementation version is read from package.json", () => {
   assert.equal(VERSION, packageVersion);
 });
 
-test("both CLIs print the implementation version", () => {
-  for (const script of ["crctl.js", "rail.js"]) {
+test("every CLI prints the implementation version", () => {
+  for (const script of ["crctl.js", "rail.js", "mcp.js"]) {
     for (const args of [["--version"], ["--version", "--port", "0x1F90"]]) {
       const result = spawnSync(process.execPath, [repoPath("cmd", script), ...args], {
         cwd: repoPath(),

@@ -299,6 +299,35 @@ deletes only the extra comment. Library callers pass `actionClasses` to the
 rail; see [`src/action-classes.js`](src/action-classes.js) and
 [ActionProposal v0.3](spec/model.md#registered-action-classes-actionproposal-v03).
 
+## Call it from an agent over MCP
+
+An agent reaches the rail the same way it reaches any tool: as an MCP server.
+
+```text
+node ./cmd/mcp.js --demo-authorizer
+```
+
+The gateway speaks MCP over stdio in front of the synthetic ticket
+connector, and its rail holds the only connector credential.
+`list_ticket_comments` is read-only and passes straight through.
+`post_ticket_comment` is gated: the call becomes an ActionProposal v0.3, runs
+only with a signed decision over its action digest, reserved recourse and a
+single-use permit, and returns the settlement outcome and receipt digest. A
+duplicate post is detected and the extra comment deleted inside the same
+call. MCP calls these annotations hints; here a tool without
+`readOnlyHint: true` cannot be registered without a gate.
+
+Without `--demo-authorizer` the first call returns `authorization_required`
+with the `action_digest`. A policy engine such as the Constitutional Agent
+Testbench signs that digest, and the client calls again with the same
+arguments and the decision under `_meta["consequence-rail/authorization"]`.
+The gateway refuses an unsigned decision from the caller.
+`createMcpHttpServer` in [`src/mcp-http.js`](src/mcp-http.js) serves the same
+gateway over Streamable HTTP as an OAuth protected resource: RFC 9728
+metadata at `/.well-known/oauth-protected-resource`, `401` without a valid
+token, and `403 insufficient_scope` when a token without `rail.tools.gated`
+calls a gated tool.
+
 ## Assurance modes
 
 | Mode | Meaning | May issue a permit |
@@ -550,6 +579,9 @@ Read:
 - [`src/`](src/): reference rail, signing, connector, and verifier
 - [`src/action-classes.js`](src/action-classes.js): registered action classes
   for ActionProposal v0.3
+- [`src/mcp-gateway.js`](src/mcp-gateway.js) and
+  [`src/mcp-http.js`](src/mcp-http.js): MCP front door over stdio
+  (`cmd/mcp.js`) and Streamable HTTP
 - [`src/recovery-preflight.js`](src/recovery-preflight.js): recovery contract,
   qualification and replay verification
 - [`src/mock-refund-recovery-adapter.js`](src/mock-refund-recovery-adapter.js):
