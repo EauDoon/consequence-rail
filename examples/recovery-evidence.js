@@ -12,10 +12,25 @@ import { demoRecoveryTrustedKeys } from "../src/signing.js";
 // These public deterministic keys are demonstration identities only.
 const trustedKeys = demoRecoveryTrustedKeys();
 const [destination, ...extra] = process.argv.slice(2);
-if (!destination || extra.length) throw new Error("Usage: node examples/recovery-evidence.js <new-directory>");
+const USAGE = "Usage: node examples/recovery-evidence.js <new-directory>";
+// An operator mistake gets one plain line and exit status 1, not a stack trace.
+function refuse(...lines) {
+  process.stderr.write(`${lines.join("\n")}\n`);
+  process.exit(1);
+}
+if (!destination || extra.length) refuse(USAGE);
 const directory = resolve(destination);
-mkdirSync(directory); // Refuse existing destinations, including prior examples.
-const write = (name, value) => writeFileSync(join(directory, name), serializeArtifact(value), { flag: "wx" });
+try {
+  // Refuse existing destinations, including prior examples. Exported evidence
+  // is owner-only, like every artifact file the CLI writes.
+  mkdirSync(directory, { mode: 0o700 });
+} catch (error) {
+  if (error.code === "EEXIST") refuse(`Destination already exists: ${directory}`, USAGE);
+  if (error.code === "ENOENT") refuse(`Parent directory does not exist: ${directory}`, USAGE);
+  throw error;
+}
+const write = (name, value) =>
+  writeFileSync(join(directory, name), serializeArtifact(value), { flag: "wx", mode: 0o600 });
 
 const { bundle, summary } = await runRecoveryPreflightDemo();
 const failed = await runRecoveryPreflightDemo({ fault: "missing-checkpoint" });

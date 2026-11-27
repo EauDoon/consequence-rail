@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,31 @@ test("exported recovery example verifies independently and refuses stale, missin
     assert.equal(refused.status, 1);
     assert.equal(JSON.parse(refused.stderr).code, code);
   }
-  assert.equal(run(["examples/recovery-evidence.js", destination]).status, 1);
+  const repeated = run(["examples/recovery-evidence.js", destination]);
+  assert.equal(repeated.status, 1);
+  assert.equal(repeated.stdout, "");
+  assert.match(repeated.stderr, /^Destination already exists: .+\nUsage: node examples\/recovery-evidence\.js <new-directory>\n$/);
   assert.equal(readFileSync(join(destination, "report.json"), "utf8"), example.stdout);
+});
+
+test("recovery example reports usage errors on one line without a stack trace", () => {
+  for (const args of [[], ["one", "two"]]) {
+    const result = run(["examples/recovery-evidence.js", ...args]);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, "Usage: node examples/recovery-evidence.js <new-directory>\n");
+  }
+});
+
+test("recovery example keeps exported evidence owner-only", { skip: process.platform === "win32" }, t => {
+  const parent = mkdtempSync(join(tmpdir(), "rail-recovery-example-mode-"));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const destination = join(parent, "evidence");
+  assert.equal(run(["examples/recovery-evidence.js", destination]).status, 0);
+  assert.equal(statSync(destination).mode & 0o777, 0o700);
+  const files = readdirSync(destination).sort();
+  assert.deepEqual(files, ["altered.json", "drill.json", "missing-checkpoint.json", "report.json"]);
+  for (const file of files) {
+    assert.equal(statSync(join(destination, file)).mode & 0o777, 0o600, file);
+  }
 });
