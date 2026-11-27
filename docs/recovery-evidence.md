@@ -2,6 +2,9 @@
 
 Run this dependency-free example from the repository root with Node.js 20 or
 later. The destination must not already exist; the example never overwrites it.
+A missing argument, an existing destination or a missing parent directory
+prints one line and the usage to stderr and exits with status 1. On POSIX the
+directory is created with mode 0700 and each file with mode 0600.
 
 ```sh
 node examples/recovery-evidence.js .consequence-rail-evidence
