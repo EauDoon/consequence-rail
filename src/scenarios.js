@@ -2,6 +2,7 @@ import { deepClone, deepFreeze } from "./canonical.js";
 import { DEMO_FAULTS } from "./demo.js";
 import { INVENTORY_DEMO_FAULTS } from "./inventory-demo.js";
 import { RECOVERY_DEMO_FAULTS } from "./recovery-demo.js";
+import { TICKET_DEMO_FAULTS } from "./ticket-demo.js";
 
 const OUTCOMES = {
   none: "settled", duplicate: "compensated", "lost-response-after-commit": "settled",
@@ -26,7 +27,7 @@ const PURPOSES = {
   "not-testable-local": "Disclose that a local exact drill is unavailable.", "out-of-scope": "Reject recovery outside declared scope.",
 };
 const scenarios = deepFreeze([
-  ...[["refund", DEMO_FAULTS], ["inventory", INVENTORY_DEMO_FAULTS]].map(([name, faults]) => ({
+  ...[["refund", DEMO_FAULTS], ["inventory", INVENTORY_DEMO_FAULTS], ["ticket", TICKET_DEMO_FAULTS]].map(([name, faults]) => ({
     name, assurance_modes: ["enforced", "cooperative"], expected_assurance: "enforced",
     faults: faults.map((name) => ({ name, purpose: PURPOSES[name], expected: {
       state: name === "action-mutation" ? "PERMITTED" : name === "lost-response-before-commit" ? "FAILED" : "CLOSED",

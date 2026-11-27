@@ -306,11 +306,13 @@ test("v0.1 remains immutable while v0.2 schemas bind bounds and receipt versions
     [
       { $ref: "../spec/schemas/action-proposal.schema.json" },
       { $ref: "../spec/schemas/action-proposal-v0.2.schema.json" },
+      { $ref: "../spec/schemas/action-proposal-v0.3.schema.json" },
     ],
   );
   const bundleSchemaReferences = [
     { $ref: "../spec/schemas/settlement-bundle.schema.json" },
     { $ref: "../spec/schemas/settlement-bundle-v0.2.schema.json" },
+    { $ref: "../spec/schemas/settlement-bundle-v0.3.schema.json" },
   ];
   assert.deepEqual(
     openapi.paths["/v0/actions/{action_id}/bundle"].get

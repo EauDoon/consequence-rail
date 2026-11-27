@@ -7,16 +7,19 @@ export const ASSURANCE_MODES = ["enforced", "cooperative", "observed"];
 const ACTION_PROPOSAL_VERSIONS = new Set([
   "consequence-rail/action-proposal/v0.1",
   "consequence-rail/action-proposal/v0.2",
+  "consequence-rail/action-proposal/v0.3",
 ]);
 
 const BUNDLE_VERSION_BY_PROPOSAL = new Map([
   ["consequence-rail/action-proposal/v0.1", "consequence-rail/settlement-bundle/v0.1"],
   ["consequence-rail/action-proposal/v0.2", "consequence-rail/settlement-bundle/v0.2"],
+  ["consequence-rail/action-proposal/v0.3", "consequence-rail/settlement-bundle/v0.3"],
 ]);
 
 const RECEIPT_VERSION_BY_PROPOSAL = new Map([
   ["consequence-rail/action-proposal/v0.1", "consequence-rail/settlement-receipt/v0.1"],
   ["consequence-rail/action-proposal/v0.2", "consequence-rail/settlement-receipt/v0.2"],
+  ["consequence-rail/action-proposal/v0.3", "consequence-rail/settlement-receipt/v0.3"],
 ]);
 
 export const ALLOWED_TRANSITIONS = {

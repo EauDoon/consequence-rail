@@ -4,6 +4,12 @@
 
 import { deepClone, deepFreeze, digest } from "./canonical.js";
 import { isExpired } from "./clock.js";
+import {
+  ActionClassRegistry,
+  unmetBindings,
+  validateClassParameters,
+  validateProposalDeclarations,
+} from "./action-classes.js";
 import { isSignedAuthorizationDecision, verifyAuthorizationDecision } from "./authorization.js";
 import { MemoryEventStore } from "./event-store.js";
 import { RailError } from "./errors.js";
@@ -22,7 +28,8 @@ import {
   assertSafeInteger,
   assertTimestamp,
   RECEIPT_RECOURSE_STATUSES,
-  recourseScopeField,
+  OPEN_PROPOSAL_VERSION,
+  proposalScopeField,
   proposalAdmitsActionType,
   MAX_DURATION_SECONDS,
   AUTHORIZATION_FIELDS,
@@ -40,6 +47,9 @@ import {
   INVENTORY_PARAMETER_FIELDS,
   INVENTORY_RECOURSE_INPUT_FIELDS,
   PROPOSAL_FIELDS,
+  PROPOSAL_V3_FIELDS,
+  EVIDENCE_PLAN_V3_FIELDS,
+  RECOURSE_SCOPE_FIELDS,
   RECOURSE_INPUT_FIELDS,
   RECOURSE_STATUS_FIELDS,
   REFUND_PARAMETER_FIELDS,
@@ -91,6 +101,7 @@ export class ConsequenceRail {
     recoveryTrustedKeys,
     authorizerTrustedKeys,
     requireSignedAuthorization = false,
+    actionClasses,
     requireRecoveryPreflight = false,
     measureRecoveryImplementation = null,
     maxActions = MAX_ACTIONS,
@@ -140,6 +151,18 @@ export class ConsequenceRail {
     // Copied so a caller changing its own map later cannot change the trust.
     this.authorizerTrustedKeys = new Map(authorizerTrustedKeys ?? []);
     this.requireSignedAuthorization = requireSignedAuthorization;
+    // Registered action classes admit ActionProposal v0.3. An array of class
+    // definitions is copied into a registry this rail owns.
+    assert(
+      actionClasses === undefined ||
+        actionClasses instanceof ActionClassRegistry ||
+        Array.isArray(actionClasses),
+      "CONFIG_INVALID",
+      "actionClasses must be an ActionClassRegistry or an array of class definitions.",
+    );
+    this.actionClasses = actionClasses instanceof ActionClassRegistry
+      ? new ActionClassRegistry(actionClasses.list())
+      : new ActionClassRegistry(actionClasses ?? []);
     this.requireRecoveryPreflight = requireRecoveryPreflight;
     this.measureRecoveryImplementation = measureRecoveryImplementation;
     this.maxActions = maxActions;
@@ -388,7 +411,7 @@ export class ConsequenceRail {
       expires_at: request.expires_at,
       remedy_window_seconds: request.remedy_window_seconds,
       max_attempts: request.max_attempts,
-      ...(recourseScopeField(record.proposal.action_type) === "max_quantity"
+      ...(proposalScopeField(record.proposal) === "max_quantity"
         ? { max_quantity: request.max_quantity }
         : { max_amount_minor: request.max_amount_minor }),
       idempotency_key_digest: digest(request.idempotency_key),
@@ -1220,7 +1243,7 @@ export class ConsequenceRail {
     );
     const receiptBody = {
       schema_version: receiptSchemaVersion,
-      ...(receiptSchemaVersion === "consequence-rail/settlement-receipt/v0.2"
+      ...(receiptSchemaVersion !== "consequence-rail/settlement-receipt/v0.1"
         ? { proposal_schema_version: record.proposal.schema_version }
         : {}),
       receipt_id: `receipt_${digest({
@@ -1254,7 +1277,9 @@ export class ConsequenceRail {
   }
 
   validateProposal(input) {
-    assertExactFields(input, PROPOSAL_FIELDS, "ActionProposal");
+    assertPlainObject(input, "ActionProposal");
+    const open = input.schema_version === OPEN_PROPOSAL_VERSION;
+    assertExactFields(input, open ? PROPOSAL_V3_FIELDS : PROPOSAL_FIELDS, "ActionProposal");
     assert(
       ACTION_PROPOSAL_VERSIONS.has(input.schema_version),
       "SCHEMA_INVALID",
@@ -1264,6 +1289,13 @@ export class ConsequenceRail {
       proposalAdmitsActionType(input.schema_version, input.action_type),
       "SCHEMA_INVALID",
       "Unsupported action type.",
+    );
+    const actionClass = open ? this.actionClasses.get(input.action_type) : null;
+    assert(
+      !open || actionClass !== null,
+      "ACTION_CLASS_UNREGISTERED",
+      "This rail has no registered class for the action type.",
+      { action_type: input.action_type },
     );
     assertExactFields(input.subject, SUBJECT_FIELDS, "ActionProposal.subject");
     assertNonEmptyString(input.subject.type, "ActionProposal.subject.type");
@@ -1294,7 +1326,7 @@ export class ConsequenceRail {
     );
     assertExactFields(
       input.evidence_plan,
-      EVIDENCE_PLAN_FIELDS,
+      open ? EVIDENCE_PLAN_V3_FIELDS : EVIDENCE_PLAN_FIELDS,
       "ActionProposal.evidence_plan",
     );
     assertNonEmptyString(
@@ -1312,7 +1344,11 @@ export class ConsequenceRail {
     );
     evaluatePostcondition(input.postcondition, { facts: {} });
 
-    if (input.action_type === "demo.inventory.allocate/v1") {
+    if (open) {
+      assertExactFields(input.recourse_scope, RECOURSE_SCOPE_FIELDS, "ActionProposal.recourse_scope");
+      validateClassParameters(actionClass, input.parameters);
+      validateProposalDeclarations(actionClass, input);
+    } else if (input.action_type === "demo.inventory.allocate/v1") {
       assertExactFields(
         input.parameters,
         INVENTORY_PARAMETER_FIELDS,
@@ -1365,7 +1401,7 @@ export class ConsequenceRail {
   }
 
   validateReservation(record, input) {
-    const scopeField = recourseScopeField(record.proposal.action_type);
+    const scopeField = proposalScopeField(record.proposal);
     assertExactFields(
       input,
       scopeField === "max_quantity" ? INVENTORY_RECOURSE_INPUT_FIELDS : RECOURSE_INPUT_FIELDS,
@@ -1450,7 +1486,22 @@ export class ConsequenceRail {
       "RECOURSE_WINDOW_TOO_SHORT",
       "Recourse validity must cover permit expiry and the remedy window.",
     );
-    if (record.proposal.parameters?.quantity !== undefined) {
+    if (record.proposal.schema_version === OPEN_PROPOSAL_VERSION) {
+      const actionClass = this.actionClasses.get(record.proposal.action_type);
+      assert(
+        actionClass?.recourse.kinds.includes(input.kind),
+        "RECOURSE_INVALID",
+        "The action class does not allow this remedy kind.",
+      );
+      const covers = record.proposal.recourse_scope.covers_parameter;
+      if (covers !== null) {
+        assert(
+          input[scopeField] >= record.proposal.parameters[covers],
+          "RECOURSE_INVALID",
+          `Recourse ${scopeField} does not cover the proposed ${covers}.`,
+        );
+      }
+    } else if (record.proposal.parameters?.quantity !== undefined) {
       assert(
         input.max_quantity >= record.proposal.parameters.quantity,
         "RECOURSE_INVALID",
@@ -1467,7 +1518,7 @@ export class ConsequenceRail {
   }
 
   validateConnectorCommitment(record, request, commitment) {
-    const commitmentScopeField = recourseScopeField(record.proposal.action_type);
+    const commitmentScopeField = proposalScopeField(record.proposal);
     assertExactFields(
       commitment,
       commitmentScopeField === "max_quantity"
@@ -1496,7 +1547,7 @@ export class ConsequenceRail {
       "kind",
       "expires_at",
       "max_attempts",
-      recourseScopeField(record.proposal.action_type),
+      commitmentScopeField,
     ]) {
       assert(
         commitment[field] === request[field],
@@ -1572,6 +1623,15 @@ export class ConsequenceRail {
       "Evidence does not report every postcondition fact.",
       { clause_indexes: missingClauses },
     );
+    if (record.proposal.schema_version === OPEN_PROPOSAL_VERSION) {
+      const unmet = unmetBindings(record.proposal, input.facts);
+      assert(
+        unmet.length === 0,
+        "EVIDENCE_BINDING_MISMATCH",
+        "Evidence facts do not equal the parameters the proposal binds them to.",
+        { binding_indexes: unmet },
+      );
+    }
     const observedAt = assertTimestamp(
       input.observed_at,
       "OutcomeEvidence.observed_at",

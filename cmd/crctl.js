@@ -5,6 +5,7 @@ import {
   INVENTORY_DEMO_FAULTS,
   runInventoryDemo,
 } from "../src/inventory-demo.js";
+import { TICKET_DEMO_FAULTS, runTicketDemo } from "../src/ticket-demo.js";
 import { ASSURANCE_MODES } from "../src/rail.js";
 import { RailError } from "../src/errors.js";
 import {
@@ -45,9 +46,10 @@ function printHelp() {
 Usage:
   crctl demo list [--json]
   crctl demo find <search terms> [--json]
-  crctl demo matrix [all|refund|inventory|recovery-preflight|irreversible] [--summary] [--json]
+  crctl demo matrix [all|refund|inventory|ticket|recovery-preflight|irreversible] [--summary] [--json]
   crctl demo inventory [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo refund [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
+  crctl demo ticket [--fault <name>] [--assurance <mode>] [--json] [--out <file>]
   crctl demo irreversible [--json]
   crctl demo recovery-preflight [--fault <name>] [--json] [--out <file>]
   crctl bundle verify <file> [--expect-digest <digest>] [--expect-checkpoint <count>:<head>]
@@ -74,15 +76,18 @@ Refund demo faults:
 Inventory demo faults:
   ${INVENTORY_DEMO_FAULTS.join(", ")}
 
+Ticket demo faults (a registered non-money action class):
+  ${TICKET_DEMO_FAULTS.join(", ")}
+
 Recovery-preflight demo faults:
   ${RECOVERY_DEMO_FAULTS.join(", ")}
 
 Assurance modes:
-  ${ASSURANCE_MODES.join(", ")} (refund and inventory demo default: enforced)
+  ${ASSURANCE_MODES.join(", ")} (refund, inventory and ticket demo default: enforced)
 
 Flags:
   --fault <name>        Synthetic fault to inject
-  --assurance <mode>    Assurance mode for the refund and inventory demos
+  --assurance <mode>    Assurance mode for the refund, inventory and ticket demos
   --json                Print machine-readable JSON
   --markdown            Print a readable settlement or recovery review
   --out <file>          Write a demo bundle, receipt projection, review report or trust file
@@ -162,7 +167,13 @@ function printRefund(summary, asJson) {
           `allocated_quantity: ${summary.allocated_quantity}`,
           `inventory_on_hand: ${summary.inventory_on_hand}`,
         ]
-      : [`active_refunds: ${summary.active_refunds}`]),
+      : summary.scenario === "synthetic-ticket-comment"
+        ? [
+            `action_type: ${summary.action_type}`,
+            `active_comments: ${summary.active_comments}`,
+            `deleted_comments: ${summary.deleted_comments}`,
+          ]
+        : [`active_refunds: ${summary.active_refunds}`]),
     `bundle_verification: ${summary.bundle_verification}`,
   ];
   if (summary.expected_rejection) {
@@ -351,7 +362,7 @@ async function main() {
       return;
     }
     if (!subcommand) {
-      throw usage("Missing demo scenario. Expected refund, inventory, irreversible, recovery-preflight, list, find, or matrix.");
+      throw usage("Missing demo scenario. Expected refund, inventory, ticket, irreversible, recovery-preflight, list, find, or matrix.");
     }
     if (subcommand === "refund") {
       requireNoExtra(positional, 2, "demo refund");
@@ -403,6 +414,31 @@ async function main() {
       printRefund(result.summary, Boolean(options.json));
       return;
     }
+    if (subcommand === "ticket") {
+      requireNoExtra(positional, 2, "demo ticket");
+      assertFlags(options, new Set(["fault", "assurance", "json", "out"]));
+      const fault = options.fault ?? "none";
+      const assuranceMode = options.assurance ?? "enforced";
+      if (!TICKET_DEMO_FAULTS.includes(fault)) {
+        throw usage(
+          `Unknown ticket demo fault '${fault}'. Expected one of: ${TICKET_DEMO_FAULTS.join(", ")}.`,
+        );
+      }
+      if (!ASSURANCE_MODES.includes(assuranceMode)) {
+        throw usage(
+          `Unknown assurance mode '${assuranceMode}'. Expected one of: ${ASSURANCE_MODES.join(", ")}.`,
+        );
+      }
+      const result = await runTicketDemo({ fault, assuranceMode });
+      if (options.out) {
+        if (!result.bundle) {
+          throw new RailError("RECEIPT_NOT_AVAILABLE", "This scenario did not produce a settlement bundle.");
+        }
+        writeExclusiveJson(options.out, result.bundle);
+      }
+      printRefund(result.summary, Boolean(options.json));
+      return;
+    }
     if (subcommand === "irreversible") {
       requireNoExtra(positional, 2, "demo irreversible");
       assertFlags(options, new Set(["json"]));
@@ -439,7 +475,7 @@ async function main() {
       return;
     }
     throw usage(
-      `Unknown demo scenario '${subcommand}'. Expected refund, inventory, irreversible, recovery-preflight, list, find, or matrix.`,
+      `Unknown demo scenario '${subcommand}'. Expected refund, inventory, ticket, irreversible, recovery-preflight, list, find, or matrix.`,
     );
   }
 

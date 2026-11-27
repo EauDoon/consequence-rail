@@ -1,6 +1,7 @@
 import { runRefundDemo, runIrreversibleDemo } from "./demo.js";
 import { runInventoryDemo } from "./inventory-demo.js";
 import { runRecoveryPreflightDemo } from "./recovery-demo.js";
+import { runTicketDemo } from "./ticket-demo.js";
 import { scenarioCatalog } from "./scenarios.js";
 import { RailError } from "./errors.js";
 
@@ -10,7 +11,7 @@ export function checkScenarioResult(scenario, fault, expected, summary) {
   for (const [key, value] of Object.entries(expected)) {
     checks[key] = (key === "rejection" ? summary.expected_rejection?.code : summary[key]) === value;
   }
-  if (["refund", "inventory"].includes(scenario)) {
+  if (["refund", "inventory", "ticket"].includes(scenario)) {
     checks.execution_count = summary.execute_calls === (fault === "action-mutation" ? 0 : 1);
     checks.remedy_bounded = Number.isSafeInteger(summary.remedy_calls) && summary.remedy_calls >= 0 && summary.remedy_calls <= 1;
     checks.bundle = summary.bundle_verification === (expected.outcome ? "pass" : "not_available");
@@ -33,7 +34,7 @@ export function checkScenarioResult(scenario, fault, expected, summary) {
 export async function runScenarioMatrix(selection = "all") {
   const catalog = scenarioCatalog().scenarios;
   if (selection !== "all" && !catalog.some((scenario) => scenario.name === selection)) {
-    throw new RailError("SCENARIO_INVALID", "Expected all, refund, inventory, recovery-preflight, or irreversible.");
+    throw new RailError("SCENARIO_INVALID", "Expected all, refund, inventory, ticket, recovery-preflight, or irreversible.");
   }
   const rows = [];
   for (const scenario of catalog.filter((item) => selection === "all" || item.name === selection)) {
@@ -41,7 +42,7 @@ export async function runScenarioMatrix(selection = "all") {
     for (const fault of faults) {
       try {
         const summary = scenario.name === "irreversible" ? runIrreversibleDemo() :
-          (await (scenario.name === "refund" ? runRefundDemo : scenario.name === "inventory" ? runInventoryDemo : runRecoveryPreflightDemo)({ fault: fault.name })).summary;
+          (await (scenario.name === "refund" ? runRefundDemo : scenario.name === "inventory" ? runInventoryDemo : scenario.name === "ticket" ? runTicketDemo : runRecoveryPreflightDemo)({ fault: fault.name })).summary;
         rows.push({ scenario: scenario.name, fault: fault.name, ...checkScenarioResult(scenario.name, fault.name, fault.expected, summary), summary });
       } catch (error) {
         rows.push({ scenario: scenario.name, fault: fault.name, passed: false, code: error instanceof RailError ? error.code : "SCENARIO_FAILED" });

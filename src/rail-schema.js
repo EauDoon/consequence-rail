@@ -2,6 +2,7 @@
 // consequence-rail orchestrator. Pure data and validators with no class
 // state. The ConsequenceRail class lives in src/rail-class.js.
 
+import { isOpenActionType } from "./action-classes.js";
 import { deepClone, deepFreeze } from "./canonical.js";
 import { RailError } from "./errors.js";
 
@@ -28,6 +29,11 @@ const PROPOSAL_FIELDS = new Set([
   "postcondition",
   "evidence_plan",
 ]);
+
+// ActionProposal v0.3 repeats its registered class's remedy scope so an
+// offline verifier can check reservation coverage without the registry.
+const PROPOSAL_V3_FIELDS = new Set([...PROPOSAL_FIELDS, "recourse_scope"]);
+export const OPEN_PROPOSAL_VERSION = "consequence-rail/action-proposal/v0.3";
 
 const RECOURSE_COMMON_INPUT_FIELDS = [
   "action_digest",
@@ -70,6 +76,7 @@ const PROPOSAL_ACTION_TYPES = new Map([
 ]);
 /** The action types a published ActionProposal schema version admits. */
 export function proposalAdmitsActionType(schemaVersion, actionType) {
+  if (schemaVersion === OPEN_PROPOSAL_VERSION) return isOpenActionType(actionType);
   return PROPOSAL_ACTION_TYPES.get(schemaVersion)?.has(actionType) === true;
 }
 /**
@@ -80,8 +87,16 @@ export function proposalAdmitsActionType(schemaVersion, actionType) {
 export function recourseScopeField(actionType) {
   return actionType === "demo.inventory.allocate/v1" ? "max_quantity" : "max_amount_minor";
 }
+/** The remedy scope field for a proposal: declared in v0.3, by type before. */
+export function proposalScopeField(proposal) {
+  return proposal?.schema_version === OPEN_PROPOSAL_VERSION
+    ? proposal.recourse_scope?.field
+    : recourseScopeField(proposal?.action_type);
+}
 const EMAIL_PARAMETER_FIELDS = new Set(["recipient_id", "subject"]);
 const EVIDENCE_PLAN_FIELDS = new Set(["source", "max_age_seconds"]);
+const EVIDENCE_PLAN_V3_FIELDS = new Set([...EVIDENCE_PLAN_FIELDS, "parameter_bindings"]);
+const RECOURSE_SCOPE_FIELDS = new Set(["field", "covers_parameter"]);
 const EVIDENCE_FIELDS = new Set([
   "schema_version",
   "action_digest",
@@ -149,6 +164,9 @@ const CONNECTOR_RESULT_FIELDS = new Set(["status", "idempotency_key"]);
 
 export {
   PROPOSAL_FIELDS,
+  PROPOSAL_V3_FIELDS,
+  EVIDENCE_PLAN_V3_FIELDS,
+  RECOURSE_SCOPE_FIELDS,
   AUTHORIZATION_FIELDS,
   SUBJECT_FIELDS,
   TARGET_FIELDS,
