@@ -153,7 +153,7 @@ test("evidence that contradicts a bound parameter is rejected, not settled", asy
     evidence.facts.visibility = "internal";
     return evidence;
   };
-  const { actionId } = prepareTicket(runtime);
+  const { actionId } = await prepareTicket(runtime);
   await runtime.rail.execute(actionId);
   const view = await runtime.rail.verifyOutcome(actionId);
   assert.equal(view.outcome, "disputed");
@@ -182,7 +182,7 @@ test("the offline verifier catches a rail that settled on contradicting evidence
       record.proposal = proposal;
     }
   };
-  const { actionId } = prepareTicket(runtime);
+  const { actionId } = await prepareTicket(runtime);
   await runtime.rail.execute(actionId);
   assert.equal((await runtime.rail.verifyOutcome(actionId)).outcome, "settled");
   const bundle = runtime.rail.exportBundle(actionId, { profile: "audit" });

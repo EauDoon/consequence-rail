@@ -299,6 +299,21 @@ deletes only the extra comment. Library callers pass `actionClasses` to the
 rail; see [`src/action-classes.js`](src/action-classes.js) and
 [ActionProposal v0.3](spec/model.md#registered-action-classes-actionproposal-v03).
 
+## Dry-run before the permit
+
+A connector that can simulate returns a signed prediction of the facts the
+exact action would produce. The rail accepts it after recourse is reserved,
+refuses the permit if the prediction breaks the postcondition, binds the
+simulation digest into the permit (ActionPermit v0.2), and after execution
+records which facts the real effect diverged on. The ticket demo requires a
+dry run on every action; its duplicate fault shows `comment_count` diverging
+from the prediction:
+
+```text
+node ./cmd/crctl.js demo ticket --fault duplicate --out ticket.json
+node ./cmd/crctl.js bundle verify ticket.json --json
+```
+
 ## Stop and undo a running plan
 
 Recovery is not only before the call. An agent plan of several actions can

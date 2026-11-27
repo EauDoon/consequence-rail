@@ -244,6 +244,32 @@ within the rail's execution boundary.
 
 `observed` mode MUST NOT issue an `ActionPermit`.
 
+### Simulation evidence (ActionPermit v0.2)
+
+For a v0.3 action, the rail may ask the connector for a dry run while the
+action is `RECOURSE_RESERVED`. The connector returns a `SimulationResult`
+([`schemas/simulation-result.schema.json`](schemas/simulation-result.schema.json)),
+signed with its own key: the exact `action_digest`, the connector,
+`simulated_at`, and the `predicted_facts` the action would produce. The rail
+accepts it only from a trusted connector key, when it is fresh under the
+evidence plan's `max_age_seconds`, names every postcondition fact, and keeps
+every parameter binding. It records a `SIMULATION_ACCEPTED` event with the
+simulation digest and whether the postcondition is predicted to hold.
+
+A permit issued after an accepted simulation is ActionPermit v0.2
+([`schemas/action-permit-v0.2.schema.json`](schemas/action-permit-v0.2.schema.json)):
+v0.1 plus `simulation_digest`. The rail refuses the permit with
+`SIMULATION_PREDICTS_BREACH` when the dry run predicts the postcondition
+fails, and with `SIMULATION_STALE` when the dry run aged out before the
+permit. A rail built with `requireSimulation` refuses a v0.3 permit without
+one (`SIMULATION_REQUIRED`). After the initial evidence is accepted, a
+`SIMULATION_COMPARED` event lists the postcondition paths where the real
+facts differ from the prediction. A divergence does not change the outcome;
+it shows where the dry run was wrong. The audit bundle carries the
+`SimulationResult`, and the offline verifier checks its signature, its
+binding to the permit, its timing, the prediction and the recorded
+divergence.
+
 ## OutcomeEvidence
 
 `OutcomeEvidence` contains declared observations about an external resource.

@@ -81,11 +81,12 @@ export function createTicketRuntime({ assuranceMode = "enforced", clock = new Ma
     connectorTrustedKeys: connector.trustedKeys(),
     recoveryTrustedKeys: demoRecoveryTrustedKeys(),
     actionClasses: [DEMO_TICKET_COMMENT_CLASS],
+    requireSimulation: true,
   });
   return { clock, signer, connector, rail, assuranceMode };
 }
 
-export function prepareTicket(runtime) {
+export async function prepareTicket(runtime) {
   const proposal = buildTicketProposal(runtime.clock, runtime.assuranceMode);
   const proposed = runtime.rail.propose(proposal);
   runtime.rail.authorize(proposed.action_id, {
@@ -95,6 +96,7 @@ export function prepareTicket(runtime) {
     evaluation_input_digest: digest({ visibility: proposal.parameters.visibility }),
   });
   runtime.rail.reserveRecourse(proposed.action_id, buildTicketReservation(proposed.action_digest, proposal));
+  await runtime.rail.simulate(proposed.action_id);
   runtime.rail.issuePermit(proposed.action_id);
   return { actionId: proposed.action_id, proposal };
 }
@@ -113,7 +115,7 @@ export async function runTicketDemo({ fault = "none", assuranceMode = "enforced"
     );
   }
   const runtime = createTicketRuntime({ assuranceMode });
-  const { actionId } = prepareTicket(runtime);
+  const { actionId } = await prepareTicket(runtime);
 
   const remedyPhase = fault.startsWith("remedy-") || fault.startsWith("post-remedy-");
   await runtime.rail.execute(actionId, {

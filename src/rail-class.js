@@ -11,9 +11,10 @@ import {
   validateProposalDeclarations,
 } from "./action-classes.js";
 import { isSignedAuthorizationDecision, verifyAuthorizationDecision } from "./authorization.js";
+import { verifySimulationResult } from "./simulation.js";
 import { MemoryEventStore } from "./event-store.js";
 import { RailError } from "./errors.js";
-import { evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
+import { divergentPostconditionPaths, evaluatePostcondition, missingPostconditionPaths } from "./postconditions.js";
 import { verifyRecoveryPreflight } from "./recovery-preflight.js";
 import { normalizeSigner, signArtifact, verifyArtifact } from "./signing.js";
 import {
@@ -106,6 +107,7 @@ export class ConsequenceRail {
     authorizerTrustedKeys,
     requireSignedAuthorization = false,
     actionClasses,
+    requireSimulation = false,
     requireRecoveryPreflight = false,
     measureRecoveryImplementation = null,
     maxActions = MAX_ACTIONS,
@@ -168,6 +170,9 @@ export class ConsequenceRail {
       ? new ActionClassRegistry(actionClasses.list())
       : new ActionClassRegistry(actionClasses ?? []);
     this.requireRecoveryPreflight = requireRecoveryPreflight;
+    // With requireSimulation, a v0.3 action needs an accepted connector dry
+    // run that predicts its postcondition before a permit is issued.
+    this.requireSimulation = requireSimulation === true;
     // Plans group v0.3 actions into ordered steps with one kill switch.
     this.plans = new Map();
     this.measureRecoveryImplementation = measureRecoveryImplementation;
@@ -508,8 +513,26 @@ export class ConsequenceRail {
       this.assertAcceptedRecoveryPreflight(record, { requireCurrent: true });
     }
 
+    if (record.proposal.schema_version === OPEN_PROPOSAL_VERSION && this.requireSimulation) {
+      assert(record.simulation, "SIMULATION_REQUIRED", "An accepted dry run of this action is required before permit issuance.");
+    }
+    if (record.simulation) {
+      assert(
+        record.simulation_predicted_satisfied,
+        "SIMULATION_PREDICTS_BREACH",
+        "The connector's dry run predicts that the postcondition would not hold.",
+        { simulation_digest: record.simulation_digest },
+      );
+      assert(
+        new Date(this.clock.now()).getTime() - Date.parse(record.simulation.simulated_at) <=
+          record.proposal.evidence_plan.max_age_seconds * 1_000,
+        "SIMULATION_STALE",
+        "The accepted dry run is older than the evidence freshness window.",
+      );
+    }
+
     const permitBody = {
-      schema_version: "consequence-rail/action-permit/v0.1",
+      schema_version: record.simulation ? "consequence-rail/action-permit/v0.2" : "consequence-rail/action-permit/v0.1",
       permit_id: `permit_${record.action_digest.slice(0, 20)}`,
       action_id: actionId,
       action_digest: record.action_digest,
@@ -524,6 +547,7 @@ export class ConsequenceRail {
       issued_at: this.clock.now(),
       expires_at: record.proposal.expires_at,
       max_uses: 1,
+      ...(record.simulation ? { simulation_digest: record.simulation_digest } : {}),
     };
     const signedPermit = signArtifact(permitBody, this.signer);
     const permitDigest = digest(signedPermit);
@@ -535,6 +559,7 @@ export class ConsequenceRail {
       permit_digest: permitDigest,
       assurance_mode: record.proposal.assurance_mode,
       bypass_possible: signedPermit.bypass_possible,
+      ...(record.simulation ? { simulation_digest: record.simulation_digest } : {}),
       ...(record.authorization.require_recovery_preflight
         ? {
             recovery_preflight_attestation_digest:
@@ -730,6 +755,17 @@ export class ConsequenceRail {
       satisfied: evaluation.satisfied,
     });
     record.evidence.push(accepted);
+    if (record.simulation) {
+      this.eventStore.append(actionId, "SIMULATION_COMPARED", "rail", {
+        simulation_digest: record.simulation_digest,
+        evidence_digest: acceptedDigest,
+        diverged_paths: divergentPostconditionPaths(
+          record.proposal.postcondition,
+          record.simulation.predicted_facts,
+          accepted.facts,
+        ),
+      });
+    }
 
     if (evaluation.satisfied) {
       this.transition(record, "SATISFIED", "POSTCONDITION_SATISFIED", {
@@ -975,6 +1011,43 @@ export class ConsequenceRail {
     }
   }
 
+  /**
+   * Ask the connector for a signed dry run of the exact reserved action and
+   * accept it if it is fresh, bound to this action and complete. The result
+   * is bound into the permit; a predicted breach blocks the permit.
+   */
+  async simulate(actionId) {
+    const record = this.get(actionId);
+    this.assertPlanAllows(record);
+    this.assertState(record, "RECOURSE_RESERVED");
+    assert(
+      record.proposal.schema_version === OPEN_PROPOSAL_VERSION,
+      "SIMULATION_UNSUPPORTED",
+      "Simulation evidence binds into ActionPermit v0.2, which only ActionProposal v0.3 uses.",
+    );
+    assert(
+      typeof this.connector.simulate === "function",
+      "SIMULATION_UNSUPPORTED",
+      "The connector does not offer a dry run.",
+    );
+    const result = await this.connector.simulate(deepClone(record.proposal), { actionDigest: record.action_digest });
+    const checked = verifySimulationResult(result, {
+      proposal: record.proposal,
+      actionDigest: record.action_digest,
+      trustedKeys: this.connectorTrustedKeys,
+      now: this.clock.now(),
+    });
+    this.eventStore.append(actionId, "SIMULATION_ACCEPTED", "rail", {
+      simulation_digest: checked.simulation_digest,
+      predicted_satisfied: checked.predicted_satisfied,
+      connector_key_id: checked.key_id,
+    });
+    record.simulation = deepFreeze(checked.simulation);
+    record.simulation_digest = checked.simulation_digest;
+    record.simulation_predicted_satisfied = checked.predicted_satisfied;
+    return this.inspect(actionId);
+  }
+
   // ---- Plans: ordered steps, one kill switch, reverse-order unwind ----
 
   /** Open a plan that v0.3 proposals can join as numbered steps. */
@@ -1173,6 +1246,9 @@ export class ConsequenceRail {
       event_count: events.length,
       event_chain_head: events.at(-1)?.event_hash ?? null,
       outcome: record.receipt?.outcome ?? null,
+      ...(record.simulation
+        ? { simulation_digest: record.simulation_digest, simulation_predicted_satisfied: record.simulation_predicted_satisfied }
+        : {}),
       ...(record.proposal.plan
         ? { plan_id: record.proposal.plan.plan_id, plan_step: record.proposal.plan.step, plan_held: record.plan_held === true }
         : {}),
@@ -1235,6 +1311,7 @@ export class ConsequenceRail {
       action_permit: record.permit,
       evidence_manifest: record.evidence.map((item) => digest(item)),
       outcome_evidence: auditProfile ? record.evidence : [],
+      ...(auditProfile && record.simulation ? { simulation_result: record.simulation } : {}),
       settlement_receipt: record.receipt,
       events: this.eventStore.list(actionId),
       trust_hint: {
