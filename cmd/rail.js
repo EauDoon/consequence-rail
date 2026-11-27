@@ -12,6 +12,7 @@ function printHelp() {
 
 Usage:
   rail [--port <number>] [--clock <system|demo>] [--trusted-keys <file>]
+       [--require-signed-authorization]
   rail --help
   rail --version
 
@@ -24,6 +25,12 @@ Options:
                           consequence-rail/trusted-keys/v0.1 file with at least one rail
                           and one connector key (default: the public demonstration keys).
                           The sidecar itself still signs with the demonstration keys.
+  --require-signed-authorization
+                          Refuse an unsigned authorize body. Only a signed
+                          consequence-rail/authorization-decision/v0.1 over the
+                          action digest is accepted, from a key in the file's
+                          authorizer role, or the public demonstration authorizer
+                          key when the file lists none.
   -h, --help              Show this help
   --version               Print the implementation version
 
@@ -89,6 +96,7 @@ function parseArgs(args, env = process.env) {
   let trustedKeys;
   let sawPort = false;
   let sawClock = false;
+  let requireSignedAuthorization = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--port") {
@@ -129,6 +137,13 @@ function parseArgs(args, env = process.env) {
       index += 1;
       continue;
     }
+    if (arg === "--require-signed-authorization") {
+      if (requireSignedAuthorization) {
+        throw usageError("Flag --require-signed-authorization was supplied more than once.");
+      }
+      requireSignedAuthorization = true;
+      continue;
+    }
     throw usageError(`Unknown argument ${arg}.`);
   }
   if (!sawPort) {
@@ -139,7 +154,7 @@ function parseArgs(args, env = process.env) {
     const envClock = envValue(env, "CONSEQUENCE_RAIL_CLOCK");
     clock = envClock === undefined ? "system" : parseClock(envClock, "CONSEQUENCE_RAIL_CLOCK");
   }
-  return { help: false, port, clock, trustedKeys };
+  return { help: false, port, clock, trustedKeys, requireSignedAuthorization };
 }
 
 // Loaded before the server exists, so a bad file never binds a port.
@@ -154,6 +169,7 @@ function loadBundleTrust(path) {
   }
   return {
     trust: { trustedKeys: config.rail, trustedConnectorKeys: config.connector },
+    authorizer: config.authorizer,
     digest: config.trust_config_digest,
   };
 }
@@ -167,7 +183,13 @@ try {
   } else {
     const bundleTrust = loadBundleTrust(parsed.trustedKeys);
     const server = createReferenceServer({
-      runtime: createDemoRuntime({ clock: createSidecarClock(parsed.clock) }),
+      runtime: createDemoRuntime({
+        clock: createSidecarClock(parsed.clock),
+        requireSignedAuthorization: parsed.requireSignedAuthorization,
+        ...(bundleTrust?.authorizer?.size > 0
+          ? { authorizerTrustedKeys: bundleTrust.authorizer }
+          : {}),
+      }),
       ...(bundleTrust ? { bundleTrust: bundleTrust.trust } : {}),
     });
     // Binding is asynchronous, so a busy port surfaces as an "error" event
@@ -185,6 +207,13 @@ try {
       if (bundleTrust) {
         process.stdout.write(
           `Bundle verification trusts caller-supplied keys, trust_config_digest ${bundleTrust.digest}\n`,
+        );
+      }
+      if (parsed.requireSignedAuthorization) {
+        process.stdout.write(
+          bundleTrust?.authorizer?.size > 0
+            ? "Authorization requires a signed decision from the file's authorizer keys\n"
+            : "Authorization requires a signed decision from the public demonstration authorizer key\n",
         );
       }
     });

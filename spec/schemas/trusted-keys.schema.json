@@ -12,7 +12,8 @@
     },
     "rail": { "$ref": "#/$defs/role" },
     "connector": { "$ref": "#/$defs/role" },
-    "recovery": { "$ref": "#/$defs/role" }
+    "recovery": { "$ref": "#/$defs/role" },
+    "authorizer": { "$ref": "#/$defs/role" }
   },
   "$defs": {
     "role": {

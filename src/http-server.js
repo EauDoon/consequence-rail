@@ -193,7 +193,11 @@ function errorStatus(error) {
     error.code === "MEDIA_TYPE_UNSUPPORTED" ||
     error.code === "CONTENT_ENCODING_UNSUPPORTED"
   ) return 415;
-  if (error.code === "ORIGIN_FORBIDDEN") return 403;
+  if (
+    error.code === "ORIGIN_FORBIDDEN" ||
+    error.code === "AUTHORIZATION_SIGNATURE_REQUIRED" ||
+    error.code === "AUTHORIZER_UNTRUSTED"
+  ) return 403;
   if (error.code === "RATE_LIMITED") return 429;
   if (error.code === "ACTION_CAPACITY_REACHED") return 503;
   if (
@@ -392,7 +396,8 @@ export function createReferenceServer({
           implementation_version: VERSION,
           assurance_modes: ["enforced", "cooperative", "observed"],
           executable_modes: ["enforced", "cooperative"],
-          optional_features: ["recovery-preflight/v0.1"],
+          optional_features: ["recovery-preflight/v0.1", "signed-authorization/v0.1"],
+          signed_authorization_required: rail.requireSignedAuthorization,
           connector: runtime.connector.capabilities(),
         });
         return;

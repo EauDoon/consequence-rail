@@ -11,6 +11,10 @@ of the package version below.
 
 ## [Unreleased]
 
+### Added
+
+- Accept a signed `AuthorizationDecision` (`consequence-rail/authorization-decision/v0.1`) on `authorize`. An authorizer key, never the rail's key, signs one decision over one exact action digest with a lifetime of at most one day. The rail verifies it against a separate `authorizer` trust role, records an `AUTHORIZATION_DECISION_ACCEPTED` event, and reports `authorization_decision_digest` and `authorizer_key_id` on the action view. `requireSignedAuthorization` on the rail, and `--require-signed-authorization` on the sidecar, refuse the unsigned claim with `AUTHORIZATION_SIGNATURE_REQUIRED`, so the agent that proposes an action cannot also approve it. Trusted-keys files gain an optional `authorizer` role that leaves existing `trust_config_digest` values unchanged.
+
 ### Improvements
 
 - Browse the offline architecture atlas, trace dependencies through admission, recovery and settlement, inspect source references and bookmark individual views.

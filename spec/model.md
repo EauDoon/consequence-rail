@@ -55,6 +55,40 @@ After authorization, the proposal MUST NOT change. A changed target,
 parameter, postcondition, expiry, idempotency key, or assurance mode is a new
 action.
 
+## AuthorizationDecision
+
+An authorization binds a policy decision to the action before any recourse
+is reserved. The rail accepts two forms.
+
+The signed form, `consequence-rail/authorization-decision/v0.1`
+([schema](schemas/authorization-decision.schema.json)), is produced by an
+authorizer, such as a policy engine, a contract checker or a human approval
+step, and signed with that authorizer's Ed25519 key. It contains:
+
+- the exact `action_digest`
+- `allow`, `policy_id` and `policy_digest`
+- `evaluation_input_digest`, the digest of the exact JSON the policy
+  evaluated, or `null`
+- `evaluation_digest`, the digest of the authorizer's evaluation result (for
+  example a Constitutional Agent Testbench evaluation), or `null`
+- `require_recovery_preflight`
+- `decided_at` and `expires_at`, at most 86,400 seconds apart
+- `decision_id`, derived from the digest of the unsigned body
+
+The rail MUST verify the signature against its configured authorizer keys,
+which are a separate trust role from the rail, connector and recovery keys.
+The decision MUST name this action's digest, MUST NOT be decided after the
+current time and MUST NOT be expired. A refused decision MUST leave the action
+`PROPOSED` with no new event. An accepted one is recorded as an
+`AUTHORIZATION_DECISION_ACCEPTED` event carrying its digest and key id,
+followed by the `AUTHORIZED` or `DENIED` transition.
+
+The unsigned form is a caller's claim of `allow`, `policy_id` and
+`policy_digest`. Any caller can send it, including the proposer. A rail
+configured with `requireSignedAuthorization` MUST refuse it with
+`AUTHORIZATION_SIGNATURE_REQUIRED`. Either form can strengthen a rail-wide
+Recovery Preflight requirement but cannot remove it.
+
 ## RecourseReservation
 
 A `RecourseReservation` contains two signatures:
