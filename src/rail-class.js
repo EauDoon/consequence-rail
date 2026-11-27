@@ -52,6 +52,9 @@ import {
   PROPOSAL_V3_FIELDS,
   PROPOSAL_V3_OPTIONAL_FIELDS,
   PLAN_REFERENCE_FIELDS,
+  MANDATE_REFERENCE_FIELDS,
+  MANDATE_REFERENCE_PROFILES,
+  MANDATE_ID_PATTERN,
   PLAN_ID_PATTERN,
   MAX_PLAN_STEPS,
   EVIDENCE_PLAN_V3_FIELDS,
@@ -1590,6 +1593,9 @@ export class ConsequenceRail {
       ...(receiptSchemaVersion !== "consequence-rail/settlement-receipt/v0.1"
         ? { proposal_schema_version: record.proposal.schema_version }
         : {}),
+      ...(record.proposal.mandate_reference
+        ? { mandate_reference: deepClone(record.proposal.mandate_reference) }
+        : {}),
       receipt_id: `receipt_${digest({
         action_id: record.action_id,
         event_chain_head: events.at(-1).event_hash,
@@ -1706,6 +1712,21 @@ export class ConsequenceRail {
         );
         assertSafeInteger(input.plan.step, "ActionProposal.plan.step", { min: 1, max: MAX_PLAN_STEPS });
         evaluatePostcondition(input.plan.unwind_postcondition, { facts: {} });
+      }
+      if (input.mandate_reference !== undefined) {
+        assertExactFields(input.mandate_reference, MANDATE_REFERENCE_FIELDS, "ActionProposal.mandate_reference");
+        assert(
+          MANDATE_REFERENCE_PROFILES.has(input.mandate_reference.profile),
+          "SCHEMA_INVALID",
+          "ActionProposal.mandate_reference.profile is not supported.",
+        );
+        assert(
+          typeof input.mandate_reference.mandate_id === "string" &&
+            MANDATE_ID_PATTERN.test(input.mandate_reference.mandate_id),
+          "SCHEMA_INVALID",
+          "ActionProposal.mandate_reference.mandate_id must be 1 to 256 visible ASCII characters.",
+        );
+        assertDigest(input.mandate_reference.mandate_digest, "ActionProposal.mandate_reference.mandate_digest");
       }
     } else if (input.action_type === "demo.inventory.allocate/v1") {
       assertExactFields(

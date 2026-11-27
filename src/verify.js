@@ -1,4 +1,4 @@
-import { digest } from "./canonical.js";
+import { canonicalJson, digest } from "./canonical.js";
 import { validateSettlementBundle } from "./bundle-validation.js";
 import { verifyEventChain } from "./event-store.js";
 import { RailError } from "./errors.js";
@@ -109,6 +109,14 @@ export function verifyBundle(
     integrityAssert(
       receipt.proposal_schema_version === versionBinding.proposal,
       "Signed receipt proposal version does not match the bundle.",
+    );
+  }
+
+  if (action.proposal) {
+    integrityAssert(
+      canonicalJson(receipt.mandate_reference ?? null) ===
+        canonicalJson(action.proposal.mandate_reference ?? null),
+      "Signed receipt mandate reference does not match the proposal.",
     );
   }
 

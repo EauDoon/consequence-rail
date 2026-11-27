@@ -299,6 +299,16 @@ deletes only the extra comment. Library callers pass `actionClasses` to the
 rail; see [`src/action-classes.js`](src/action-classes.js) and
 [ActionProposal v0.3](spec/model.md#registered-action-classes-actionproposal-v03).
 
+### Link an AP2 payment mandate
+
+A v0.3 proposal can name the AP2 Payment Mandate it runs under with
+`mandate_reference` (`profile`, `mandate_id`, `mandate_digest`). Under profile
+`sha256-terminal-compact-jws`, the digest is the same value as the `reference`
+claim of the AP2 Payment Receipt, so a MandateBound check and a Consequence
+Rail receipt can be joined on one string. The rail binds the reference into
+the action digest and the signed receipt; it does not verify the mandate,
+which stays the mandate verifier's job.
+
 ## Dry-run before the permit
 
 A connector that can simulate returns a signed prediction of the facts the

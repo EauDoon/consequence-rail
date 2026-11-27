@@ -66,7 +66,17 @@ const PROPOSAL_FIELDS = new Set([
   "evidence_plan",
 ]);
 const PROPOSAL_V3_FIELDS = new Set([...PROPOSAL_FIELDS, "recourse_scope"]);
-const PROPOSAL_V3_ALLOWED_FIELDS = new Set([...PROPOSAL_V3_FIELDS, "plan"]);
+const PROPOSAL_V3_ALLOWED_FIELDS = new Set([...PROPOSAL_V3_FIELDS, "plan", "mandate_reference"]);
+const MANDATE_REFERENCE_FIELDS = new Set(["profile", "mandate_id", "mandate_digest"]);
+
+function mandateReference(value, label) {
+  exactObject(value, MANDATE_REFERENCE_FIELDS, MANDATE_REFERENCE_FIELDS, label);
+  if (value.profile !== "sha256-terminal-compact-jws") invalid(`${label}.profile is not supported.`);
+  if (typeof value.mandate_id !== "string" || !/^[\x21-\x7E]{1,256}$/.test(value.mandate_id)) {
+    invalid(`${label}.mandate_id must be 1 to 256 visible ASCII characters.`);
+  }
+  digestString(value.mandate_digest, `${label}.mandate_digest`);
+}
 const PLAN_REFERENCE_FIELDS = new Set(["plan_id", "step", "unwind_postcondition"]);
 const SUBJECT_FIELDS = new Set(["type", "id"]);
 const TARGET_FIELDS = new Set(["connector", "resource_type", "resource_id"]);
@@ -188,6 +198,7 @@ const RECEIPT_V2_FIELDS = new Set([
   ...RECEIPT_FIELDS,
   "proposal_schema_version",
 ]);
+const RECEIPT_V3_ALLOWED_FIELDS = new Set([...RECEIPT_V2_FIELDS, "mandate_reference"]);
 const EVENT_FIELDS = new Set([
   "schema_version",
   "action_id",
@@ -395,6 +406,9 @@ function proposal(value, expectedVersion) {
       integer(value.plan.step, "ActionProposal.plan.step", 1, 100);
       postcondition(value.plan.unwind_postcondition);
     }
+    if (Object.hasOwn(value, "mandate_reference")) {
+      mandateReference(value.mandate_reference, "ActionProposal.mandate_reference");
+    }
   } else if (value.action_type === "demo.inventory.allocate/v1") {
     exactObject(
       value.parameters,
@@ -595,7 +609,11 @@ function receipt(value, versionBinding) {
   const fields = versionBinding.receipt === "consequence-rail/settlement-receipt/v0.1"
     ? RECEIPT_FIELDS
     : RECEIPT_V2_FIELDS;
-  exactObject(value, fields, fields, "SettlementReceipt");
+  const v3 = versionBinding.receipt === "consequence-rail/settlement-receipt/v0.3";
+  exactObject(value, v3 ? RECEIPT_V3_ALLOWED_FIELDS : fields, fields, "SettlementReceipt");
+  if (Object.hasOwn(value, "mandate_reference")) {
+    mandateReference(value.mandate_reference, "SettlementReceipt.mandate_reference");
+  }
   if (value.schema_version !== versionBinding.receipt) {
     invalid("SettlementReceipt schema version does not match the settlement bundle.");
   }
