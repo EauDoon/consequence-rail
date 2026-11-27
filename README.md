@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/banner.svg" alt="Consequence Rail. Recourse-gated execution and settlement receipts for autonomous actions. An action runs only after a bounded remedy is reserved for it, and closes with a signed outcome: settled, compensated or disputed. Shown as a carriage on a closed rail that turns green after it passes the recourse gate." width="100%"></p>
+
 # Consequence Rail
 
 [![build](https://img.shields.io/github/actions/workflow/status/EauDoon/consequence-rail/ci.yml?branch=main)](https://github.com/EauDoon/consequence-rail/actions)
