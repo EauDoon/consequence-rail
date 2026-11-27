@@ -13,6 +13,7 @@
     "demo:duplicate": "node ./cmd/crctl.js demo refund --fault duplicate",
     "demo:irreversible": "node ./cmd/crctl.js demo irreversible",
     "demo:recovery": "node ./cmd/crctl.js demo recovery-preflight",
+    "mcp": "node ./cmd/mcp.js --demo-authorizer",
     "start": "node ./cmd/rail.js",
     "test": "node --test"
   },

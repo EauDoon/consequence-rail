@@ -171,6 +171,13 @@ export class MockTicketConnector {
     return this.executions.get(idempotencyKey) ?? { status: "unknown", idempotency_key: idempotencyKey };
   }
 
+  /** Read-only view of one ticket's live comments, for a pass-through tool. */
+  listComments(ticketId) {
+    return this.comments
+      .filter((comment) => comment.ticket_id === ticketId && comment.status === "active")
+      .map(({ comment_id, visibility, body_digest }) => ({ comment_id, visibility, body_digest }));
+  }
+
   activeComments(proposal) {
     const tracked = new Set(this.executionComments.get(proposal.idempotency_key) ?? []);
     return this.comments.filter(

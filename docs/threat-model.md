@@ -27,6 +27,27 @@ mode is `cooperative` or `observed`.
 Residual risk: the reference connector only declares custody. A production
 deployment must enforce it through target and network controls.
 
+The MCP gateway (`cmd/mcp.js`, [`src/mcp-gateway.js`](../src/mcp-gateway.js))
+is the intended way to give an agent custody-safe access: the agent connects
+to the gateway as an MCP server, and only the gateway's rail holds the
+downstream credential. A tool without `readOnlyHint: true` cannot be
+registered without a gate, so an unannotated write cannot slip through as a
+pass-through. Residual risk: a tool marked read-only by its operator is
+trusted to have no side effects.
+
+### Self-authorization over MCP
+
+Threat: an agent calling a gated MCP tool attaches its own `allow: true`.
+
+Control: the gateway's rail requires signed authorization, and the gateway
+refuses any unsigned decision in `_meta` with
+`AUTHORIZATION_SIGNATURE_REQUIRED` before it reaches the rail. Over HTTP, a
+gated call also needs the `rail.tools.gated` OAuth scope; a token with only
+`rail.tools.read` gets `403 insufficient_scope` and must step up.
+
+Residual risk: token validation is the operator's `verifyToken` hook. It must
+check issuer, audience and expiry; the reference never issues tokens.
+
 ### Self-authorization
 
 Threat: the agent that proposes an action also calls `authorize` with
