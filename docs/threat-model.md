@@ -63,6 +63,22 @@ callers. A signed decision proves which key approved, not that the policy
 behind it was right. Whoever holds the authorizer key can approve anything,
 so it must not be reachable by the proposing agent.
 
+### Runaway plan
+
+Threat: an agent keeps taking steps after one of them shows the plan is
+wrong, or completed steps leave a half-done state that nobody undoes.
+
+Control: steps of a plan stay held with recourse reserved until the plan is
+committed. `haltPlan` revokes waiting steps and makes every later authorize,
+reserve, permit and execute fail with `PLAN_HALTED`. `unwindPlan` undoes held
+steps in reverse order, verifies each undo, and stops at the first that does
+not verify instead of undoing earlier steps on a broken base.
+
+Residual risk: a step already executing finishes its call. Holding keeps
+recourse reserved only until the reservation expires, so a long plan must
+reserve recourse long enough. The plan registry is in memory in this
+reference.
+
 ### Action mutation
 
 Threat: parameters, target, postcondition or expiry change after approval.

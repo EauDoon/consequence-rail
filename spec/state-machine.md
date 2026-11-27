@@ -65,6 +65,11 @@ REMEDY_VERIFYING
 
 SATISFIED
   -> CLOSED(settled)
+  -> UNWIND_DUE
+
+UNWIND_DUE
+  -> REMEDIATING
+  -> REVIEW_REQUIRED
 
 REMEDIATED
   -> CLOSED(compensated)
@@ -89,6 +94,27 @@ requires preflight, the transition to `PERMITTED` MUST fail unless that
 attestation is current, explicitly trusted, `QUALIFIED_EXACT`, and matched to
 the action and recourse envelope. Running a drill against the live connector
 is outside the state machine and MUST NOT occur as part of permit issuance.
+
+## Plans and unwind
+
+A v0.3 proposal may be one numbered step of a plan. While the plan is open, a
+step that reaches `SATISFIED` is held there with its recourse still reserved,
+and a `PLAN_STEP_HELD` event records the hold. Committing the plan closes each
+held step as `settled`.
+
+Halting the plan is a kill switch: steps in `AUTHORIZED`,
+`RECOURSE_RESERVED` or `PERMITTED` move to `REVOKED` with reason
+`PLAN_HALTED` and their recourse is released, and authorize, reserve, permit
+and execute on any step of the plan fail with `PLAN_HALTED`. A step already
+`EXECUTING` finishes its own call.
+
+Unwinding a halted plan visits held steps from the last to the first. Each
+moves `SATISFIED -> UNWIND_DUE` with reason `PLAN_UNWIND` and then follows the
+remedy path above with its reserved remedy. Post-unwind evidence is evaluated
+against the step's `plan.unwind_postcondition` instead of its postcondition,
+and parameter bindings do not apply to it. A verified undo closes the step as
+`compensated`. The first step that does not verify closes as `disputed` and
+stops the unwind; earlier steps stay held until the plan is committed.
 
 ## Ambiguous execution
 

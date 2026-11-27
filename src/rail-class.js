@@ -48,6 +48,10 @@ import {
   INVENTORY_RECOURSE_INPUT_FIELDS,
   PROPOSAL_FIELDS,
   PROPOSAL_V3_FIELDS,
+  PROPOSAL_V3_OPTIONAL_FIELDS,
+  PLAN_REFERENCE_FIELDS,
+  PLAN_ID_PATTERN,
+  MAX_PLAN_STEPS,
   EVIDENCE_PLAN_V3_FIELDS,
   RECOURSE_SCOPE_FIELDS,
   RECOURSE_INPUT_FIELDS,
@@ -164,6 +168,8 @@ export class ConsequenceRail {
       ? new ActionClassRegistry(actionClasses.list())
       : new ActionClassRegistry(actionClasses ?? []);
     this.requireRecoveryPreflight = requireRecoveryPreflight;
+    // Plans group v0.3 actions into ordered steps with one kill switch.
+    this.plans = new Map();
     this.measureRecoveryImplementation = measureRecoveryImplementation;
     this.maxActions = maxActions;
     const configuredEventStore = eventStore ?? new MemoryEventStore(signer, clock);
@@ -201,6 +207,15 @@ export class ConsequenceRail {
     assert(!this.actions.has(actionId), "ACTION_EXISTS", "An identical action is already registered.", {
       action_id: actionId,
     });
+    const plan = proposal.plan ? this.getPlan(proposal.plan.plan_id) : null;
+    if (plan) {
+      this.assertPlanOpen(plan);
+      assert(
+        proposal.plan.step === plan.steps.length + 1,
+        "PLAN_STEP_INVALID",
+        `The next step of ${plan.plan_id} is ${plan.steps.length + 1}.`,
+      );
+    }
 
     const record = {
       action_id: actionId,
@@ -222,11 +237,20 @@ export class ConsequenceRail {
       assurance_mode: proposal.assurance_mode,
     });
     this.actions.set(actionId, record);
+    if (plan) {
+      plan.steps.push(actionId);
+      this.eventStore.append(plan.plan_id, "PLAN_STEP_ADDED", "rail", {
+        step: proposal.plan.step,
+        action_id: actionId,
+        action_digest: actionDigest,
+      });
+    }
     return this.inspect(actionId);
   }
 
   authorize(actionId, decision) {
     const record = this.get(actionId);
+    this.assertPlanAllows(record);
     this.assertState(record, "PROPOSED");
     if (isSignedAuthorizationDecision(decision)) {
       return this.authorizeSigned(record, decision);
@@ -385,6 +409,7 @@ export class ConsequenceRail {
 
   reserveRecourse(actionId, input) {
     const record = this.get(actionId);
+    this.assertPlanAllows(record);
     this.assertState(record, "AUTHORIZED");
     assert(
       record.proposal.assurance_mode !== "observed",
@@ -442,6 +467,7 @@ export class ConsequenceRail {
 
   issuePermit(actionId) {
     const record = this.get(actionId);
+    this.assertPlanAllows(record);
     this.assertState(record, "RECOURSE_RESERVED");
     this.assertNotExpired(record.proposal.expires_at, record, "ACTION_EXPIRED");
     this.assertNotExpired(record.reservation.expires_at, record, "RECOURSE_EXPIRED");
@@ -534,6 +560,7 @@ export class ConsequenceRail {
       "Execution fault is not supported.",
     );
     const record = this.get(actionId);
+    this.assertPlanAllows(record);
     assert(record.permit_uses === 0, "PERMIT_USED", "The single-use permit has already been consumed.", {
       action_id: actionId,
       state: record.state,
@@ -708,7 +735,7 @@ export class ConsequenceRail {
       this.transition(record, "SATISFIED", "POSTCONDITION_SATISFIED", {
         evidence_digest: acceptedDigest,
       });
-      this.close(record);
+      if (!this.holdForPlan(record)) this.close(record);
     } else {
       this.transition(record, "BREACHED", "POSTCONDITION_BREACHED", {
         evidence_digest: acceptedDigest,
@@ -733,7 +760,12 @@ export class ConsequenceRail {
       "Remediation fault is not supported.",
     );
     const record = this.get(actionId);
-    this.assertState(record, "REMEDY_DUE");
+    assert(
+      record.state === "REMEDY_DUE" || record.state === "UNWIND_DUE",
+      "ILLEGAL_TRANSITION",
+      `Action is in ${record.state}, not REMEDY_DUE or UNWIND_DUE.`,
+      { action_id: actionId, state: record.state },
+    );
     if (isExpired(record.reservation.expires_at, this.clock.now())) {
       this.transition(record, "REVIEW_REQUIRED", "RECOURSE_EXPIRED", {});
       this.close(record);
@@ -884,7 +916,7 @@ export class ConsequenceRail {
       ({ accepted, evaluation, acceptedDigest } = this.acceptEvidence(
         record,
         evidence,
-        "post-remedy",
+        record.unwinding ? "post-unwind" : "post-remedy",
       ));
     } catch (error) {
       if (error instanceof RailError && error.code.startsWith("EVIDENCE_")) {
@@ -923,7 +955,7 @@ export class ConsequenceRail {
   // canonical JSON limits when copied into the evaluation) is rejected
   // through the normal fail-closed path instead of stranding the action.
   acceptEvidence(record, evidence, phase = null) {
-    const evaluation = evaluatePostcondition(record.proposal.postcondition, evidence);
+    const evaluation = evaluatePostcondition(this.activePostcondition(record), evidence);
     try {
       const accepted = signArtifact({
         ...evidence,
@@ -941,6 +973,183 @@ export class ConsequenceRail {
       }
       throw error;
     }
+  }
+
+  // ---- Plans: ordered steps, one kill switch, reverse-order unwind ----
+
+  /** Open a plan that v0.3 proposals can join as numbered steps. */
+  openPlan({ plan_id: planId, ...rest } = {}) {
+    assertNoUnknownFields(rest, new Set(), "Plan");
+    assert(
+      typeof planId === "string" && PLAN_ID_PATTERN.test(planId),
+      "SCHEMA_INVALID",
+      "plan_id must look like plan_<name>.",
+    );
+    assert(!this.plans.has(planId), "PLAN_EXISTS", "A plan with this id is already open.", { plan_id: planId });
+    assert(this.plans.size < this.maxActions, "ACTION_CAPACITY_REACHED", "The in-memory plan capacity has been reached.");
+    this.eventStore.append(planId, "PLAN_OPENED", "rail", { plan_id: planId });
+    this.plans.set(planId, { plan_id: planId, state: "open", steps: [], halt_reason: null });
+    return this.inspectPlan(planId);
+  }
+
+  getPlan(planId) {
+    const plan = this.plans.get(planId);
+    assert(plan, "PLAN_NOT_FOUND", "Plan was not found.", { plan_id: planId });
+    return plan;
+  }
+
+  assertPlanOpen(plan) {
+    assert(
+      plan.state === "open",
+      plan.state === "halted" || plan.state.startsWith("unwind") ? "PLAN_HALTED" : "PLAN_CLOSED",
+      `Plan ${plan.plan_id} is ${plan.state}; no further step may proceed.`,
+      { plan_id: plan.plan_id, plan_state: plan.state },
+    );
+  }
+
+  /** The kill switch: a step of a plan that is no longer open cannot advance. */
+  assertPlanAllows(record) {
+    if (record.proposal.plan) this.assertPlanOpen(this.getPlan(record.proposal.plan.plan_id));
+  }
+
+  /**
+   * A satisfied step keeps its reserved recourse until the plan is committed
+   * or unwound, so a later failure can still undo it.
+   */
+  holdForPlan(record) {
+    if (!record.proposal.plan) return false;
+    const plan = this.getPlan(record.proposal.plan.plan_id);
+    if (plan.state === "committed") return false;
+    this.eventStore.append(record.action_id, "PLAN_STEP_HELD", "rail", {
+      plan_id: plan.plan_id,
+      step: record.proposal.plan.step,
+    });
+    record.plan_held = true;
+    return true;
+  }
+
+  activePostcondition(record) {
+    return record.unwinding ? record.proposal.plan.unwind_postcondition : record.proposal.postcondition;
+  }
+
+  /**
+   * Stop a plan. Steps not yet executing are revoked and their recourse is
+   * released; nothing in the plan can be authorized, reserved, permitted or
+   * executed afterwards. A step already executing finishes its own call.
+   */
+  haltPlan(planId, { reason = "OPERATOR_HALT", ...rest } = {}) {
+    assertNoUnknownFields(rest, new Set(), "Plan halt options");
+    assert(typeof reason === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(reason), "SCHEMA_INVALID", "reason must be an upper-case code.");
+    const plan = this.getPlan(planId);
+    this.assertPlanOpen(plan);
+    plan.state = "halted";
+    plan.halt_reason = reason;
+    this.eventStore.append(planId, "PLAN_HALTED", "rail", { reason });
+    for (const actionId of plan.steps) {
+      const record = this.actions.get(actionId);
+      if (["AUTHORIZED", "RECOURSE_RESERVED", "PERMITTED"].includes(record.state)) {
+        this.transition(record, "REVOKED", "PLAN_HALTED", { plan_id: planId, reason });
+        if (record.reservation?.connector_commitment) {
+          this.connector.releaseRecourse(record.reservation.connector_commitment.reservation_token);
+        }
+      }
+    }
+    return this.inspectPlan(planId);
+  }
+
+  /**
+   * Halt the plan if it is open, then undo its held steps from the last to
+   * the first with each step's reserved remedy. Each undo is verified against
+   * that step's unwind postcondition before the next one starts; the first
+   * step that does not verify stops the unwind.
+   */
+  async unwindPlan(planId) {
+    const plan = this.getPlan(planId);
+    if (plan.state === "open") this.haltPlan(planId, { reason: "UNWIND_REQUESTED" });
+    assert(plan.state === "halted", "PLAN_CLOSED", `Plan ${planId} is ${plan.state} and cannot be unwound.`);
+    const busy = plan.steps.filter((actionId) =>
+      ["EXECUTING", "UNKNOWN", "EXECUTED", "VERIFYING", "BREACHED", "REMEDY_DUE", "REMEDIATING", "REMEDY_UNKNOWN", "REMEDY_VERIFYING"]
+        .includes(this.actions.get(actionId).state));
+    assert(busy.length === 0, "PLAN_BUSY", "A plan step is still in flight; finish it before unwinding.", { action_ids: busy });
+    plan.state = "unwinding";
+    this.eventStore.append(planId, "PLAN_UNWIND_STARTED", "rail", {});
+    for (const actionId of [...plan.steps].reverse()) {
+      const record = this.actions.get(actionId);
+      if (!record.plan_held || record.state !== "SATISFIED") continue;
+      record.unwinding = true;
+      record.plan_held = false;
+      this.transition(record, "UNWIND_DUE", "PLAN_UNWIND", { plan_id: planId, step: record.proposal.plan.step });
+      let view = await this.remediate(actionId);
+      if (view.state === "REMEDY_UNKNOWN") view = await this.reconcileRemedy(actionId);
+      this.eventStore.append(planId, "PLAN_STEP_UNWOUND", "rail", {
+        step: record.proposal.plan.step,
+        action_id: actionId,
+        outcome: view.outcome,
+      });
+      if (view.outcome !== "compensated") {
+        plan.state = "unwind_failed";
+        this.eventStore.append(planId, "PLAN_UNWIND_STOPPED", "rail", { step: record.proposal.plan.step });
+        return this.inspectPlan(planId);
+      }
+    }
+    plan.state = "unwound";
+    this.eventStore.append(planId, "PLAN_UNWOUND", "rail", {});
+    return this.inspectPlan(planId);
+  }
+
+  /**
+   * Keep the plan's completed effects: close every held step as settled and
+   * release its recourse. Allowed while open, after a halt, or after an
+   * unwind that stopped.
+   */
+  commitPlan(planId) {
+    const plan = this.getPlan(planId);
+    assert(
+      ["open", "halted", "unwind_failed"].includes(plan.state),
+      "PLAN_CLOSED",
+      `Plan ${planId} is ${plan.state} and cannot be committed.`,
+    );
+    const busy = plan.steps.filter((actionId) =>
+      !["SATISFIED", "CLOSED", "DENIED", "REVOKED", "EXPIRED", "FAILED", "PROPOSED"].includes(this.actions.get(actionId).state));
+    assert(busy.length === 0, "PLAN_BUSY", "A plan step is still in flight; finish it before committing.", { action_ids: busy });
+    plan.state = "committed";
+    this.eventStore.append(planId, "PLAN_COMMITTED", "rail", {});
+    for (const actionId of plan.steps) {
+      const record = this.actions.get(actionId);
+      if (record.plan_held && record.state === "SATISFIED") {
+        record.plan_held = false;
+        this.close(record);
+      }
+    }
+    return this.inspectPlan(planId);
+  }
+
+  inspectPlan(planId) {
+    const plan = this.getPlan(planId);
+    const events = this.eventStore.list(planId);
+    return {
+      plan_id: plan.plan_id,
+      state: plan.state,
+      halt_reason: plan.halt_reason,
+      steps: plan.steps.map((actionId, index) => {
+        const record = this.actions.get(actionId);
+        return {
+          step: index + 1,
+          action_id: actionId,
+          state: record.state,
+          outcome: record.receipt?.outcome ?? null,
+          held: record.plan_held === true,
+        };
+      }),
+      event_count: events.length,
+      event_chain_head: events.at(-1)?.event_hash ?? null,
+    };
+  }
+
+  /** The plan's own signed event chain. */
+  planEvents(planId) {
+    this.getPlan(planId);
+    return this.eventStore.list(planId);
   }
 
   inspect(actionId) {
@@ -964,6 +1173,9 @@ export class ConsequenceRail {
       event_count: events.length,
       event_chain_head: events.at(-1)?.event_hash ?? null,
       outcome: record.receipt?.outcome ?? null,
+      ...(record.proposal.plan
+        ? { plan_id: record.proposal.plan.plan_id, plan_step: record.proposal.plan.step, plan_held: record.plan_held === true }
+        : {}),
       ...(record.authorization?.decision_digest
         ? {
             authorization_decision_digest: record.authorization.decision_digest,
@@ -1279,7 +1491,12 @@ export class ConsequenceRail {
   validateProposal(input) {
     assertPlainObject(input, "ActionProposal");
     const open = input.schema_version === OPEN_PROPOSAL_VERSION;
-    assertExactFields(input, open ? PROPOSAL_V3_FIELDS : PROPOSAL_FIELDS, "ActionProposal");
+    if (open) {
+      assertNoUnknownFields(input, PROPOSAL_V3_OPTIONAL_FIELDS, "ActionProposal");
+      assertRequiredFields(input, PROPOSAL_V3_FIELDS, "ActionProposal");
+    } else {
+      assertExactFields(input, PROPOSAL_FIELDS, "ActionProposal");
+    }
     assert(
       ACTION_PROPOSAL_VERSIONS.has(input.schema_version),
       "SCHEMA_INVALID",
@@ -1348,6 +1565,16 @@ export class ConsequenceRail {
       assertExactFields(input.recourse_scope, RECOURSE_SCOPE_FIELDS, "ActionProposal.recourse_scope");
       validateClassParameters(actionClass, input.parameters);
       validateProposalDeclarations(actionClass, input);
+      if (input.plan !== undefined) {
+        assertExactFields(input.plan, PLAN_REFERENCE_FIELDS, "ActionProposal.plan");
+        assert(
+          typeof input.plan.plan_id === "string" && PLAN_ID_PATTERN.test(input.plan.plan_id),
+          "SCHEMA_INVALID",
+          "ActionProposal.plan.plan_id is invalid.",
+        );
+        assertSafeInteger(input.plan.step, "ActionProposal.plan.step", { min: 1, max: MAX_PLAN_STEPS });
+        evaluatePostcondition(input.plan.unwind_postcondition, { facts: {} });
+      }
     } else if (input.action_type === "demo.inventory.allocate/v1") {
       assertExactFields(
         input.parameters,
@@ -1614,7 +1841,7 @@ export class ConsequenceRail {
     assertPlainObject(input.facts, "OutcomeEvidence.facts", "EVIDENCE_SCHEMA_INVALID");
     digest(input.facts);
     const missingClauses = missingPostconditionPaths(
-      record.proposal.postcondition,
+      this.activePostcondition(record),
       input.facts,
     );
     assert(
@@ -1623,7 +1850,9 @@ export class ConsequenceRail {
       "Evidence does not report every postcondition fact.",
       { clause_indexes: missingClauses },
     );
-    if (record.proposal.schema_version === OPEN_PROPOSAL_VERSION) {
+    // Bindings show the approved effect happened. After an unwind the
+    // effect is gone, so only the unwind postcondition applies.
+    if (record.proposal.schema_version === OPEN_PROPOSAL_VERSION && !record.unwinding) {
       const unmet = unmetBindings(record.proposal, input.facts);
       assert(
         unmet.length === 0,

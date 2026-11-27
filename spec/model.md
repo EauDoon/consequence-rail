@@ -84,6 +84,14 @@ registry. The rail refuses a proposal for an unregistered class with
 proposal settles into a v0.3 settlement bundle and receipt, which sign the
 v0.3 proposal schema identifier.
 
+A v0.3 proposal may also carry `plan`: the `plan_id` of a plan opened on the
+rail, its 1-based `step`, and an `unwind_postcondition` that shows the step's
+effect undone. Steps join in order. See
+[Plans and unwind](state-machine.md#plans-and-unwind) for the hold, kill
+switch and reverse-order unwind. An unwound step's receipt is `compensated`;
+its audit bundle carries initial evidence that satisfied the postcondition
+and `post-unwind` evidence that satisfied the unwind postcondition.
+
 The reference demo class `demo.ticket.comment/v1` posts one comment on a
 synthetic support ticket. Its scope is `max_quantity` with no covered
 parameter (the remedy may delete one comment), its kinds are `reverse` and

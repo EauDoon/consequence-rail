@@ -50,7 +50,7 @@ test("crctl rejects unknown commands and incomplete usage", () => {
   assert.match(stderrJson(unknownDemo).message, /Unknown demo scenario 'nope'/);
   // Both demo usage errors name every demo subcommand, not only the four fixtures.
   for (const message of [stderrJson(demoOnly).message, stderrJson(unknownDemo).message]) {
-    assert.match(message, /Expected refund, inventory, ticket, irreversible, recovery-preflight, list, find, or matrix\./);
+    assert.match(message, /Expected refund, inventory, ticket, plan, irreversible, recovery-preflight, list, find, or matrix\./);
   }
 
   const verifyNoFile = runCli("crctl.js", ["bundle", "verify"]);

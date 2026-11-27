@@ -299,6 +299,27 @@ deletes only the extra comment. Library callers pass `actionClasses` to the
 rail; see [`src/action-classes.js`](src/action-classes.js) and
 [ActionProposal v0.3](spec/model.md#registered-action-classes-actionproposal-v03).
 
+## Stop and undo a running plan
+
+Recovery is not only before the call. An agent plan of several actions can
+be stopped and rolled back while it runs:
+
+```text
+node ./cmd/crctl.js demo plan
+```
+
+`openPlan` starts a plan, and each v0.3 proposal names its plan and step.
+A step that succeeds is held with its recourse still reserved instead of
+closing. `haltPlan` is the kill switch: steps that are authorized, reserved
+or permitted are revoked, and nothing in the plan can be authorized,
+permitted or executed afterwards (`PLAN_HALTED`). `unwindPlan` then undoes
+the held steps from the last to the first with each step's reserved remedy,
+verifies each undo against its `unwind_postcondition` before starting the
+next, and stops at the first one that does not verify. `commitPlan` keeps
+the effects and settles the held steps. In the demo two comments are posted,
+the third step is permitted when the plan is halted, and the unwind deletes
+comment 2 then comment 1; every closed step's bundle verifies offline.
+
 ## Call it from an agent over MCP
 
 An agent reaches the rail the same way it reaches any tool: as an MCP server.

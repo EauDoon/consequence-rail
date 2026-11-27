@@ -97,6 +97,12 @@ const EMAIL_PARAMETER_FIELDS = new Set(["recipient_id", "subject"]);
 const EVIDENCE_PLAN_FIELDS = new Set(["source", "max_age_seconds"]);
 const EVIDENCE_PLAN_V3_FIELDS = new Set([...EVIDENCE_PLAN_FIELDS, "parameter_bindings"]);
 const RECOURSE_SCOPE_FIELDS = new Set(["field", "covers_parameter"]);
+// A v0.3 proposal may name the plan it is one step of, and the postcondition
+// that shows its effect undone if the plan is unwound.
+const PROPOSAL_V3_OPTIONAL_FIELDS = new Set([...PROPOSAL_V3_FIELDS, "plan"]);
+const PLAN_REFERENCE_FIELDS = new Set(["plan_id", "step", "unwind_postcondition"]);
+export const PLAN_ID_PATTERN = /^plan_[A-Za-z0-9_-]{1,64}$/;
+export const MAX_PLAN_STEPS = 100;
 const EVIDENCE_FIELDS = new Set([
   "schema_version",
   "action_digest",
@@ -165,6 +171,8 @@ const CONNECTOR_RESULT_FIELDS = new Set(["status", "idempotency_key"]);
 export {
   PROPOSAL_FIELDS,
   PROPOSAL_V3_FIELDS,
+  PROPOSAL_V3_OPTIONAL_FIELDS,
+  PLAN_REFERENCE_FIELDS,
   EVIDENCE_PLAN_V3_FIELDS,
   RECOURSE_SCOPE_FIELDS,
   AUTHORIZATION_FIELDS,
