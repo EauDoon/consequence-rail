@@ -71,10 +71,18 @@ export function buildTicketReservation(actionDigest, proposal) {
   };
 }
 
-export function createTicketRuntime({ assuranceMode = "enforced", clock = new ManualClock() } = {}) {
-  const signer = createDemoSigner();
-  const connector = new MockTicketConnector(clock);
+export function createTicketRuntime({
+  assuranceMode = "enforced",
+  clock = new ManualClock(),
+  signer = createDemoSigner(),
+  connector = new MockTicketConnector(clock),
+  createEventStore,
+  permitLedger,
+} = {}) {
+  const eventStore = createEventStore ? createEventStore(signer, clock) : undefined;
   const rail = new ConsequenceRail({
+    eventStore,
+    permitLedger,
     signer,
     clock,
     connector,
@@ -83,7 +91,7 @@ export function createTicketRuntime({ assuranceMode = "enforced", clock = new Ma
     actionClasses: [DEMO_TICKET_COMMENT_CLASS],
     requireSimulation: true,
   });
-  return { clock, signer, connector, rail, assuranceMode };
+  return { clock, signer, connector, rail, assuranceMode, eventStore };
 }
 
 export async function prepareTicket(runtime) {

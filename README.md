@@ -314,6 +314,30 @@ node ./cmd/crctl.js demo ticket --fault duplicate --out ticket.json
 node ./cmd/crctl.js bundle verify ticket.json --json
 ```
 
+## Keep permits single-use across processes
+
+The default event store and permit ledger live in memory. For a rail that must
+survive a restart, or several rail processes on one host, pass durable ones:
+
+```js
+import { FileEventStore } from "./src/file-event-store.js";
+import { FilePermitLedger } from "./src/permit-ledger.js";
+
+const rail = new ConsequenceRail({
+  signer, clock, connector,
+  eventStore: new FileEventStore({ dir: "state/events", signer, clock }),
+  permitLedger: new FilePermitLedger({ dir: "state/permits", clock }),
+});
+```
+
+Each consumed permit `jti` is claimed by an exclusive file create before the
+connector is called, so only one process can spend it; the loser gets
+`PERMIT_USED` and the connector is never called. A connector that keeps its
+own lease (`consumePermit`) is asked as well. The event log is append-only
+JSON Lines, fsynced per event, verified on open and locked to one process. A
+restarted rail keeps the history but does not resume an action from it: it
+refuses the same action or plan again with `ACTION_EXISTS` or `PLAN_EXISTS`.
+
 ## Stop and undo a running plan
 
 Recovery is not only before the call. An agent plan of several actions can
@@ -618,6 +642,9 @@ Read:
 - [`src/mcp-gateway.js`](src/mcp-gateway.js) and
   [`src/mcp-http.js`](src/mcp-http.js): MCP front door over stdio
   (`cmd/mcp.js`) and Streamable HTTP
+- [`src/file-event-store.js`](src/file-event-store.js) and
+  [`src/permit-ledger.js`](src/permit-ledger.js): durable event log and
+  cross-process permit ledger
 - [`src/recovery-preflight.js`](src/recovery-preflight.js): recovery contract,
   qualification and replay verification
 - [`src/mock-refund-recovery-adapter.js`](src/mock-refund-recovery-adapter.js):

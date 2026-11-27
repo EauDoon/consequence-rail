@@ -33,7 +33,19 @@ export class MockTicketConnector {
     this.remedyCalls = 0;
     this.remedyStatusCalls = 0;
     this.simulateCalls = 0;
+    this.consumedPermits = new Set();
     this.exclusiveCredentialCustody = true;
+  }
+
+  /**
+   * The connector's own permit lease. It holds the credential, so it is the
+   * last place a reused permit can be stopped, even when two rails do not
+   * share a permit ledger.
+   */
+  consumePermit({ jti }) {
+    if (this.consumedPermits.has(jti)) return false;
+    this.consumedPermits.add(jti);
+    return true;
   }
 
   capabilities() {
