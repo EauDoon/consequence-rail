@@ -26,6 +26,12 @@ of the package version below.
 
 - Create exported artifact files with owner-only permissions on POSIX, including under permissive process umasks, without changing atomic no-overwrite publication.
 
+- Name every demo subcommand in the unknown demo scenario error. `crctl demo <unknown>` listed only the four fixtures and omitted `list`, `find` and `matrix`, unlike the missing-scenario error.
+
+- Give the scenario matrix CLI test a 60 second child timeout. Under the parallel suite on a 4-core runner the 31-fixture run passed the 5 second default, was killed, and failed the test with a null exit status.
+
+- Report recovery evidence example usage errors as one plain line with exit status 1 where a missing argument or an existing destination previously printed a stack trace. The example now creates its directory and files owner-only on POSIX, like the CLI's artifact exports.
+
 ## [0.4.0] - 2026-10-30
 
 This release adds capabilities without changing artifacts. There is no

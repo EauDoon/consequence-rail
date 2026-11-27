@@ -439,7 +439,7 @@ async function main() {
       return;
     }
     throw usage(
-      `Unknown demo scenario '${subcommand}'. Expected refund, inventory, irreversible, or recovery-preflight.`,
+      `Unknown demo scenario '${subcommand}'. Expected refund, inventory, irreversible, recovery-preflight, list, find, or matrix.`,
     );
   }
 
