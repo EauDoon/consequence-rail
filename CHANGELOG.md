@@ -30,7 +30,7 @@ of the package version below.
 
 - Give the scenario matrix CLI test a 60 second child timeout. Under the parallel suite on a 4-core runner the 31-fixture run passed the 5 second default, was killed, and failed the test with a null exit status.
 
-- Report recovery evidence example usage errors as one plain line with exit status 1 where a missing argument or an existing destination previously printed a stack trace. The example now creates its directory and files owner-only on POSIX, like the CLI's artifact exports.
+- Report recovery evidence example usage errors as one plain line with exit status 1 where a missing argument or an existing destination previously printed a stack trace. A missing parent directory is named in the same way. The example now creates its directory and files owner-only on POSIX, like the CLI's artifact exports.
 
 ## [0.4.0] - 2026-10-30
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { readArtifactFile, serializeArtifact } from "../src/artifact-files.js";
 import { deepClone, digest } from "../src/canonical.js";
 import { buildRefundProposal, buildRefundReservation, createDemoRuntime } from "../src/demo.js";
@@ -26,7 +26,7 @@ try {
   mkdirSync(directory, { mode: 0o700 });
 } catch (error) {
   if (error.code === "EEXIST") refuse(`Destination already exists: ${directory}`, USAGE);
-  if (error.code === "ENOENT") refuse(`Parent directory does not exist: ${directory}`, USAGE);
+  if (error.code === "ENOENT") refuse(`Parent directory does not exist: ${dirname(directory)}`, USAGE);
   throw error;
 }
 const write = (name, value) =>

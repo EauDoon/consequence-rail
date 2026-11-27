@@ -56,6 +56,17 @@ test("recovery example reports usage errors on one line without a stack trace", 
   }
 });
 
+test("recovery example names the missing parent directory, not the destination", t => {
+  const parent = mkdtempSync(join(tmpdir(), "rail-recovery-example-parent-"));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const missing = join(parent, "absent");
+  const result = run(["examples/recovery-evidence.js", join(missing, "evidence")]);
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr,
+    `Parent directory does not exist: ${missing}\nUsage: node examples/recovery-evidence.js <new-directory>\n`);
+});
+
 test("recovery example keeps exported evidence owner-only", { skip: process.platform === "win32" }, t => {
   const parent = mkdtempSync(join(tmpdir(), "rail-recovery-example-mode-"));
   t.after(() => rmSync(parent, { recursive: true, force: true }));
